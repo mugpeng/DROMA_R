@@ -1,12 +1,13 @@
 Package: DROMA
-Title: Drug Omics association MAp(DROMA) Package
-Version: 0.1.0
+Title: Drug Omics Association Map
+Version: 0.2.0
 Authors@R: 
-    person("Peng Yu Zhong", email = "yc47680@um.edu.mo", role = c("aut"))
+    person("Peng Yu Zhong", email = "yc47680@um.edu.mo", role = c("aut", "cre"))
 Description: DROMA (Drug Omics Association) provides tools for analyzing associations 
     between drug responses and various omics data types. It supports meta-analysis 
     of drug-omics associations across multiple datasets, visualization of results, 
-    and batch processing of features.
+    and batch processing of features. The package enables researchers to identify 
+    and validate biomarkers for drug sensitivity across multiple data sources.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
@@ -25,10 +26,16 @@ Imports:
     DT,
     htmltools,
     utils
-RoxygenNote: 7.1.1
+RoxygenNote: 7.2.3
 Suggests: 
     testthat,
     knitr,
     rmarkdown,
-    devtools
+    devtools,
+    ggrepel,
+    gridExtra,
+    grid,
+    patchwork
 VignetteBuilder: knitr 
+URL: https://github.com/pengyu-zhong/DROMA
+BugReports: https://github.com/pengyu-zhong/DROMA/issues 

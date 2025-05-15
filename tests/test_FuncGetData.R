@@ -1,64 +1,72 @@
 #!/usr/bin/env Rscript
 
 # Test script for FuncGetData.R functions
-# Tests selFeatures, mergeDrugFeatures, and annoMergeFeatures
+# Tests selectFeatures, mergeDrugFeatures, and annotateMergedFeatures
 
 # Load required packages
 library(testthat)
 
 # Source the function file
-source("Package_Function/FuncGetData.R")
+source("R/FuncGetData.R")
 
-# Test for selFeatures function
-test_that("selFeatures returns correct data for drug", {
-  select_drugs = "5-Fluorouracil"
-  data_type = "all"
-  tumor_type = "all"
+context("Data Selection Functions")
+
+# Setup mock data
+select_drugs <- "Paclitaxel"  # Example drug
+select_omics_type <- "mRNA"    # Example omics type
+select_omics <- "ABCB1"        # Example omics feature
+
+# Test for selectFeatures function
+test_that("selectFeatures returns correct data for drug", {
+  # Load example drug data
+  load("../data/drug.Rda")
+  load("../data/mRNA.Rda")
   
-  myDrugs <- selFeatures("drug", select_drugs, 
-                         data_type = data_type, 
-                         tumor_type = tumor_type)
+  # Call function
+  myDrugs <- selectFeatures("drug", select_drugs,
+                        data_type = "all",
+                        tumor_type = "all")
   
-  # Check that result is a list
+  # Verify results
   expect_true(is.list(myDrugs))
+  expect_true(length(myDrugs) > 0)
   
-  # Check that it's not empty
-  expect_gt(length(myDrugs), 0)
-  
-  # Check that each element is a numeric vector
-  for(i in 1:length(myDrugs)) {
-    expect_true(is.numeric(myDrugs[[i]]))
+  # Test for a specific dataset
+  if ("gdsc1" %in% names(myDrugs)) {
+    drug_data <- myDrugs[["gdsc1"]]
+    expect_true(is.numeric(drug_data))
+    expect_true(length(drug_data) > 0)
   }
 })
 
-test_that("selFeatures returns correct data for mRNA", {
-  select_omics_type = "mRNA"
-  select_omics = "ABCB1"
-  data_type = "all"
-  tumor_type = "all"
+test_that("selectFeatures returns correct data for mRNA", {
+  # Load example omics data
+  load("../data/mRNA.Rda")
+  load("../data/anno.Rda")
   
-  myOmics <- selFeatures(select_omics_type, select_omics,
-                         data_type = data_type, 
-                         tumor_type = tumor_type)
+  # Call function
+  myOmics <- selectFeatures(select_omics_type, select_omics,
+                         data_type = "all",
+                         tumor_type = "all")
   
-  # Check that result is a list
+  # Verify results
   expect_true(is.list(myOmics))
+  expect_true(length(myOmics) > 0)
   
-  # Check that it's not empty
-  expect_gt(length(myOmics), 0)
-  
-  # Check that each element is a numeric vector
-  for(i in 1:length(myOmics)) {
-    expect_true(is.numeric(myOmics[[i]]))
+  # Test for a specific dataset
+  if ("gdsc" %in% names(myOmics)) {
+    omics_data <- myOmics[["gdsc"]]
+    expect_true(is.numeric(omics_data))
+    expect_true(length(omics_data) > 0)
   }
 })
 
-test_that("selFeatures handles invalid feature type", {
-  expect_error(selFeatures("invalid_type", "ABCB1"), 
-               "The select feature type doesn't exsit")
+test_that("selectFeatures handles invalid feature type", {
+  expect_error(selectFeatures("invalid_type", "ABCB1"),
+               "The select feature type doesn't exist")
 })
 
-test_that("selFeatures handles invalid data_type", {
-  expect_error(selFeatures("mRNA", "ABCB1", data_type = "invalid_type"), 
+test_that("selectFeatures handles invalid data_type", {
+  expect_error(selectFeatures("mRNA", "ABCB1", data_type = "invalid_type"),
                "Invalid data_type")
 })

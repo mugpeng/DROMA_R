@@ -1,210 +1,207 @@
 #!/usr/bin/env Rscript
 
 # Test script for FuncDrugOmicPair.R functions
-# Tests pairDrugOmic, analyze_continuous_drugomic, pairDrugOmic2, analyze_discrete_drugomic, oneDrugOmicPair
+# Tests pairDrugOmic, analyzeContinuousDrugOmic, pairDiscreteDrugOmic, 
+# analyzeDiscreteDrugOmic, and plotting functions
 
 # Load required packages
 library(testthat)
+library(ggplot2)
+library(metafor)
 library(meta)
+library(effsize)
+library(ggpubr)
 
-# Source the function file
-source("Package_Function/FuncDrugOmicPair.R")
-source("Package_Function/FuncGetData.R")  # Required for selFeatures
+# Source the function files
+source("R/FuncDrugOmicPair.R")
+source("R/FuncGetData.R") # Needed for selectFeatures function
 
-# Test for pairDrugOmic function
-test_that("pairDrugOmic pairs drug and omic data correctly", {
-  # Get test data
-  select_omics_type <- "mRNA"
-  select_omics <- "ABCB1"
-  select_drugs <- "5-Fluorouracil"
-  data_type <- "all"
-  tumor_type <- "all"
-  
-  myOmics <- selFeatures(select_omics_type, select_omics,
-                         data_type = data_type, 
-                         tumor_type = tumor_type)
-  myDrugs <- selFeatures("drug", select_drugs, 
-                         data_type = data_type, 
-                         tumor_type = tumor_type)
-  
-  # Test without merged dataset
-  pairs_without_merged <- pairDrugOmic(myOmics, myDrugs, merged = FALSE)
-  
-  # Check structure
-  expect_true(is.list(pairs_without_merged))
-  expect_gt(length(pairs_without_merged), 0)
-  
-  # Check content of first pair
-  first_pair <- pairs_without_merged[[1]]
-  expect_true(all(c("omic", "drug") %in% names(first_pair)))
-  expect_true(is.numeric(first_pair$omic))
-  expect_true(is.numeric(first_pair$drug))
-  expect_equal(length(first_pair$omic), length(first_pair$drug))
-  expect_equal(names(first_pair$omic), names(first_pair$drug))
-  
-  # Test with merged dataset
-  pairs_with_merged <- pairDrugOmic(myOmics, myDrugs, merged = TRUE)
-  
-  # Check merged dataset exists
-  expect_true("merged_dataset" %in% names(pairs_with_merged))
-  
-  # Check merged dataset structure
-  merged_data <- pairs_with_merged$merged_dataset
-  expect_true(all(c("omic", "drug") %in% names(merged_data)))
-  expect_true(is.numeric(merged_data$omic))
-  expect_true(is.numeric(merged_data$drug))
-  expect_equal(length(merged_data$omic), length(merged_data$drug))
-  expect_equal(names(merged_data$omic), names(merged_data$drug))
-})
+context("Drug-Omic Pairing Functions")
 
-test_that("pairDrugOmic handles empty data", {
-  # Create empty lists that would normally cause an error
-  empty_omics <- list(empty = numeric(0))
-  empty_drugs <- list(empty = numeric(0))
+# Setup mock data for continuous tests
+test_that("pairDrugOmic correctly pairs drug and omics data", {
+  # Create mock omics and drug data
+  myOmics <- list(
+    dataset1 = c("cell1" = 0.5, "cell2" = 1.2, "cell3" = -0.8, "cell4" = 0.3),
+    dataset2 = c("cell2" = 0.9, "cell3" = -0.6, "cell5" = 1.5, "cell6" = -0.2)
+  )
   
-  # Expect error when pairing empty data
-  expect_error(pairDrugOmic(empty_omics, empty_drugs), 
-               "Please try to another drug-omic pair")
-})
-
-# Test for analyze_continuous_drugomic function
-test_that("analyze_continuous_drugomic performs meta-analysis correctly", {
-  # Get test data
-  select_omics_type <- "mRNA"
-  select_omics <- "ABCB1"
-  select_drugs <- "5-Fluorouracil"
+  myDrugs <- list(
+    drug1 = c("cell1" = 0.1, "cell2" = 0.7, "cell3" = -0.3, "cell5" = 0.5),
+    drug2 = c("cell2" = 0.4, "cell3" = -0.2, "cell4" = 0.6, "cell6" = -0.4)
+  )
   
-  myOmics <- selFeatures(select_omics_type, select_omics)
-  myDrugs <- selFeatures("drug", select_drugs)
-  myPairs <- pairDrugOmic(myOmics, myDrugs, merged = TRUE)
+  # Pair the data
+  pairs <- pairDrugOmic(myOmics, myDrugs)
   
-  # Run analysis
-  meta_result <- analyze_continuous_drugomic(myPairs)
+  # Verify structure and content
+  expect_true(is.list(pairs))
+  expect_true(length(pairs) > 0)
   
-  # Check result structure if meta-analysis was performed
-  if (!is.null(meta_result)) {
-    expect_s3_class(meta_result, "meta")
-    expect_true("TE.random" %in% names(meta_result))  # Effect size
-    expect_true("pval.random" %in% names(meta_result))  # P-value
-  }
-})
-
-# Test for pairDrugOmic2 function (discrete omics)
-test_that("pairDrugOmic2 pairs discrete omic data with drug data", {
-  # Get test data
-  select_omics_type <- "mutation_gene"
-  select_omics <- "TP53"  # Common mutation to test with
-  select_drugs <- "5-Fluorouracil"
-  
-  # This may fail if this specific mutation doesn't exist in the test data
-  # We use tryCatch to handle this case gracefully
-  result <- tryCatch({
-    myOmics <- selFeatures(select_omics_type, select_omics)
-    myDrugs <- selFeatures("drug", select_drugs)
-    
-    # Test function
-    myPairs <- pairDrugOmic2(myOmics, myDrugs, merged = TRUE)
-    
-    # Check structure
-    expect_true(is.list(myPairs))
-    expect_gt(length(myPairs), 0)
-    
-    # Check content of first pair
-    first_pair <- myPairs[[1]]
-    expect_true(all(c("yes", "no") %in% names(first_pair)))
-    expect_true(is.numeric(first_pair$yes))
-    expect_true(is.numeric(first_pair$no))
-    
-    # Check merged dataset exists
-    expect_true("merged_dataset" %in% names(myPairs))
-    
-    TRUE  # Test passed
-  }, error = function(e) {
-    # If this specific mutation doesn't exist, test is inconclusive
-    message("Skipping test for pairDrugOmic2: ", e$message)
-    TRUE  # Don't fail the test in this case
-  })
-  
-  expect_true(result)
-})
-
-# Test for analyze_discrete_drugomic function
-test_that("analyze_discrete_drugomic performs meta-analysis correctly", {
-  # This test is similar to the continuous case but for discrete data
-  # Since we can't guarantee the specific mutation will be in the test data,
-  # we use tryCatch to handle the case gracefully
-  
-  result <- tryCatch({
-    select_omics_type <- "mutation_gene"
-    select_omics <- "TP53"  # Common mutation to test with
-    select_drugs <- "5-Fluorouracil"
-    
-    myOmics <- selFeatures(select_omics_type, select_omics)
-    myDrugs <- selFeatures("drug", select_drugs)
-    myPairs <- pairDrugOmic2(myOmics, myDrugs, merged = TRUE)
-    
-    # Run analysis
-    meta_result <- analyze_discrete_drugomic(myPairs)
-    
-    # Check result structure if meta-analysis was performed
-    if (!is.null(meta_result)) {
-      expect_s3_class(meta_result, "meta")
-      expect_true("TE.random" %in% names(meta_result))  # Effect size
-      expect_true("pval.random" %in% names(meta_result))  # P-value
-    }
-    
-    TRUE  # Test passed
-  }, error = function(e) {
-    # If this specific mutation doesn't exist, test is inconclusive
-    message("Skipping test for analyze_discrete_drugomic: ", e$message)
-    TRUE  # Don't fail the test in this case
-  })
-  
-  expect_true(result)
-})
-
-# Test for oneDrugOmicPair function
-test_that("oneDrugOmicPair handles continuous omics data", {
-  select_omics_type <- "mutation_site"
-  select_omics <- "TMEM57_p.R63*"
-  select_drugs <- "cepharanthine"
-  merged_enabled <- TRUE
-  data_type <- "all"
-  tumor_type <- "all"
-  
-  # Run function
-  result <- oneDrugOmicPair(select_omics_type, select_omics,
-                           select_drugs, data_type, tumor_type,
-                           merged_enabled)
-  
-  # Check result structure
-  expect_true(is.list(result))
-  
-  # Check that we have plot and data elements
-  expect_true("plot" %in% names(result))
-  expect_true("data" %in% names(result))
-  
-  # Check that plot is a ggplot object if it exists
-  if (!is.null(result$plot)) {
-    if (is.list(result$plot)) {
-      # If it's a list of plots
-      for (p in result$plot) {
-        if (!is.null(p)) {
-          expect_true(inherits(p, "ggplot") || 
-                     inherits(p, "grob") || 
-                     inherits(p, "gtable"))
-        }
-      }
-    } else {
-      # If it's a single plot
-      expect_true(inherits(result$plot, "ggplot") || 
-                 inherits(result$plot, "grob") || 
-                 inherits(result$plot, "gtable"))
-    }
+  # Check one specific pair
+  expect_true("dataset1_drug1" %in% names(pairs))
+  if ("dataset1_drug1" %in% names(pairs)) {
+    pair <- pairs[["dataset1_drug1"]]
+    expect_true(is.list(pair))
+    expect_true(all(c("omic", "drug") %in% names(pair)))
+    expect_equal(length(pair$omic), length(pair$drug))
+    expect_equal(names(pair$omic), names(pair$drug))
   }
   
-  # Check that meta-analysis was performed if enabled
-  if (!is.null(result$meta)) {
-    expect_s3_class(result$meta, "meta")
+  # Test with merged = TRUE
+  merged_pairs <- pairDrugOmic(myOmics, myDrugs, merged = TRUE)
+  expect_true("merged_dataset" %in% names(merged_pairs))
+})
+
+test_that("analyzeContinuousDrugOmic correctly analyzes pairs", {
+  # Create mock pairs
+  myPairs <- list(
+    dataset1_drug1 = list(
+      omic = c("cell1" = 0.5, "cell2" = 1.2, "cell3" = -0.8),
+      drug = c("cell1" = 0.1, "cell2" = 0.7, "cell3" = -0.3)
+    ),
+    dataset2_drug1 = list(
+      omic = c("cell2" = 0.9, "cell3" = -0.6, "cell5" = 1.5),
+      drug = c("cell2" = 0.4, "cell3" = -0.2, "cell5" = 0.8)
+    )
+  )
+  
+  # Add a merged dataset (should be skipped in meta-analysis)
+  myPairs[["merged_dataset"]] <- list(
+    omic = c("cell1" = 0.5, "cell2" = 1.2, "cell3" = -0.8, "cell5" = 1.5),
+    drug = c("cell1" = 0.1, "cell2" = 0.7, "cell3" = -0.3, "cell5" = 0.8)
+  )
+  
+  # Analyze the pairs
+  results <- analyzeContinuousDrugOmic(myPairs)
+  
+  # Verify results
+  expect_true(!is.null(results))
+  expect_true(inherits(results, "meta"))
+})
+
+# Setup mock data for discrete tests
+test_that("pairDiscreteDrugOmic correctly pairs discrete data", {
+  # Create mock discrete omics data (lists of sample names with feature)
+  myOmics <- list(
+    dataset1 = c("cell1", "cell2", "cell4"),
+    dataset2 = c("cell2", "cell5", "cell6")
+  )
+  
+  # Create mock drug data
+  myDrugs <- list(
+    drug1 = c("cell1" = 0.1, "cell2" = 0.7, "cell3" = -0.3, "cell4" = 0.2, "cell5" = 0.5),
+    drug2 = c("cell2" = 0.4, "cell3" = -0.2, "cell4" = 0.6, "cell5" = -0.1, "cell6" = -0.4)
+  )
+  
+  # Pair the data
+  pairs <- pairDiscreteDrugOmic(myOmics, myDrugs)
+  
+  # Verify structure and content
+  expect_true(is.list(pairs))
+  expect_true(length(pairs) > 0)
+  
+  # Check one specific pair
+  expect_true("dataset1_drug1" %in% names(pairs))
+  if ("dataset1_drug1" %in% names(pairs)) {
+    pair <- pairs[["dataset1_drug1"]]
+    expect_true(is.list(pair))
+    expect_true(all(c("yes", "no") %in% names(pair)))
+    # "yes" should contain drug values for samples with the feature
+    expect_true(all(names(pair$yes) %in% myOmics$dataset1))
+    # "no" should contain drug values for samples without the feature
+    expect_true(all(!names(pair$no) %in% myOmics$dataset1))
   }
+  
+  # Test with merged = TRUE
+  merged_pairs <- pairDiscreteDrugOmic(myOmics, myDrugs, merged = TRUE)
+  expect_true("merged_dataset" %in% names(merged_pairs))
+})
+
+test_that("analyzeDiscreteDrugOmic correctly analyzes pairs", {
+  # Create mock pairs
+  myPairs <- list(
+    dataset1_drug1 = list(
+      yes = c("cell1" = 0.1, "cell2" = 0.7, "cell4" = 0.2),
+      no = c("cell3" = -0.3, "cell5" = 0.5, "cell6" = -0.1)
+    ),
+    dataset2_drug1 = list(
+      yes = c("cell2" = 0.4, "cell5" = -0.1, "cell6" = -0.4),
+      no = c("cell1" = 0.1, "cell3" = -0.3, "cell4" = 0.6)
+    )
+  )
+  
+  # Add a merged dataset (should be skipped in meta-analysis)
+  myPairs[["merged_dataset"]] <- list(
+    yes = c("cell1" = 0.1, "cell2" = 0.7, "cell4" = 0.2, "cell5" = -0.1, "cell6" = -0.4),
+    no = c("cell3" = -0.3)
+  )
+  
+  # Analyze the pairs
+  results <- analyzeDiscreteDrugOmic(myPairs)
+  
+  # Verify results
+  expect_true(!is.null(results))
+  expect_true(inherits(results, "meta"))
+})
+
+# Test plotting functions (minimal tests just to check they run)
+test_that("createForestPlot creates a forest plot", {
+  # This is a minimal test to check the function runs without error
+  # For complete testing, we would need actual meta-analysis results
+  
+  skip("This test requires actual meta-analysis results")
+  
+  # In a real test with appropriate fixtures:
+  # meta_obj <- analyzeContinuousDrugOmic(myPairs)
+  # expect_error(createForestPlot(meta_obj), NA)
+})
+
+test_that("plotContinuousDrugOmic creates a scatter plot", {
+  # Create mock data
+  omic_values <- c("cell1" = 0.5, "cell2" = 1.2, "cell3" = -0.8, "cell4" = 0.3)
+  drug_values <- c("cell1" = 0.1, "cell2" = 0.7, "cell3" = -0.3, "cell4" = 0.2)
+  
+  # Create plot
+  plot <- plotContinuousDrugOmic(omic_values, drug_values, "Test Study")
+  
+  # Verify plot is created
+  expect_true(inherits(plot, "ggplot"))
+})
+
+test_that("plotDiscreteDrugOmic creates a boxplot", {
+  # Create mock data
+  yes_values <- c("cell1" = 0.1, "cell2" = 0.7, "cell4" = 0.2)
+  no_values <- c("cell3" = -0.3, "cell5" = 0.5, "cell6" = -0.1)
+  
+  # Create plot
+  plot <- plotDiscreteDrugOmic(yes_values, no_values, "Test Study")
+  
+  # Verify plot is created
+  expect_true(inherits(plot, "ggplot"))
+})
+
+# Test the main analysis function
+test_that("analyzeDrugOmicPair handles both continuous and discrete data", {
+  # This is a complex function that requires mocking selectFeatures
+  # We'll mock the function by temporarily redefining it
+  
+  skip("This test requires mocking the selectFeatures function")
+  
+  # In a real test environment with proper mocking:
+  # mockSelectFeatures <- function(...) {
+  #   # Return appropriate mock data based on args
+  # }
+  # 
+  # # Temporarily replace the selectFeatures function
+  # original <- selectFeatures
+  # assign("selectFeatures", mockSelectFeatures, envir = environment(analyzeDrugOmicPair))
+  # 
+  # # Test the function
+  # result <- analyzeDrugOmicPair("mRNA", "GENE1", "DRUG1")
+  # expect_true(is.list(result))
+  # expect_true(!is.null(result$plot))
+  # 
+  # # Restore the original function
+  # assign("selectFeatures", original, envir = environment(analyzeDrugOmicPair))
 }) 

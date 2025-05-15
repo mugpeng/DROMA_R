@@ -1,25 +1,27 @@
-# Function to select feature data include omic data and drug data
-# 
-# @param select_feas_type The type of feature to select (e.g., "mRNA", "cnv", "drug")
-# @param select_feas The specific feature to select within the feature type
-# @param data_type Filter by data type: "all" (default), "cell" (cell lines only), or "PDO" (patient-derived organoids only), or "PDC" and "PDX"
-# @param tumor_type Filter by tumor type: "all" (default) or any specific tumor type (e.g., "lung cancer", "breast cancer")
-# @return A list of selected features filtered by the specified data type and tumor type
-selFeatures <- function(select_feas_type, select_feas, 
+#' Select features from omics or drug data
+#'
+#' @description Function to select feature data including omic data and drug data
+#' @param select_feas_type The type of feature to select (e.g., "mRNA", "cnv", "drug")
+#' @param select_feas The specific feature to select within the feature type
+#' @param data_type Filter by data type: "all" (default), "CellLine", "PDO" (patient-derived organoids), "PDC", or "PDX"
+#' @param tumor_type Filter by tumor type: "all" (default) or any specific tumor type (e.g., "lung cancer", "breast cancer")
+#' @return A list of selected features filtered by the specified data type and tumor type
+#' @export
+selectFeatures <- function(select_feas_type, select_feas,
                         data_type = "all", tumor_type = "all") {
   if(!select_feas_type %in% c("mRNA","cnv",
                                "meth", "proteinrppa", "proteinms", # continuous
                                "mutation_gene", "mutation_site", "fusion", # discrete
                                "drug", "drug_raw"
   )){
-    stop("The select feature type doesn't exsit. Please choose from drug, mRNA, meth, cnv, proteinms, proteinrppa, \nmutation_gene, mutation_site, or fusion.")
+    stop("The select feature type doesn't exist. Please choose from drug, mRNA, meth, cnv, proteinms, proteinrppa, mutation_gene, mutation_site, or fusion.")
   }
-  
+
   # Validate data_type parameter
   if(!data_type %in% c("all", "CellLine", "PDO", "PDC", "PDX")) {
-    stop("Invalid data_type. Please choose from 'all', 'CellLine', or 'PDO', or 'PDC', or 'PDX'.")
+    stop("Invalid data_type. Please choose from 'all', 'CellLine', 'PDO', 'PDC', or 'PDX'.")
   }
-  
+
   # Get cells based on data_type and tumor_type filter
   filtered_cells <- NULL
   if(data_type != "all" || tumor_type != "all") {
@@ -29,12 +31,12 @@ selFeatures <- function(select_feas_type, select_feas,
     } else {
       # Create a logical vector for filtering
       filter_idx <- rep(TRUE, nrow(sample_anno))
-      
+
       # Apply data_type filter if specified
       if(data_type != "all") {
         filter_idx <- filter_idx & (sample_anno$DataType == data_type)
       }
-      
+
       # Apply tumor_type filter if specified
       if(tumor_type != "all") {
         if(!"TumorType" %in% colnames(sample_anno)) {
@@ -43,10 +45,10 @@ selFeatures <- function(select_feas_type, select_feas,
           filter_idx <- filter_idx & (sample_anno$TumorType == tumor_type)
         }
       }
-      
+
       # Get filtered sample IDs
       filtered_cells <- sample_anno$SampleID[filter_idx]
-      
+
       if(length(filtered_cells) == 0) {
         # Construct appropriate error message
         if(data_type != "all" && tumor_type != "all") {
@@ -59,7 +61,7 @@ selFeatures <- function(select_feas_type, select_feas,
       }
     }
   }
-  
+
   feas_sel_vec <- fea_list[[select_feas_type]]
   if(select_feas_type %in% c("mRNA","cnv",
                               "meth", "proteinrppa", "proteinms",
@@ -72,7 +74,7 @@ selFeatures <- function(select_feas_type, select_feas,
         return(NULL)
       }
       names(fea_sel) <- colnames(fea)
-      
+
       # Filter by data_type and tumor_type if specified
       if(!is.null(filtered_cells)) {
         common_cells <- intersect(names(fea_sel), filtered_cells)
@@ -81,7 +83,7 @@ selFeatures <- function(select_feas_type, select_feas,
         }
         fea_sel <- fea_sel[common_cells]
       }
-      
+
       fea_sel
     })
   } else{
@@ -92,7 +94,7 @@ selFeatures <- function(select_feas_type, select_feas,
       if(all(is.na(fea_sel))){
         return(NULL)
       }
-      
+
       # Filter by data_type and tumor_type if specified
       if(!is.null(filtered_cells)) {
         fea_sel <- intersect(fea_sel, filtered_cells)
@@ -100,7 +102,7 @@ selFeatures <- function(select_feas_type, select_feas,
           return(NULL)
         }
       }
-      
+
       fea_sel
     })
   }
@@ -123,19 +125,4 @@ selFeatures <- function(select_feas_type, select_feas,
     }
   }
   fea_sel_list
-}
-
-mergeDrugFeatures <- function(myDrugs){
-  my_drugs <- unname(myDrugs)
-  merge_drug <- unlist(lapply(my_drugs, function(x) x))
-  merge_drug <- na.omit(merge_drug)
-  merge_drug
-}
-
-annoMergeFeatures <- function(mergeDrug){
-  merge_drug <- data.frame(
-    SampleID = names(mergeDrug),
-    value = unname(mergeDrug)
-  )
-  merge_drug <- base::merge(merge_drug, sample_anno, by = "SampleID")
 }
