@@ -1,0 +1,34 @@
+Package: DROMA
+Title: Drug Omics association MAp(DROMA) Package
+Version: 0.1.0
+Authors@R: 
+    person("Peng Yu Zhong", email = "yc47680@um.edu.mo", role = c("aut"))
+Description: DROMA (Drug Omics Association) provides tools for analyzing associations 
+    between drug responses and various omics data types. It supports meta-analysis 
+    of drug-omics associations across multiple datasets, visualization of results, 
+    and batch processing of features.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends: 
+    R (>= 3.5.0)
+Imports: 
+    meta,
+    metafor,
+    effsize,
+    parallel,
+    snowfall,
+    ggplot2,
+    ggpubr,
+    dplyr,
+    stats,
+    DT,
+    htmltools,
+    utils
+RoxygenNote: 7.1.1
+Suggests: 
+    testthat,
+    knitr,
+    rmarkdown,
+    devtools
+VignetteBuilder: knitr 
