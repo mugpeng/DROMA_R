@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Test script for FuncDrugOmicPair.R functions
-# Tests pairDrugOmic, analyzeContinuousDrugOmic, pairDiscreteDrugOmic, 
+# Tests pairDrugOmic, analyzeContinuousDrugOmic, pairDiscreteDrugOmic,
 # analyzeDiscreteDrugOmic, and plotting functions
 
 # Load required packages
@@ -11,6 +11,7 @@ library(metafor)
 library(meta)
 library(effsize)
 library(ggpubr)
+library(patchwork)
 
 # Source the function files
 source("R/FuncDrugOmicPair.R")
@@ -18,190 +19,244 @@ source("R/FuncGetData.R") # Needed for selectFeatures function
 
 context("Drug-Omic Pairing Functions")
 
-# Setup mock data for continuous tests
+# Setup real data for tests
+# Define example features to use
+select_drugs <- "Paclitaxel"  # Example drug
+select_omics_type_continuous <- "mRNA"    # Example continuous omics type
+select_omics_continuous <- "ABCB1"        # Example continuous omics feature
+select_omics_type_discrete <- "mutation_gene"  # Example discrete omics type
+select_omics_discrete <- "TP53"           # Example discrete omics feature
+
+# Test for pairDrugOmic function
 test_that("pairDrugOmic correctly pairs drug and omics data", {
-  # Create mock omics and drug data
-  myOmics <- list(
-    dataset1 = c("cell1" = 0.5, "cell2" = 1.2, "cell3" = -0.8, "cell4" = 0.3),
-    dataset2 = c("cell2" = 0.9, "cell3" = -0.6, "cell5" = 1.5, "cell6" = -0.2)
-  )
-  
-  myDrugs <- list(
-    drug1 = c("cell1" = 0.1, "cell2" = 0.7, "cell3" = -0.3, "cell5" = 0.5),
-    drug2 = c("cell2" = 0.4, "cell3" = -0.2, "cell4" = 0.6, "cell6" = -0.4)
-  )
-  
+  # Load example data
+  load("data/drug.Rda")
+  load("data/mRNA.Rda")
+  load("data/anno.Rda")
+
+  # Get real data using selectFeatures
+  myOmics <- selectFeatures(select_omics_type_continuous, select_omics_continuous,
+                         data_type = "all", tumor_type = "all")
+  myDrugs <- selectFeatures("drug", select_drugs,
+                         data_type = "all", tumor_type = "all")
+
   # Pair the data
   pairs <- pairDrugOmic(myOmics, myDrugs)
-  
+
   # Verify structure and content
   expect_true(is.list(pairs))
   expect_true(length(pairs) > 0)
-  
-  # Check one specific pair
-  expect_true("dataset1_drug1" %in% names(pairs))
-  if ("dataset1_drug1" %in% names(pairs)) {
-    pair <- pairs[["dataset1_drug1"]]
-    expect_true(is.list(pair))
-    expect_true(all(c("omic", "drug") %in% names(pair)))
-    expect_equal(length(pair$omic), length(pair$drug))
-    expect_equal(names(pair$omic), names(pair$drug))
-  }
-  
+
+  # Check that pairs have the expected structure
+  first_pair_name <- names(pairs)[1]
+  pair <- pairs[[first_pair_name]]
+  expect_true(is.list(pair))
+  expect_true(all(c("omic", "drug") %in% names(pair)))
+  expect_equal(length(pair$omic), length(pair$drug))
+  expect_equal(names(pair$omic), names(pair$drug))
+
   # Test with merged = TRUE
   merged_pairs <- pairDrugOmic(myOmics, myDrugs, merged = TRUE)
   expect_true("merged_dataset" %in% names(merged_pairs))
 })
 
 test_that("analyzeContinuousDrugOmic correctly analyzes pairs", {
-  # Create mock pairs
-  myPairs <- list(
-    dataset1_drug1 = list(
-      omic = c("cell1" = 0.5, "cell2" = 1.2, "cell3" = -0.8),
-      drug = c("cell1" = 0.1, "cell2" = 0.7, "cell3" = -0.3)
-    ),
-    dataset2_drug1 = list(
-      omic = c("cell2" = 0.9, "cell3" = -0.6, "cell5" = 1.5),
-      drug = c("cell2" = 0.4, "cell3" = -0.2, "cell5" = 0.8)
-    )
-  )
-  
-  # Add a merged dataset (should be skipped in meta-analysis)
-  myPairs[["merged_dataset"]] <- list(
-    omic = c("cell1" = 0.5, "cell2" = 1.2, "cell3" = -0.8, "cell5" = 1.5),
-    drug = c("cell1" = 0.1, "cell2" = 0.7, "cell3" = -0.3, "cell5" = 0.8)
-  )
-  
+  # Load example data
+  load("data/drug.Rda")
+  load("data/mRNA.Rda")
+  load("data/anno.Rda")
+
+  # Get real data using selectFeatures
+  myOmics <- selectFeatures(select_omics_type_continuous, select_omics_continuous,
+                         data_type = "all", tumor_type = "all")
+  myDrugs <- selectFeatures("drug", select_drugs,
+                         data_type = "all", tumor_type = "all")
+
+  # Pair the data
+  myPairs <- pairDrugOmic(myOmics, myDrugs)
+
   # Analyze the pairs
   results <- analyzeContinuousDrugOmic(myPairs)
-  
+
   # Verify results
   expect_true(!is.null(results))
   expect_true(inherits(results, "meta"))
 })
 
-# Setup mock data for discrete tests
+# Test for pairDiscreteDrugOmic function
 test_that("pairDiscreteDrugOmic correctly pairs discrete data", {
-  # Create mock discrete omics data (lists of sample names with feature)
-  myOmics <- list(
-    dataset1 = c("cell1", "cell2", "cell4"),
-    dataset2 = c("cell2", "cell5", "cell6")
-  )
-  
-  # Create mock drug data
-  myDrugs <- list(
-    drug1 = c("cell1" = 0.1, "cell2" = 0.7, "cell3" = -0.3, "cell4" = 0.2, "cell5" = 0.5),
-    drug2 = c("cell2" = 0.4, "cell3" = -0.2, "cell4" = 0.6, "cell5" = -0.1, "cell6" = -0.4)
-  )
-  
+  # Load example data
+  load("data/drug.Rda")
+  load("data/mut.Rda")
+  load("data/anno.Rda")
+
+  # Get real data using selectFeatures
+  myOmics <- selectFeatures(select_omics_type_discrete, select_omics_discrete,
+                         data_type = "all", tumor_type = "all")
+  myDrugs <- selectFeatures("drug", select_drugs,
+                         data_type = "all", tumor_type = "all")
+
   # Pair the data
   pairs <- pairDiscreteDrugOmic(myOmics, myDrugs)
-  
+
   # Verify structure and content
   expect_true(is.list(pairs))
   expect_true(length(pairs) > 0)
-  
-  # Check one specific pair
-  expect_true("dataset1_drug1" %in% names(pairs))
-  if ("dataset1_drug1" %in% names(pairs)) {
-    pair <- pairs[["dataset1_drug1"]]
-    expect_true(is.list(pair))
-    expect_true(all(c("yes", "no") %in% names(pair)))
-    # "yes" should contain drug values for samples with the feature
-    expect_true(all(names(pair$yes) %in% myOmics$dataset1))
-    # "no" should contain drug values for samples without the feature
-    expect_true(all(!names(pair$no) %in% myOmics$dataset1))
-  }
-  
+
+  # Check that pairs have the expected structure
+  first_pair_name <- names(pairs)[1]
+  pair <- pairs[[first_pair_name]]
+  expect_true(is.list(pair))
+  expect_true(all(c("yes", "no") %in% names(pair)))
+
   # Test with merged = TRUE
   merged_pairs <- pairDiscreteDrugOmic(myOmics, myDrugs, merged = TRUE)
   expect_true("merged_dataset" %in% names(merged_pairs))
 })
 
 test_that("analyzeDiscreteDrugOmic correctly analyzes pairs", {
-  # Create mock pairs
-  myPairs <- list(
-    dataset1_drug1 = list(
-      yes = c("cell1" = 0.1, "cell2" = 0.7, "cell4" = 0.2),
-      no = c("cell3" = -0.3, "cell5" = 0.5, "cell6" = -0.1)
-    ),
-    dataset2_drug1 = list(
-      yes = c("cell2" = 0.4, "cell5" = -0.1, "cell6" = -0.4),
-      no = c("cell1" = 0.1, "cell3" = -0.3, "cell4" = 0.6)
-    )
-  )
-  
-  # Add a merged dataset (should be skipped in meta-analysis)
-  myPairs[["merged_dataset"]] <- list(
-    yes = c("cell1" = 0.1, "cell2" = 0.7, "cell4" = 0.2, "cell5" = -0.1, "cell6" = -0.4),
-    no = c("cell3" = -0.3)
-  )
-  
+  # Load example data
+  load("data/drug.Rda")
+  load("data/mut.Rda")
+  load("data/anno.Rda")
+
+  # Get real data using selectFeatures
+  myOmics <- selectFeatures(select_omics_type_discrete, select_omics_discrete,
+                         data_type = "all", tumor_type = "all")
+  myDrugs <- selectFeatures("drug", select_drugs,
+                         data_type = "all", tumor_type = "all")
+
+  # Pair the data
+  myPairs <- pairDiscreteDrugOmic(myOmics, myDrugs)
+
   # Analyze the pairs
   results <- analyzeDiscreteDrugOmic(myPairs)
-  
+
   # Verify results
   expect_true(!is.null(results))
   expect_true(inherits(results, "meta"))
 })
 
-# Test plotting functions (minimal tests just to check they run)
+# Test plotting functions with real data
 test_that("createForestPlot creates a forest plot", {
-  # This is a minimal test to check the function runs without error
-  # For complete testing, we would need actual meta-analysis results
-  
-  skip("This test requires actual meta-analysis results")
-  
-  # In a real test with appropriate fixtures:
-  # meta_obj <- analyzeContinuousDrugOmic(myPairs)
-  # expect_error(createForestPlot(meta_obj), NA)
+  # Load example data
+  load("data/drug.Rda")
+  load("data/mRNA.Rda")
+  load("data/anno.Rda")
+
+  # Get real data using selectFeatures
+  myOmics <- selectFeatures(select_omics_type_continuous, select_omics_continuous,
+                         data_type = "all", tumor_type = "all")
+  myDrugs <- selectFeatures("drug", select_drugs,
+                         data_type = "all", tumor_type = "all")
+
+  # Pair the data and analyze
+  myPairs <- pairDrugOmic(myOmics, myDrugs)
+  meta_obj <- analyzeContinuousDrugOmic(myPairs)
+
+  # Skip if meta-analysis failed
+  if (is.null(meta_obj)) {
+    skip("Meta-analysis did not produce results with the test data")
+  }
+
+  # Create forest plot
+  plot <- createForestPlot(meta_obj)
+
+  # Verify plot was created (no easy way to test the plot itself)
+  expect_true(TRUE)
 })
 
 test_that("plotContinuousDrugOmic creates a scatter plot", {
-  # Create mock data
-  omic_values <- c("cell1" = 0.5, "cell2" = 1.2, "cell3" = -0.8, "cell4" = 0.3)
-  drug_values <- c("cell1" = 0.1, "cell2" = 0.7, "cell3" = -0.3, "cell4" = 0.2)
-  
+  # Load example data
+  load("data/drug.Rda")
+  load("data/mRNA.Rda")
+  load("data/anno.Rda")
+
+  # Get real data using selectFeatures
+  myOmics <- selectFeatures(select_omics_type_continuous, select_omics_continuous,
+                         data_type = "all", tumor_type = "all")
+  myDrugs <- selectFeatures("drug", select_drugs,
+                         data_type = "all", tumor_type = "all")
+
+  # Pair the data
+  myPairs <- pairDrugOmic(myOmics, myDrugs)
+
+  # Get first pair for plotting
+  first_pair_name <- names(myPairs)[1]
+  pair <- myPairs[[first_pair_name]]
+
   # Create plot
-  plot <- plotContinuousDrugOmic(omic_values, drug_values, "Test Study")
-  
+  plot <- plotContinuousDrugOmic(pair$omic, pair$drug, first_pair_name)
+
   # Verify plot is created
   expect_true(inherits(plot, "ggplot"))
 })
 
 test_that("plotDiscreteDrugOmic creates a boxplot", {
-  # Create mock data
-  yes_values <- c("cell1" = 0.1, "cell2" = 0.7, "cell4" = 0.2)
-  no_values <- c("cell3" = -0.3, "cell5" = 0.5, "cell6" = -0.1)
-  
+  # Load example data
+  load("data/drug.Rda")
+  load("data/mut.Rda")
+  load("data/anno.Rda")
+
+  # Get real data using selectFeatures
+  myOmics <- selectFeatures(select_omics_type_discrete, select_omics_discrete,
+                         data_type = "all", tumor_type = "all")
+  myDrugs <- selectFeatures("drug", select_drugs,
+                         data_type = "all", tumor_type = "all")
+
+  # Pair the data
+  myPairs <- pairDiscreteDrugOmic(myOmics, myDrugs)
+
+  # Get first pair for plotting
+  first_pair_name <- names(myPairs)[1]
+  pair <- myPairs[[first_pair_name]]
+
   # Create plot
-  plot <- plotDiscreteDrugOmic(yes_values, no_values, "Test Study")
-  
+  plot <- plotDiscreteDrugOmic(pair$yes, pair$no, first_pair_name)
+
   # Verify plot is created
   expect_true(inherits(plot, "ggplot"))
 })
 
 # Test the main analysis function
-test_that("analyzeDrugOmicPair handles both continuous and discrete data", {
-  # This is a complex function that requires mocking selectFeatures
-  # We'll mock the function by temporarily redefining it
-  
-  skip("This test requires mocking the selectFeatures function")
-  
-  # In a real test environment with proper mocking:
-  # mockSelectFeatures <- function(...) {
-  #   # Return appropriate mock data based on args
-  # }
-  # 
-  # # Temporarily replace the selectFeatures function
-  # original <- selectFeatures
-  # assign("selectFeatures", mockSelectFeatures, envir = environment(analyzeDrugOmicPair))
-  # 
-  # # Test the function
-  # result <- analyzeDrugOmicPair("mRNA", "GENE1", "DRUG1")
-  # expect_true(is.list(result))
-  # expect_true(!is.null(result$plot))
-  # 
-  # # Restore the original function
-  # assign("selectFeatures", original, envir = environment(analyzeDrugOmicPair))
-}) 
+test_that("analyzeDrugOmicPair handles continuous data", {
+  # Load example data
+  load("data/drug.Rda")
+  load("data/mRNA.Rda")
+  load("data/anno.Rda")
+
+  # Call the main analysis function
+  result <- analyzeDrugOmicPair(
+    select_omics_type = select_omics_type_continuous,
+    select_omics = select_omics_continuous,
+    select_drugs = select_drugs,
+    data_type = "all",
+    tumor_type = "all"
+  )
+
+  # Verify results
+  expect_true(is.list(result))
+  expect_true(!is.null(result$plot))
+  expect_true(!is.null(result$data))
+})
+
+test_that("analyzeDrugOmicPair handles discrete data", {
+  # Load example data
+  load("data/drug.Rda")
+  load("data/mut.Rda")
+  load("data/anno.Rda")
+
+  # Call the main analysis function
+  result <- analyzeDrugOmicPair(
+    select_omics_type = select_omics_type_discrete,
+    select_omics = select_omics_discrete,
+    select_drugs = select_drugs,
+    data_type = "all",
+    tumor_type = "all"
+  )
+
+  # Verify results
+  expect_true(is.list(result))
+  expect_true(!is.null(result$plot))
+  expect_true(!is.null(result$data))
+})

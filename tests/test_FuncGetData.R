@@ -1,13 +1,19 @@
 #!/usr/bin/env Rscript
 
 # Test script for FuncGetData.R functions
-# Tests selectFeatures, mergeDrugFeatures, and annotateMergedFeatures
+# Tests selectFeatures
 
 # Load required packages
 library(testthat)
 
 # Source the function file
 source("R/FuncGetData.R")
+
+# Load necessary data files
+load("data/search_vec.Rda")  # Contains fea_list required by selectFeatures
+load("data/drug.Rda")
+load("data/mRNA.Rda")
+load("data/anno.Rda")
 
 context("Data Selection Functions")
 
@@ -18,19 +24,15 @@ select_omics <- "ABCB1"        # Example omics feature
 
 # Test for selectFeatures function
 test_that("selectFeatures returns correct data for drug", {
-  # Load example drug data
-  load("../data/drug.Rda")
-  load("../data/mRNA.Rda")
-  
   # Call function
   myDrugs <- selectFeatures("drug", select_drugs,
                         data_type = "all",
                         tumor_type = "all")
-  
+
   # Verify results
   expect_true(is.list(myDrugs))
   expect_true(length(myDrugs) > 0)
-  
+
   # Test for a specific dataset
   if ("gdsc1" %in% names(myDrugs)) {
     drug_data <- myDrugs[["gdsc1"]]
@@ -40,19 +42,15 @@ test_that("selectFeatures returns correct data for drug", {
 })
 
 test_that("selectFeatures returns correct data for mRNA", {
-  # Load example omics data
-  load("../data/mRNA.Rda")
-  load("../data/anno.Rda")
-  
   # Call function
   myOmics <- selectFeatures(select_omics_type, select_omics,
                          data_type = "all",
                          tumor_type = "all")
-  
+
   # Verify results
   expect_true(is.list(myOmics))
   expect_true(length(myOmics) > 0)
-  
+
   # Test for a specific dataset
   if ("gdsc" %in% names(myOmics)) {
     omics_data <- myOmics[["gdsc"]]
