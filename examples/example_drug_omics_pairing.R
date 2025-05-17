@@ -40,7 +40,8 @@ result <- analyzeDrugOmicPair(
 
 # Display results
 cat("Meta-analysis results:\n")
-print(result$data)
+createForestPlot(result$meta)
+result$plot
 
 # Example 2: Analyze association between Paclitaxel and TP53 mutation status
 cat("\nAnalyzing association between Paclitaxel and TP53 mutation status...\n")
@@ -54,7 +55,9 @@ result_mut <- analyzeDrugOmicPair(
 
 # Display results
 cat("Meta-analysis results for mutation association:\n")
-print(result_mut$data)
+print(names(result_mut$data))
+createForestPlot(result_mut$meta)
+result_mut$plot
 
 # Example 3: Get drug sensitivity data for visualization
 cat("\nRetrieving drug sensitivity data for Paclitaxel...\n")
