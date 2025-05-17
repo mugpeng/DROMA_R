@@ -1,8 +1,7 @@
 # DROMA: Drug Omics Association Map
 
-[![R-CMD-check](https://github.com/mugpeng/DROMA_R/workflows/R-CMD-check/badge.svg)](https://github.com/mugpeng/DROMA_R/actions)
+
 [![Version](https://img.shields.io/badge/version-0.3.1-blue.svg)](https://github.com/mugpeng/DROMA_R)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
 
@@ -92,7 +91,7 @@ print(result$data)
 plot(result$plot)
 ```
 
-## Example Workflows
+## Examples
 
 ### 1. Drug-Omics Association Analysis
 
@@ -143,6 +142,14 @@ print(results$result_table)
 # Create volcano plot
 plotMetaVolcano(results$result_table)
 ```
+
+
+
+### Full example
+
+check scripts under `examples/`
+
+
 
 ## Documentation
 
