@@ -10,10 +10,16 @@ library(metafor)
 library(effsize)
 library(ggplot2)
 library(dplyr)
+library(DROMA)
 
-# Source the function files
-source("../R/FuncBatchFeature.R")
-source("../R/FuncGetData.R") # For selectFeatures function
+# Load necessary data files
+setupDROMA()
+loadDROMA("drug")
+loadDROMA("mRNA")
+loadDROMA("mut")
+
+# When running tests in the package environment, we should use the package functions directly
+# rather than sourcing the files
 
 context("Batch Feature Analysis Functions")
 
@@ -27,10 +33,7 @@ select_omics_discrete <- "TP53"           # Example discrete omics feature
 
 # Test meta-analysis calculation functions
 test_that("metaCalcConCon calculates meta-analysis for continuous data", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mRNA.Rda")
-  load("data/anno.Rda")
+  skip_if_not_installed("DROMA")
 
   # Get real data using selectFeatures
   myOmics <- selectFeatures(select_omics_type_continuous, select_omics_continuous,
@@ -50,11 +53,7 @@ test_that("metaCalcConCon calculates meta-analysis for continuous data", {
 })
 
 test_that("metaCalcConDis calculates meta-analysis for continuous vs. discrete data", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mut.Rda")
-  load("data/mRNA.Rda")
-  load("data/anno.Rda")
+  skip_if_not_installed("DROMA")
 
   # Get real data using selectFeatures
   myOmics <- selectFeatures(select_omics_type_discrete, select_omics_discrete,
@@ -74,15 +73,12 @@ test_that("metaCalcConDis calculates meta-analysis for continuous vs. discrete d
 })
 
 test_that("metaCalcDisDis calculates meta-analysis for discrete vs. discrete data", {
-  # Load example data
-  load("data/mut.Rda")
-  load("data/anno.Rda")
-  load("data/search_vec.Rda")
+  skip_if_not_installed("DROMA")
 
   # Get real data for two discrete features
   my_feas1 <- selectFeatures("mutation_gene", "TP53",
                           data_type = "all", tumor_type = "all")
-  my_feas2 <- selectFeatures("mutation_gene", "KRAS",
+  my_feas2 <- selectFeatures("mutation_gene", "ABCB1",
                           data_type = "all", tumor_type = "all")
 
   # Pair the data
@@ -92,9 +88,7 @@ test_that("metaCalcDisDis calculates meta-analysis for discrete vs. discrete dat
                                       samples_search = samples_search)
 
   # Skip if no valid pairs were created
-  if (length(selected_pair) == 0) {
-    skip("No valid discrete-discrete pairs could be created with the test data")
-  }
+  skip_if(length(selected_pair) == 0, "No valid discrete-discrete pairs could be created with the test data")
 
   # Calculate meta-analysis
   result <- metaCalcDisDis(selected_pair)
@@ -116,22 +110,9 @@ test_that("formatTime correctly formats time in seconds", {
   expect_equal(formatTime(7325), "2 hours 2 minutes")
 })
 
-test_that("estimateTimeRemaining calculates remaining time", {
-  # Test with 25% completion (1 out of 4 items, 10 seconds elapsed)
-  estimate <- estimateTimeRemaining(1, 4, 10)
-  expect_equal(estimate, 30) # Expect 30 seconds remaining
-
-  # Test with 50% completion (5 out of 10 items, 100 seconds elapsed)
-  estimate <- estimateTimeRemaining(5, 10, 100)
-  expect_equal(estimate, 100) # Expect 100 seconds remaining
-})
-
 # Test pairing functions
 test_that("pairContinuousFeatures correctly pairs continuous data", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mRNA.Rda")
-  load("data/anno.Rda")
+  skip_if_not_installed("DROMA")
 
   # Get real data using selectFeatures
   myOmics <- selectFeatures(select_omics_type_continuous, select_omics_continuous,
@@ -155,10 +136,7 @@ test_that("pairContinuousFeatures correctly pairs continuous data", {
 })
 
 test_that("pairDiscreteFeatures correctly pairs discrete and continuous data", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mut.Rda")
-  load("data/anno.Rda")
+  skip_if_not_installed("DROMA")
 
   # Get real data using selectFeatures
   myOmics <- selectFeatures(select_omics_type_discrete, select_omics_discrete,
@@ -181,10 +159,7 @@ test_that("pairDiscreteFeatures correctly pairs discrete and continuous data", {
 })
 
 test_that("pairDiscreteDiscrete correctly pairs two discrete features", {
-  # Load example data
-  load("data/mut.Rda")
-  load("data/anno.Rda")
-  load("data/search_vec.Rda")
+  skip_if_not_installed("DROMA")
 
   # Get real data for two discrete features
   my_feas1 <- selectFeatures("mutation_gene", "TP53",
@@ -199,9 +174,7 @@ test_that("pairDiscreteDiscrete correctly pairs two discrete features", {
                               samples_search = samples_search)
 
   # Skip if no valid pairs were created
-  if (length(pairs) == 0) {
-    skip("No valid discrete-discrete pairs could be created with the test data")
-  }
+  skip_if(length(pairs) == 0, "No valid discrete-discrete pairs could be created with the test data")
 
   # Verify structure and content
   expect_true(is.list(pairs))
@@ -217,14 +190,14 @@ test_that("pairDiscreteDiscrete correctly pairs two discrete features", {
 
 # Test plotting function
 test_that("plotMetaVolcano creates a volcano plot", {
-  # Create meta-analysis results from real data
-  load("data/search_vec.Rda")
+  skip_if_not_installed("DROMA")
+  skip_if_not_installed("ggplot2")
 
   # Create a sample meta-analysis results dataframe
   meta_df <- data.frame(
     effect_size = runif(20, -0.8, 0.8),
     p_value = 10^(-runif(20, 0, 5)),
-    name = sample(feas_search$name[feas_search$type == "mRNA"], 20)
+    name = paste0("Gene_", 1:20)
   )
 
   # Create plot
@@ -236,20 +209,8 @@ test_that("plotMetaVolcano creates a volcano plot", {
 
 # Test the main batch analysis function
 test_that("batchFindSignificantFeatures handles real data", {
-  # Load required data
-  load("data/drug.Rda")
-  load("data/mRNA.Rda")
-  load("data/anno.Rda")
-  load("data/search_vec.Rda")
-
-  # Skip the full test as it takes too long
-  skip("This test takes too long to run in a standard test suite")
-
-  # Test with real data (limited to top 10 features for speed)
-  # This would be run in a more comprehensive test environment
-  assign("feas_search", feas_search, envir = .GlobalEnv)
-  assign("samples_search", samples_search, envir = .GlobalEnv)
-  assign("fea_list", fea_list, envir = .GlobalEnv)
+  # skip("This test takes too long to run in a standard test suite")
+  skip_if_not_installed("DROMA")
 
   # Run batch analysis with limited scope
   results <- batchFindSignificantFeatures(

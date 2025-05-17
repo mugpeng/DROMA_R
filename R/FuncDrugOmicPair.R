@@ -54,6 +54,7 @@ pairDrugOmic <- function(myOmics, myDrugs, merged = FALSE){
 #' @return Meta-analysis results object or NULL if analysis couldn't be performed
 #' @export
 analyzeContinuousDrugOmic <- function(myPairs) {
+  options(warn = -1)
   # Initialize list to store correlation results
   test_list <- list()
   valid_indices <- c()
@@ -72,6 +73,7 @@ analyzeContinuousDrugOmic <- function(myPairs) {
       if (length(omic_sel) < 3 || length(drug_sel) < 3) next
 
       # Perform correlation test
+
       cor_re <- cor.test(omic_sel, drug_sel, method = "spearman")
       test_list[[x]] <- data.frame(
         p = cor_re$p.value,
@@ -171,6 +173,7 @@ pairDiscreteDrugOmic <- function(myOmics, myDrugs, merged = FALSE){
 #' @return Meta-analysis results object or NULL if analysis couldn't be performed
 #' @export
 analyzeDiscreteDrugOmic <- function(myPairs) {
+  options(warn = -1)
   # Initialize list to store test results
   test_list <- list()
   valid_indices <- c()
@@ -318,7 +321,6 @@ plotAllContinuousDrugOmic <- function(pairs_list) {
   for (i in seq_along(pairs_list)) {
 
     # Try to create the plot, continue if error
-    tryCatch({
       omic_sel <- pairs_list[[i]]$omic
       drug_sel <- pairs_list[[i]]$drug
 
@@ -327,9 +329,6 @@ plotAllContinuousDrugOmic <- function(pairs_list) {
 
       # Create plot and add to list
       p_list[[i]] <- plotContinuousDrugOmic(omic_sel, drug_sel, names(pairs_list)[i])
-    }, error = function(e) {
-      # Continue to next pair on error
-    })
   }
 
   # Remove NULL entries from list
@@ -390,18 +389,14 @@ plotAllDiscreteDrugOmic <- function(pairs_list) {
   for (i in seq_along(pairs_list)) {
 
     # Try to create the plot, continue if error
-    tryCatch({
-      yes_drugs <- pairs_list[[i]]$yes
-      no_drugs <- pairs_list[[i]]$no
+    yes_drugs <- pairs_list[[i]]$yes
+    no_drugs <- pairs_list[[i]]$no
 
-      # Ensure adequate data for plotting
-      if (length(yes_drugs) < 3 || length(no_drugs) < 3) next
+    # Ensure adequate data for plotting
+    if (length(yes_drugs) < 3 || length(no_drugs) < 3) next
 
-      # Create plot and add to list
-      p_list[[i]] <- plotDiscreteDrugOmic(yes_drugs, no_drugs, names(pairs_list)[i])
-    }, error = function(e) {
-      # Continue to next pair on error
-    })
+    # Create plot and add to list
+    p_list[[i]] <- plotDiscreteDrugOmic(yes_drugs, no_drugs, names(pairs_list)[i])
   }
 
   # Remove NULL entries from list

@@ -5,16 +5,15 @@
 
 # Load required packages
 library(testthat)
-
-# Source the function file
-source("R/FuncGetData.R")
+library(DROMA)
+# Source the function file - use proper package testing approach
+# When running tests in the package environment, we should use the package functions directly
+# rather than sourcing the files
 
 # Load necessary data files
-load("data/search_vec.Rda")  # Contains fea_list required by selectFeatures
-load("data/drug.Rda")
-load("data/mRNA.Rda")
-load("data/anno.Rda")
-
+setupDROMA()
+loadDROMA("drug")
+loadDROMA("mRNA")
 context("Data Selection Functions")
 
 # Setup mock data
@@ -24,6 +23,9 @@ select_omics <- "ABCB1"        # Example omics feature
 
 # Test for selectFeatures function
 test_that("selectFeatures returns correct data for drug", {
+  skip_if_not_installed("DROMA")
+  skip_if(!exists("fea_list"))
+
   # Call function
   myDrugs <- selectFeatures("drug", select_drugs,
                         data_type = "all",
@@ -42,6 +44,9 @@ test_that("selectFeatures returns correct data for drug", {
 })
 
 test_that("selectFeatures returns correct data for mRNA", {
+  skip_if_not_installed("DROMA")
+  skip_if(!exists("fea_list"))
+
   # Call function
   myOmics <- selectFeatures(select_omics_type, select_omics,
                          data_type = "all",
@@ -60,11 +65,15 @@ test_that("selectFeatures returns correct data for mRNA", {
 })
 
 test_that("selectFeatures handles invalid feature type", {
+  skip_if_not_installed("DROMA")
+
   expect_error(selectFeatures("invalid_type", "ABCB1"),
                "The select feature type doesn't exist")
 })
 
 test_that("selectFeatures handles invalid data_type", {
+  skip_if_not_installed("DROMA")
+
   expect_error(selectFeatures("mRNA", "ABCB1", data_type = "invalid_type"),
                "Invalid data_type")
 })

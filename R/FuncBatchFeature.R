@@ -2,6 +2,7 @@
 #' Calculate meta-analysis for continuous vs continuous features
 #' @param selected_pair List of paired data
 #' @return Meta-analysis result object or NULL if insufficient data
+#' @export
 metaCalcConCon <- function(selected_pair){
   if(length(selected_pair) < 1) return(NULL)
   # test pairs one by one
@@ -10,6 +11,7 @@ metaCalcConCon <- function(selected_pair){
     fea2_sel <- selected_pair[[y]][[2]]
     # Check for minimum length
     if(length(fea1_sel) < 3 || length(fea2_sel) < 3) return(NULL)
+    options(warn = -1)
     cor_re <- tryCatch(
       cor.test(fea1_sel, fea2_sel,
                method = "spearman"),
@@ -43,7 +45,9 @@ metaCalcConCon <- function(selected_pair){
 #' Calculate meta-analysis for continuous vs discrete features
 #' @param selected_pair List of paired data
 #' @return Meta-analysis result object or NULL if insufficient data
+#' @export
 metaCalcConDis <- function(selected_pair){
+  options(warn = -1)
   if(length(selected_pair) < 1) return(NULL)
   cal_list <- lapply(1:length(selected_pair), function(y){
     yes_drugs <- selected_pair[[y]][[1]]
@@ -51,7 +55,6 @@ metaCalcConDis <- function(selected_pair){
 
     # Check for minimum length
     if(length(yes_drugs) < 3 || length(no_drugs) < 3) return(NULL)
-
     wilcox_re <- tryCatch(
       wilcox.test(no_drugs, yes_drugs),
       error = function(x){return(NULL)}
@@ -96,6 +99,7 @@ metaCalcConDis <- function(selected_pair){
 #' Calculate meta-analysis for discrete vs discrete features
 #' @param selected_pair List of paired data
 #' @return Meta-analysis result object or NULL if insufficient data
+#' @export
 metaCalcDisDis <- function(selected_pair) {
   # Check if we have enough pairs for meta-analysis
   if(length(selected_pair) < 1) return(NULL)
@@ -336,6 +340,7 @@ pairDiscreteDiscrete <- function(my_feas1, my_feas2,
 #' @param p_adj_method Method for p-value adjustment ("none", "BH", "bonferroni")
 #' @param custom_colors Custom color vector for Up, NS, Down (NULL for defaults)
 #' @return ggplot object with volcano plot
+#' @export
 plotMetaVolcano <- function(meta_df,
                             es_t = .4,
                             P_t = .001,

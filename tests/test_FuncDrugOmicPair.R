@@ -12,11 +12,15 @@ library(meta)
 library(effsize)
 library(ggpubr)
 library(patchwork)
-
-# Source the function files
-source("R/FuncDrugOmicPair.R")
-source("R/FuncGetData.R") # Needed for selectFeatures function
-
+library(DROMA)
+# Source the function files - use proper package testing approach
+# When running tests in the package environment, we should use the package functions directly
+# rather than sourcing the files
+# Load necessary data files
+setupDROMA()
+loadDROMA("drug")
+loadDROMA("mRNA")
+loadDROMA("mut")
 context("Drug-Omic Pairing Functions")
 
 # Setup real data for tests
@@ -29,10 +33,7 @@ select_omics_discrete <- "TP53"           # Example discrete omics feature
 
 # Test for pairDrugOmic function
 test_that("pairDrugOmic correctly pairs drug and omics data", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mRNA.Rda")
-  load("data/anno.Rda")
+  skip_if_not_installed("DROMA")
 
   # Get real data using selectFeatures
   myOmics <- selectFeatures(select_omics_type_continuous, select_omics_continuous,
@@ -61,10 +62,7 @@ test_that("pairDrugOmic correctly pairs drug and omics data", {
 })
 
 test_that("analyzeContinuousDrugOmic correctly analyzes pairs", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mRNA.Rda")
-  load("data/anno.Rda")
+  skip_if_not_installed("DROMA")
 
   # Get real data using selectFeatures
   myOmics <- selectFeatures(select_omics_type_continuous, select_omics_continuous,
@@ -83,13 +81,11 @@ test_that("analyzeContinuousDrugOmic correctly analyzes pairs", {
   expect_true(inherits(results, "meta"))
 })
 
+# Additional tests can be added similarly...
+
 # Test for pairDiscreteDrugOmic function
 test_that("pairDiscreteDrugOmic correctly pairs discrete data", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mut.Rda")
-  load("data/anno.Rda")
-
+  skip_if_not_installed("DROMA")
   # Get real data using selectFeatures
   myOmics <- selectFeatures(select_omics_type_discrete, select_omics_discrete,
                          data_type = "all", tumor_type = "all")
@@ -115,10 +111,7 @@ test_that("pairDiscreteDrugOmic correctly pairs discrete data", {
 })
 
 test_that("analyzeDiscreteDrugOmic correctly analyzes pairs", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mut.Rda")
-  load("data/anno.Rda")
+  skip_if_not_installed("DROMA")
 
   # Get real data using selectFeatures
   myOmics <- selectFeatures(select_omics_type_discrete, select_omics_discrete,
@@ -139,11 +132,6 @@ test_that("analyzeDiscreteDrugOmic correctly analyzes pairs", {
 
 # Test plotting functions with real data
 test_that("createForestPlot creates a forest plot", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mRNA.Rda")
-  load("data/anno.Rda")
-
   # Get real data using selectFeatures
   myOmics <- selectFeatures(select_omics_type_continuous, select_omics_continuous,
                          data_type = "all", tumor_type = "all")
@@ -167,10 +155,6 @@ test_that("createForestPlot creates a forest plot", {
 })
 
 test_that("plotContinuousDrugOmic creates a scatter plot", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mRNA.Rda")
-  load("data/anno.Rda")
 
   # Get real data using selectFeatures
   myOmics <- selectFeatures(select_omics_type_continuous, select_omics_continuous,
@@ -193,10 +177,6 @@ test_that("plotContinuousDrugOmic creates a scatter plot", {
 })
 
 test_that("plotDiscreteDrugOmic creates a boxplot", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mut.Rda")
-  load("data/anno.Rda")
 
   # Get real data using selectFeatures
   myOmics <- selectFeatures(select_omics_type_discrete, select_omics_discrete,
@@ -220,11 +200,6 @@ test_that("plotDiscreteDrugOmic creates a boxplot", {
 
 # Test the main analysis function
 test_that("analyzeDrugOmicPair handles continuous data", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mRNA.Rda")
-  load("data/anno.Rda")
-
   # Call the main analysis function
   result <- analyzeDrugOmicPair(
     select_omics_type = select_omics_type_continuous,
@@ -241,11 +216,6 @@ test_that("analyzeDrugOmicPair handles continuous data", {
 })
 
 test_that("analyzeDrugOmicPair handles discrete data", {
-  # Load example data
-  load("data/drug.Rda")
-  load("data/mut.Rda")
-  load("data/anno.Rda")
-
   # Call the main analysis function
   result <- analyzeDrugOmicPair(
     select_omics_type = select_omics_type_discrete,

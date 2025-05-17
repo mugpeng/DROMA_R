@@ -68,7 +68,7 @@ selectFeatures <- function(select_feas_type, select_feas,
                               "drug", "drug_raw")){
     fea_sel_list <- lapply(feas_sel_vec, function(x){
       # x = feas_sel_vec[1]
-      fea <- as.data.frame(base::get(paste0(x, "_", select_feas_type)))
+      fea <- as.data.frame(base::get(paste0(x, "_", select_feas_type), envir = .GlobalEnv))
       fea_sel <- as.numeric(fea[select_feas,])
       if(all(is.na(fea_sel))){
         return(NULL)
@@ -89,7 +89,7 @@ selectFeatures <- function(select_feas_type, select_feas,
   } else{
     fea_sel_list <- lapply(feas_sel_vec, function(x){
       # x = feas_sel_vec[1]
-      fea <- as.data.frame(base::get(paste0(x, "_", select_feas_type)))
+      fea <- as.data.frame(base::get(paste0(x, "_", select_feas_type), envir = .GlobalEnv))
       fea_sel <- fea$cells[fea[[1]] %in% select_feas]
       if(all(is.na(fea_sel))){
         return(NULL)
