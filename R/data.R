@@ -24,4 +24,4 @@
 #' @name DROMA-datasets
 #' @aliases drug mut mRNA cnv meth protein fusion anno search_vec
 #' @docType data
-NULL 
+NULL

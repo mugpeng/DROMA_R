@@ -1,0 +1,65 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# DROMA Package Structure
+
+DROMA is an R package for analyzing associations between drug responses and various omics data types. The package supports meta-analysis across multiple datasets, visualization of results, and batch processing of features.
+
+## Key Modules
+
+- `DROMA_DataManager.R`: Core functions for setting up the environment and loading data
+- `FuncDrugOmicPair.R`: Functions for analyzing drug-omics relationships
+- `FuncBatchFeature.R`: Functions for batch analysis of features
+- `FuncDrugFeature.R`: Functions for drug data analysis
+- `FuncZscoreWhole.R`: Functions for z-score normalization
+- `FuncGetData.R`: Functions for feature selection and data filtering
+- `theme_utils.R`: Color palettes and visualization themes for consistent plotting
+
+## Core Functions
+
+### Data Loading and Setup
+- `setupDROMA()`: Initializes the DROMA environment by loading search vectors
+- `loadDROMA(data_type, apply_normalization)`: Loads specific data types with optional normalization
+
+### Feature Selection
+- `selectFeatures(select_feas_type, select_feas, data_type, tumor_type)`: Retrieves specific features from datasets with filtering by data type (e.g., "CellLine", "PDO", "PDX") and tumor type
+
+### Analysis Functions
+- `analyzeDrugOmicPair()`: Analyzes association between drug response and omics feature
+- `pairContinuousFeatures()`: Pairs continuous feature data across datasets
+- `batchFindSignificantFeatures()`: Performs batch analysis of features
+
+### Visualization
+- `createForestPlot()`: Creates forest plots for meta-analysis results
+- `plotMetaVolcano()`: Creates volcano plots for batch analysis results
+- `bright_palette_26`: Pre-defined palette of 26 distinct colors for consistent visualization
+
+## Common Workflows
+
+1. Setup environment: `setupDROMA()`
+2. Load necessary data: `loadDROMA("drug")`, `loadDROMA("mRNA")`, etc.
+3. Select features of interest with optional filtering: `selectFeatures("mRNA", "BRCA1", data_type="PDX", tumor_type="breast cancer")`
+4. Analyze relationships between drugs and omics data: `analyzeDrugOmicPair(...)`
+5. Visualize results with appropriate plotting functions using consistent color themes
+
+## Data Types
+
+- Drug response data: Loaded with `loadDROMA("drug")`
+- mRNA expression: Loaded with `loadDROMA("mRNA")`
+- Mutations: Loaded with `loadDROMA("mut")`
+- Methylation: Loaded with `loadDROMA("meth")`
+- Protein expression: Loaded with `loadDROMA("protein")`
+- Copy number variation: Loaded with `loadDROMA("cnv")`
+- Fusion data: Loaded with `loadDROMA("fusion")`
+
+## Best Practices
+
+1. Always start by setting up the environment with `setupDROMA()`
+2. Load only the data types you need for analysis
+3. Use batch processing for analyzing multiple features
+4. When analyzing drug-omics pairs, check for sufficient sample sizes
+5. Apply z-score normalization for continuous data types when appropriate
+6. Use data type and tumor type filtering with `selectFeatures()` for targeted analyses
+7. Apply consistent visualization themes using the provided color palettes
