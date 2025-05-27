@@ -3,6 +3,8 @@
 .Rhistory
 .Rproj.user
 .DS_Store
+
 # dir
 /data
 /archive
+/sql_db

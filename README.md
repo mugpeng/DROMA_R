@@ -1,24 +1,33 @@
-# DROMA: Drug Omics Association Map
+# DROMA.R: Drug Omics Association Analysis Extension for DROMA.Set
 
-
-[![Version](https://img.shields.io/badge/version-0.3.1-blue.svg)](https://github.com/mugpeng/DROMA_R)
+[![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)](https://github.com/mugpeng/DROMA_R)
 
 ## Overview
 
-DROMA (Drug Omics Association) is an R package that provides tools for analyzing associations between drug responses and various omics data types. It supports meta-analysis of drug-omics associations across multiple datasets, visualization of results, and batch processing of features.
+**DROMA.R** is an R package that provides advanced analysis functions for drug-omics associations using DromaSet and MultiDromaSet objects from the **DROMA.Set** package. It supports meta-analysis of drug-omics associations across multiple datasets, comprehensive visualization tools, and batch processing of features. This package extends DROMA.Set with statistical analysis capabilities for biomarker discovery in precision medicine. **All data loading functions now apply z-score normalization by default** for improved analysis consistency.
 
 ## Features
 
-- Meta-analysis of drug-omics associations across multiple datasets
-- Support for various omics data types (mutation, gene expression, methylation, copy number variation, protein expression, fusion data)
-- Comprehensive visualization tools (forest plots, comparison plots, volcano plots)
-- Batch processing for analyzing multiple features simultaneously
-- Statistical analyses with multiple methodologies based on data types
-- Performance optimization for large datasets
+- **🔗 DROMA.Set Integration**: Works seamlessly with DromaSet and MultiDromaSet objects
+- **📊 Meta-analysis**: Advanced statistical analysis across multiple datasets
+- **🎨 Comprehensive Visualization**: Forest plots, volcano plots, comparison plots with consistent theming
+- **⚡ Batch Processing**: Efficient analysis of multiple features simultaneously
+- **🧮 Multiple Statistical Methods**: Spearman correlation, Wilcoxon tests, Cliff's Delta effect sizes
+- **🚀 Performance Optimization**: Parallel processing support for large datasets
+- **🔄 Z-score Normalization**: All data loading functions apply z-score normalization by default
 
 ## Installation
 
-### From GitHub
+### Prerequisites
+
+First, install the DROMA.Set package:
+
+```r
+# Install DROMA.Set (replace with actual installation method)
+# devtools::install_github("mugpeng/DROMA_Set")
+```
+
+### Install DROMA.R
 
 ```r
 # Install devtools if not already installed
@@ -26,57 +35,41 @@ if (!requireNamespace("devtools", quietly = TRUE)) {
   install.packages("devtools")
 }
 
-# Install DROMA from GitHub
+# Install DROMA.R from GitHub
 devtools::install_github("mugpeng/DROMA_R")
-```
-
-### From source
-
-```r
-# Clone the repository
-git clone https://github.com/mugpeng/DROMA_R.git
-
-# Install dependencies
-install.packages(c("meta", "metafor", "effsize", "parallel", "snowfall", 
-                  "ggplot2", "ggpubr", "dplyr", "DT", "htmltools", 
-                  "patchwork", "ggrepel", "gridExtra", "grid"))
-
-# Build and install the package
-devtools::install("./DROMA_R")
-```
-
-## Data
-
-The package includes sample datasets for testing and demonstration purposes. 
-To access the full datasets, please download them from Zenodo:
-
-**Full datasets:** [https://zenodo.org/records/15392760](https://zenodo.org/records/15392760)
-
-After downloading, you can load the data using:
-
-```r
-# Example of loading external data files
-load("path/to/downloaded/mRNA.Rda")
-load("path/to/downloaded/cnv.Rda")
-load("path/to/downloaded/meth.Rda")
-load("path/to/downloaded/protein.Rda")
 ```
 
 ## Quick Start
 
+### 1. Load Required Packages
+
 ```r
-library(DROMA)
+library(DROMA.Set)  # For data management
+library(DROMA.R)    # For analysis functions
+```
 
-# Setup DROMA environment
-setupDROMA()
+### 2. Create DromaSet Objects
 
-# Load required data types
-loadDROMA("drug")   # Load drug data
-loadDROMA("mRNA")   # Load mRNA data
-loadDROMA("mut")    # Load mutation data
+```r
+# Connect to DROMA database
+connectDROMADatabase("path/to/your/droma.sqlite")
 
-# Analyze association between Paclitaxel and ABCB1 gene expression
+# Create a single DromaSet for one project
+gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
+
+# Create a MultiDromaSet for multiple projects
+multi_set <- createMultiDromaSetFromDatabase(
+    project_names = c("gCSI", "CCLE"),
+    db_path = "path/to/droma.sqlite"
+)
+```
+
+### 3. Analyze Drug-Omics Associations
+
+```r
+# Single project analysis
 result <- analyzeDrugOmicPair(
+  gCSI,
   select_omics_type = "mRNA",
   select_omics = "ABCB1",
   select_drugs = "Paclitaxel",
@@ -84,85 +77,228 @@ result <- analyzeDrugOmicPair(
   tumor_type = "all"
 )
 
-# Display results
-print(result$data)
+# Multi-project analysis
+multi_result <- analyzeDrugOmicPair(
+  multi_set,
+  select_omics_type = "mRNA",
+  select_omics = "ABCB1",
+  select_drugs = "Paclitaxel",
+  overlap_only = FALSE
+)
 
-# Visualize the results
+# Display results
+print(result$meta)
 plot(result$plot)
 ```
 
-## Examples
-
-### 1. Drug-Omics Association Analysis
-
-Analyze the association between a drug and an omics feature:
+### 4. Batch Feature Analysis
 
 ```r
-# Load necessary data
-loadDROMA("drug")
-loadDROMA("mut")
+# Find genes associated with drug response
+batch_results <- batchFindSignificantFeatures(
+  multi_set,
+  feature1_type = "drug",
+  feature1_name = "Paclitaxel",
+  feature2_type = "mRNA",
+  overlap_only = FALSE
+)
 
-# Analyze association between Paclitaxel and TP53 mutation
+# Create volcano plot
+volcano_plot <- plotMetaVolcano(batch_results, es_t = 0.3, P_t = 0.05)
+print(volcano_plot)
+```
+
+## Core Functions
+
+### Analysis Functions
+- **`analyzeDrugOmicPair()`**: Analyze association between drug response and omics feature
+- **`batchFindSignificantFeatures()`**: Batch analysis of multiple features
+- **`analyzeContinuousDrugOmic()`**: Meta-analysis for continuous data
+- **`analyzeDiscreteDrugOmic()`**: Meta-analysis for discrete data
+
+### Data Loading Functions (Z-score Normalized by Default)
+- **`loadMolecularProfilesNormalized()`**: Load molecular profiles with z-score normalization (default: TRUE)
+- **`loadTreatmentResponseNormalized()`**: Load treatment response data with z-score normalization (default: TRUE)
+- **`loadMultiProjectMolecularProfilesNormalized()`**: Load multi-project molecular profiles with normalization
+- **`loadMultiProjectTreatmentResponseNormalized()`**: Load multi-project treatment response with normalization
+- **`applyZscoreNormalization()`**: Apply z-score normalization to existing data
+- **`isZscoreNormalized()`**: Check if data has been z-score normalized
+
+### Data Pairing Functions
+- **`pairDrugOmic()`**: Pair continuous drug and omics data
+- **`pairDiscreteDrugOmic()`**: Pair discrete omics with drug data
+- **`pairContinuousFeatures()`**: Pair continuous feature data
+- **`pairDiscreteFeatures()`**: Pair discrete with continuous features
+
+### Visualization Functions
+- **`createForestPlot()`**: Create forest plots for meta-analysis results
+- **`plotMetaVolcano()`**: Create volcano plots for batch analysis results
+- **`plotContinuousDrugOmic()`**: Scatter plots for continuous associations
+- **`plotDiscreteDrugOmic()`**: Box plots for discrete associations
+
+### Utility Functions
+- **`bright_palette_26`**: Pre-defined palette of 26 distinct colors
+- **`formatTime()`**: Format time durations
+- **`estimateTimeRemaining()`**: Estimate remaining processing time
+
+### Data Processing Functions
+- **`processDrugData()`**: Process drug sensitivity data using DromaSet objects
+- **`annotateDrugData()`**: Add sample annotations to drug sensitivity data (now with database loading support)
+- **`getDrugSensitivityData()`**: Wrapper for processing and annotating drug data
+
+## Examples
+
+### Example 1: Loading Data with Z-score Normalization
+
+```r
+# Load required packages
+library(DROMA.Set)
+library(DROMA.R)
+
+# Create DromaSet
+gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
+
+# Load mRNA data with z-score normalization (default)
+mrna_normalized <- loadMolecularProfilesNormalized(
+  gCSI,
+  molecular_type = "mRNA",
+  features = "ABCB1"
+)
+
+# Load without normalization
+mrna_raw <- loadMolecularProfilesNormalized(
+  gCSI,
+  molecular_type = "mRNA",
+  features = "ABCB1",
+  zscore = FALSE
+)
+
+# Check if data is normalized
+cat("Normalized:", isZscoreNormalized(mrna_normalized))
+cat("Raw:", isZscoreNormalized(mrna_raw))
+
+# Load drug data with normalization
+drug_normalized <- loadTreatmentResponseNormalized(
+  gCSI,
+  drugs = "Paclitaxel"
+)
+```
+
+### Example 2: Multi-Project Normalized Loading
+
+```r
+# Create MultiDromaSet
+multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"))
+
+# Load normalized data across projects
+multi_mrna <- loadMultiProjectMolecularProfilesNormalized(
+  multi_set,
+  molecular_type = "mRNA",
+  features = "ABCB1",
+  overlap_only = FALSE
+)
+
+# Load normalized drug data across projects
+multi_drugs <- loadMultiProjectTreatmentResponseNormalized(
+  multi_set,
+  drugs = "Paclitaxel",
+  overlap_only = FALSE
+)
+
+# Check normalization status for each project
+for (project in names(multi_mrna)) {
+  cat(project, "normalized:", isZscoreNormalized(multi_mrna[[project]]), "\n")
+}
+```
+
+### Example 3: Single Project Analysis
+
+```r
+# Load required packages
+library(DROMA.Set)
+library(DROMA.R)
+
+# Create DromaSet
+gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
+
+# Analyze Paclitaxel vs ABCB1 expression
 result <- analyzeDrugOmicPair(
-  select_omics_type = "mutation_gene",
-  select_omics = "TP53",
-  select_drugs = "Paclitaxel",
-  data_type = "all",
-  tumor_type = "all"
+  gCSI,
+  select_omics_type = "mRNA",
+  select_omics = "ABCB1",
+  select_drugs = "Paclitaxel"
 )
 
 # View results
-print(result$data)
-
-# Create forest plot
-createForestPlot(result$data)
+print(result$meta)
+plot(result$plot)
 ```
 
-### 2. Batch Feature Analysis
-
-Analyze multiple omics features in relation to drug response:
+### Example 4: Multi-Project Meta-Analysis
 
 ```r
-# Load necessary data
-loadDROMA("drug")
-loadDROMA("mRNA")
+# Create MultiDromaSet
+multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"))
 
-# Batch analysis of multiple genes
-results <- batchFindSignificantFeatures(
-  drug_name = "Paclitaxel",
-  omics_type = "mRNA",
-  feature_list = c("ABCB1", "ERBB2", "ESR1", "BRCA1"),
-  data_type = "all",
-  tumor_type = "all"
+# Analyze across projects with overlapping samples
+result <- analyzeDrugOmicPair(
+  multi_set,
+  select_omics_type = "mutation_gene",
+  select_omics = "TP53",
+  select_drugs = "Cisplatin",
+  overlap_only = FALSE
 )
 
-# View results table
-print(results$result_table)
-
-# Create volcano plot
-plotMetaVolcano(results$result_table)
+# Create forest plot
+createForestPlot(result$meta)
 ```
 
-
-
-### Full example
-
-check scripts under `examples/`
-
-
-
-## Documentation
-
-For detailed documentation and function references, use the built-in R help system:
+### Example 5: Batch Analysis
 
 ```r
-?DROMA
-help(package = "DROMA")
+# Find all genes associated with Paclitaxel response
+batch_results <- batchFindSignificantFeatures(
+  multi_set,
+  feature1_type = "drug",
+  feature1_name = "Paclitaxel",
+  feature2_type = "mRNA",
+  cores = 4  # Use parallel processing
+)
+
+# Sort by significance
+sorted_results <- batch_results[order(batch_results$p_value), ]
+print(head(sorted_results, 10))
+
+# Create volcano plot
+volcano_plot <- plotMetaVolcano(batch_results)
+print(volcano_plot)
 ```
+
+## Data Types Supported
+
+### Molecular Profiles
+- **mRNA**: Gene expression data
+- **cnv**: Copy number variation data
+- **mutation_gene**: Gene-level mutation data
+- **mutation_site**: Site-specific mutation data
+- **fusion**: Gene fusion data
+- **meth**: DNA methylation data
+- **proteinrppa**: Reverse-phase protein array data
+- **proteinms**: Mass spectrometry proteomics data
+
+### Treatment Response
+- **drug**: Drug sensitivity/response data
+
+## Performance Tips
+
+1. For large-scale batch analyses, use `cores > 1` to enable parallel processing
+2. Consider setting `overlap_only = TRUE` with MultiDromaSet when you need comparable sample analyses across all datasets
+3. Use the `db_path` parameter with `annotateDrugData()` or `getDrugSensitivityData()` to automatically load sample annotations from the database when needed
+4. For visualization of large datasets, consider filtering to specific tumor types or data types
 
 ## Contributing
 
-Contributions to DROMA are welcome! Please feel free to submit issues or pull requests on GitHub.
+Contributions to DROMA.R are welcome! Please feel free to submit issues or pull requests on GitHub.
 
 ## License
 
@@ -170,13 +306,17 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Citation
 
-If you use DROMA in your research, please cite:
+If you use DROMA.R in your research, please cite:
 
 ```
-Zhong, P. Y. (2023). DROMA: Drug Omics Association Map. 
-https://github.com/mugpeng/DROMA_R
+Zhong, P. Y. (2024). DROMA.R: Drug Omics Association Analysis Extension for DROMA.Set. 
+R package version 0.9.0. https://github.com/mugpeng/DROMA_R
 ```
 
 ## Contact
 
-For questions and feedback, please contact Peng Yu Zhong at yc47680@um.edu.mo. 
+For questions and feedback, please contact Peng Yu Zhong at yc47680@um.edu.mo.
+
+---
+
+**DROMA.R** - Advanced drug-omics association analysis powered by DROMA.Set 🧬💊📊

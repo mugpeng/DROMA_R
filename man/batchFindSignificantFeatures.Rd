@@ -2,29 +2,35 @@
 % Please edit documentation in R/FuncBatchFeature.R
 \name{batchFindSignificantFeatures}
 \alias{batchFindSignificantFeatures}
-\title{Batch analysis of feature relationships}
+\title{Batch analysis to find significant features associated with a reference feature using DromaSet objects}
 \usage{
 batchFindSignificantFeatures(
+  dromaset_object,
   feature1_type,
   feature1_name,
   feature2_type,
   data_type = "all",
   tumor_type = "all",
+  overlap_only = FALSE,
   cores = 1,
   progress_callback = NULL,
   test_top_100 = FALSE
 )
 }
 \arguments{
-\item{feature1_type}{Type of first feature ("mRNA", "cnv", "meth", etc.)}
+\item{dromaset_object}{Either a DromaSet or MultiDromaSet object}
 
-\item{feature1_name}{Name of first feature}
+\item{feature1_type}{Type of the reference feature (e.g., "drug", "mRNA")}
 
-\item{feature2_type}{Type of second feature to compare against}
+\item{feature1_name}{Name of the reference feature}
 
-\item{data_type}{Data type filter ("all", "CellLine", "PDO", etc.)}
+\item{feature2_type}{Type of features to test against (e.g., "mRNA", "mutation_gene")}
 
-\item{tumor_type}{Tumor type filter ("all" or specific tumor types)}
+\item{data_type}{Filter by data type ("all", "CellLine", "PDO", "PDC", "PDX")}
+
+\item{tumor_type}{Filter by tumor type ("all" or specific tumor types)}
+
+\item{overlap_only}{For MultiDromaSet, whether to use only overlapping samples (default: FALSE)}
 
 \item{cores}{Number of CPU cores to use for parallel processing}
 
@@ -36,5 +42,16 @@ batchFindSignificantFeatures(
 Data frame with meta-analysis results (p_value, effect_size, name)
 }
 \description{
-Analyzes relationships between two feature types across multiple samples and datasets
+Performs batch analysis to identify features significantly associated with a reference feature using DromaSet or MultiDromaSet objects
+}
+\examples{
+\dontrun{
+# Using DromaSet
+gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
+results <- batchFindSignificantFeatures(gCSI, "drug", "Paclitaxel", "mRNA")
+
+# Using MultiDromaSet
+multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"), "path/to/droma.sqlite")
+results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA")
+}
 }

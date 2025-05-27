@@ -2,30 +2,77 @@
 % Please edit documentation in R/FuncDrugFeature.R
 \name{getDrugSensitivityData}
 \alias{getDrugSensitivityData}
-\title{Get Drug Sensitivity Data}
+\title{Get Drug Sensitivity Data using DromaSet objects}
 \usage{
 getDrugSensitivityData(
+  dromaset_object,
   drug_name,
   data_type = "all",
   tumor_type = "all",
+  overlap_only = FALSE,
   include_annotations = TRUE,
-  sample_annotations = NULL
+  sample_annotations = NULL,
+  db_path = NULL
 )
 }
 \arguments{
+\item{dromaset_object}{Either a DromaSet or MultiDromaSet object}
+
 \item{drug_name}{Character string specifying the drug name}
 
 \item{data_type}{Filter by data type ("all", "CellLine", "PDC", "PDO", "PDX")}
 
 \item{tumor_type}{Filter by tumor type (use "all" for all tumor types)}
 
+\item{overlap_only}{For MultiDromaSet, whether to use only overlapping samples (default: FALSE).
+TRUE: Use only sample types present in all projects (recommended for meta-analysis)
+FALSE: Use all available samples from each project (may increase power but introduce bias)}
+
 \item{include_annotations}{Logical indicating whether to include sample annotations}
 
 \item{sample_annotations}{Optional dataframe containing sample annotations}
+
+\item{db_path}{Optional path to SQLite database for loading sample annotations if not provided and not in global environment}
 }
 \value{
 A dataframe with drug sensitivity data
 }
 \description{
-Wrapper function that processes and returns drug sensitivity data
+Wrapper function that processes and returns drug sensitivity data from DromaSet or MultiDromaSet objects
+}
+\details{
+This function combines the functionality of `processDrugData()` and `annotateDrugData()`.
+  When `include_annotations = TRUE`, it will add sample annotations to the drug data.
+  Sample annotations can be provided directly via the `sample_annotations` parameter,
+  or loaded from the global `sample_anno` variable, or retrieved from the SQLite
+  database specified by `db_path`.
+}
+\examples{
+\dontrun{
+# Using DromaSet
+gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
+drug_data <- getDrugSensitivityData(gCSI, "Paclitaxel")
+
+# Using MultiDromaSet with overlapping samples (recommended)
+multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"))
+drug_data <- getDrugSensitivityData(multi_set, "Paclitaxel",
+                                   include_annotations = TRUE)
+
+# Using MultiDromaSet with all available samples
+drug_data_all <- getDrugSensitivityData(multi_set, "Paclitaxel",
+                                       overlap_only = FALSE,
+                                       include_annotations = TRUE)
+
+# Using database path to load sample annotations
+drug_data <- getDrugSensitivityData(gCSI, "Paclitaxel",
+                                   include_annotations = TRUE,
+                                   db_path = "path/to/droma.sqlite")
+
+# Using custom sample annotations
+my_annotations <- data.frame(SampleID = c("sample1", "sample2"),
+                            TumorType = c("BRCA", "LUAD"))
+drug_data <- getDrugSensitivityData(gCSI, "Paclitaxel",
+                                   include_annotations = TRUE,
+                                   sample_annotations = my_annotations)
+}
 }

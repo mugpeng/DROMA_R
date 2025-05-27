@@ -336,7 +336,11 @@ plotAllContinuousDrugOmic <- function(pairs_list) {
 
   # Combine plots using patchwork if plots exist
   if (length(p_list) > 0) {
-    return(wrap_plots(p_list, ncol = 3))
+    if (length(p_list) < 3){
+      return(wrap_plots(p_list, ncol = length(p_list)))
+    } else {
+      return(wrap_plots(p_list, ncol = 3))
+    }
   } else {
     return(NULL)
   }
@@ -449,35 +453,205 @@ createPlotWithCommonAxes <- function(p, x_title = "Common X-Axis Title",
 
 # Main Analysis Function ----
 
-#' Analyze drug-omic pair associations
+#' Analyze drug-omic pair associations using DromaSet objects
 #'
-#' @description Main function for analyzing associations between a drug and an omic feature
+#' @description Main function for analyzing associations between a drug and an omic feature using DromaSet or MultiDromaSet objects
+#' @param dromaset_object Either a DromaSet or MultiDromaSet object
 #' @param select_omics_type Type of omics data to analyze (e.g., "mRNA", "mutation_gene")
 #' @param select_omics Name of the specific omics feature
 #' @param select_drugs Name of the drug to analyze
 #' @param data_type Filter by data type ("all", "CellLine", "PDO", "PDC", "PDX")
 #' @param tumor_type Filter by tumor type ("all" or specific tumor types)
+#' @param overlap_only For MultiDromaSet, whether to use only overlapping samples (default: FALSE)
 #' @param merged_enabled Logical, whether to create a merged dataset from all studies
 #' @param meta_enabled Logical, whether to perform meta-analysis
 #' @return A list containing plot, meta-analysis results, and data
 #' @export
-analyzeDrugOmicPair <- function(select_omics_type, select_omics,
+#' @examples
+#' \dontrun{
+#' # Using DromaSet
+#' gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
+#' result <- analyzeDrugOmicPair(gCSI, "mRNA", "ABCB1", "Paclitaxel")
+#'
+#' # Using MultiDromaSet
+#' multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"), "path/to/droma.sqlite")
+#' result <- analyzeDrugOmicPair(multi_set, "mRNA", "ABCB1", "Paclitaxel")
+#' }
+analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics,
                                 select_drugs,
                                 data_type = "all", tumor_type = "all",
+                                overlap_only = FALSE,
                                 merged_enabled = TRUE,
                                 meta_enabled = TRUE){
-  # Get drug data
-  myDrugs <- selectFeatures("drug", select_drugs,
-                           data_type = data_type,
-                           tumor_type = tumor_type)
-  myOmics <- selectFeatures(select_omics_type, select_omics,
-                           data_type = data_type,
-                           tumor_type = tumor_type)
+
+  # Validate input object
+  if (!inherits(dromaset_object, c("DromaSet", "MultiDromaSet"))) {
+    stop("Input must be a DromaSet or MultiDromaSet object from DROMA.Set package")
+  }
+
+  # Load and extract drug data
+  if (inherits(dromaset_object, "DromaSet")) {
+    # Single DromaSet
+    myDrugs <- loadTreatmentResponseNormalized(dromaset_object,
+                                    drugs = select_drugs,
+                                    data_type = data_type,
+                                    tumor_type = tumor_type,
+                                    return_data = TRUE)
+
+    # Convert matrix to list format for compatibility
+    if (is.matrix(myDrugs) && select_drugs %in% rownames(myDrugs)) {
+      drug_vector <- as.numeric(myDrugs[select_drugs, ])
+      names(drug_vector) <- colnames(myDrugs)
+      myDrugs <- list()
+      myDrugs[[dromaset_object@name]] <- drug_vector[!is.na(drug_vector)]
+    }
+
+  } else {
+    # MultiDromaSet
+    myDrugs <- loadMultiProjectTreatmentResponseNormalized(dromaset_object,
+                                                drugs = select_drugs,
+                                                overlap_only = overlap_only,
+                                                data_type = data_type,
+                                                tumor_type = tumor_type)
+
+    # Extract specific drug from each project
+    myDrugs <- lapply(myDrugs, function(drug_matrix) {
+      if (is.matrix(drug_matrix) && select_drugs %in% rownames(drug_matrix)) {
+        drug_vector <- as.numeric(drug_matrix[select_drugs, ])
+        names(drug_vector) <- colnames(drug_matrix)
+        return(drug_vector[!is.na(drug_vector)])
+      }
+      return(NULL)
+    })
+
+    # Remove NULL entries
+    myDrugs <- myDrugs[!sapply(myDrugs, is.null)]
+  }
+
+  # Load and extract omics data
+  if (inherits(dromaset_object, "DromaSet")) {
+    # Single DromaSet
+    if (select_omics_type %in% c("drug", "drug_raw")) {
+      # This is actually another drug, use treatment response
+      myOmics <- loadTreatmentResponseNormalized(dromaset_object,
+                                      drugs = select_omics,
+                                      data_type = data_type,
+                                      tumor_type = tumor_type,
+                                      return_data = TRUE)
+
+      if (is.matrix(myOmics) && select_omics %in% rownames(myOmics)) {
+        omics_vector <- as.numeric(myOmics[select_omics, ])
+        names(omics_vector) <- colnames(myOmics)
+        myOmics <- list()
+        myOmics[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
+      }
+    } else {
+      # Molecular profile data
+      myOmics <- loadMolecularProfilesNormalized(dromaset_object,
+                                      molecular_type = select_omics_type,
+                                      features = select_omics,
+                                      data_type = data_type,
+                                      tumor_type = tumor_type,
+                                      return_data = TRUE)
+
+      # Handle different data types
+      if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
+        # Continuous data
+        if (is.matrix(myOmics) && select_omics %in% rownames(myOmics)) {
+          omics_vector <- as.numeric(myOmics[select_omics, ])
+          names(omics_vector) <- colnames(myOmics)
+          myOmics <- list()
+          myOmics[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
+        }
+      } else {
+        # Discrete data (mutations, fusions)
+        if (is.data.frame(myOmics)) {
+          # Extract sample IDs where the feature is present
+          if ("cells" %in% colnames(myOmics)) {
+            sample_ids <- myOmics$cells[myOmics$genes == select_omics]
+          } else if ("samples" %in% colnames(myOmics)) {
+            sample_ids <- myOmics$samples[myOmics$genes == select_omics]
+          } else {
+            sample_ids <- character(0)
+          }
+          myOmics <- list()
+          myOmics[[dromaset_object@name]] <- sample_ids
+        }
+      }
+    }
+
+  } else {
+    # MultiDromaSet
+    if (select_omics_type %in% c("drug", "drug_raw")) {
+      # This is actually another drug, use treatment response
+      myOmics <- loadMultiProjectTreatmentResponseNormalized(dromaset_object,
+                                                  drugs = select_omics,
+                                                  overlap_only = overlap_only,
+                                                  data_type = data_type,
+                                                  tumor_type = tumor_type)
+
+      # Extract specific drug from each project
+      myOmics <- lapply(myOmics, function(drug_matrix) {
+        if (is.matrix(drug_matrix) && select_omics %in% rownames(drug_matrix)) {
+          drug_vector <- as.numeric(drug_matrix[select_omics, ])
+          names(drug_vector) <- colnames(drug_matrix)
+          return(drug_vector[!is.na(drug_vector)])
+        }
+        return(NULL)
+      })
+    } else {
+      # Molecular profile data
+      myOmics <- loadMultiProjectMolecularProfilesNormalized(dromaset_object,
+                                                  molecular_type = select_omics_type,
+                                                  features = select_omics,
+                                                  overlap_only = overlap_only,
+                                                  data_type = data_type,
+                                                  tumor_type = tumor_type)
+
+      # Handle different data types
+      if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
+        # Continuous data
+        myOmics <- lapply(myOmics, function(omics_matrix) {
+          if (is.matrix(omics_matrix) && select_omics %in% rownames(omics_matrix)) {
+            omics_vector <- as.numeric(omics_matrix[select_omics, ])
+            names(omics_vector) <- colnames(omics_matrix)
+            return(omics_vector[!is.na(omics_vector)])
+          }
+          return(NULL)
+        })
+      } else {
+        # Discrete data (mutations, fusions)
+        myOmics <- lapply(myOmics, function(omics_df) {
+          if (is.data.frame(omics_df)) {
+            # Extract sample IDs where the feature is present
+            if ("cells" %in% colnames(omics_df)) {
+              sample_ids <- omics_df$cells[omics_df$genes == select_omics]
+            } else if ("samples" %in% colnames(omics_df)) {
+              sample_ids <- omics_df$samples[omics_df$genes == select_omics]
+            } else {
+              sample_ids <- character(0)
+            }
+            return(sample_ids)
+          }
+          return(NULL)
+        })
+      }
+    }
+
+    # Remove NULL entries
+    myOmics <- myOmics[!sapply(myOmics, is.null)]
+  }
+
+  # Check if we have data
+  if (length(myDrugs) == 0 || length(myOmics) == 0) {
+    stop("No data found for the specified drug-omics pair")
+  }
+
   # Initialize result list
   result <- list()
 
   # Handle continuous omics data
-  if(select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")){
+  if(select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")){
     # Pair data
     myPairs <- pairDrugOmic(myOmics, myDrugs, merged = merged_enabled)
 

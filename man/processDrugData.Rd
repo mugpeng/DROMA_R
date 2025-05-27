@@ -2,20 +2,46 @@
 % Please edit documentation in R/FuncDrugFeature.R
 \name{processDrugData}
 \alias{processDrugData}
-\title{Process Drug Sensitivity Data}
+\title{Process Drug Sensitivity Data using DromaSet objects}
 \usage{
-processDrugData(drug_name, data_type = "all", tumor_type = "all")
+processDrugData(
+  dromaset_object,
+  drug_name,
+  data_type = "all",
+  tumor_type = "all",
+  overlap_only = FALSE
+)
 }
 \arguments{
+\item{dromaset_object}{Either a DromaSet or MultiDromaSet object}
+
 \item{drug_name}{Character string specifying the drug name}
 
 \item{data_type}{Filter by data type ("all", "CellLine", "PDC", "PDO", "PDX")}
 
 \item{tumor_type}{Filter by tumor type (use "all" for all tumor types)}
+
+\item{overlap_only}{For MultiDromaSet, whether to use only overlapping samples (default: FALSE).
+TRUE: Use only sample types present in all projects (recommended for meta-analysis)
+FALSE: Use all available samples from each project (may increase power but introduce bias)}
 }
 \value{
 A dataframe with combined raw and normalized drug sensitivity values
 }
 \description{
-Creates a combined dataframe with raw and normalized drug sensitivity values
+Creates a combined dataframe with raw and normalized drug sensitivity values from DromaSet or MultiDromaSet objects
+}
+\examples{
+\dontrun{
+# Using DromaSet
+gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
+drug_data <- processDrugData(gCSI, "Paclitaxel")
+
+# Using MultiDromaSet with overlapping samples (recommended for meta-analysis)
+multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"))
+drug_data <- processDrugData(multi_set, "Paclitaxel", overlap_only = FALSE)
+
+# Using MultiDromaSet with all samples (maximum sample size)
+drug_data_all <- processDrugData(multi_set, "Paclitaxel", overlap_only = FALSE)
+}
 }

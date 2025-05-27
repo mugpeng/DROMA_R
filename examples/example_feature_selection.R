@@ -1,133 +1,214 @@
 #!/usr/bin/env Rscript
 
-# Example script for DROMA package: Feature Selection with selectFeatures
-# This example demonstrates different ways to retrieve omics and drug data
+# Example script for DROMA.R package: Feature Selection with DromaSet Objects
+# This example demonstrates how to retrieve omics and drug data using DromaSet and MultiDromaSet objects
 
 # Load required libraries
-library(DROMA)
+library(DROMA.Set)  # For data management
+library(DROMA.R)    # For analysis functions
+library(dplyr)
 
-# Setup DROMA environment - load search vectors and sample annotations
-setupDROMA()
+# Setup: Create DromaSet Objects ----
 
-######################################
-# Basic Feature Selection Examples
-######################################
+# Note: Replace with your actual database path
+db_path <- "sql_db/droma.sqlite"
 
-# Load necessary data
-loadDROMA("drug")
-loadDROMA("mRNA")
-loadDROMA("mut")
+# Connect to DROMA database
+connectDROMADatabase(db_path)
 
-# Example 1: Select a drug feature (Paclitaxel) across all data types and tumor types
-cat("Example 1: Selecting drug data for Paclitaxel across all datasets\n")
-paclitaxel_data <- selectFeatures(
-  select_feas_type = "drug",
-  select_feas = "Paclitaxel",
-  data_type = "all",
-  tumor_type = "all"
+# Create individual DromaSet objects
+cat("Creating DromaSet objects...\n")
+gCSI <- createDromaSetFromDatabase("gCSI", db_path)
+CCLE <- createDromaSetFromDatabase("CCLE", db_path)
+
+# Create a MultiDromaSet for cross-project analysis
+multi_set <- createMultiDromaSetFromDatabase(
+  project_names = c("gCSI", "CCLE"),
+  db_path = db_path
 )
 
-# Print summary of retrieved data
-cat("Retrieved Paclitaxel data from", length(paclitaxel_data), "datasets:\n")
-for (dataset_name in names(paclitaxel_data)) {
-  cat(sprintf("- %s: %d samples\n", dataset_name, length(paclitaxel_data[[dataset_name]])))
-}
+cat("DromaSet objects created successfully!\n")
 
-# Example 2: Select an mRNA feature (ABCB1) across all data types and tumor types
-cat("\nExample 2: Selecting mRNA data for ABCB1 across all datasets\n")
-abcb1_data <- selectFeatures(
-  select_feas_type = "mRNA",
-  select_feas = "ABCB1",
-  data_type = "all",
-  tumor_type = "all"
-)
+# Basic Feature Selection Examples ----
 
-# Print summary of retrieved data
-cat("Retrieved ABCB1 data from", length(abcb1_data), "datasets:\n")
-for (dataset_name in names(abcb1_data)) {
-  cat(sprintf("- %s: %d samples\n", dataset_name, length(abcb1_data[[dataset_name]])))
-}
+# Example 1: Load drug data (Paclitaxel) from a single project
+cat("\nExample 1: Loading drug data for Paclitaxel from gCSI\n")
+paclitaxel_data <- loadTreatmentResponseNormalized(gCSI,
+                                         drugs = "Paclitaxel",
+                                         return_data = TRUE)
 
-# Example 3: Select a mutation feature (TP53) across all data types and tumor types
-cat("\nExample 3: Selecting mutation data for TP53 across all datasets\n")
-tp53_data <- selectFeatures(
-  select_feas_type = "mutation_gene",
-  select_feas = "TP53",
-  data_type = "all",
-  tumor_type = "all"
-)
-
-# Print summary of retrieved data
-cat("Retrieved TP53 mutation data from", length(tp53_data), "datasets:\n")
-for (dataset_name in names(tp53_data)) {
-  cat(sprintf("- %s: %d samples\n", dataset_name, length(tp53_data[[dataset_name]])))
-}
-
-######################################
-# Filtering by Data Type and Tumor Type
-######################################
-
-# Example 4: Get Paclitaxel data only for cell lines
-cat("\nExample 4: Selecting Paclitaxel data only for cell lines\n")
-paclitaxel_cellline_data <- selectFeatures(
-  select_feas_type = "drug",
-  select_feas = "Paclitaxel",
-  data_type = "CellLine",
-  tumor_type = "all"
-)
-
-# Print summary
-cat("Retrieved Paclitaxel cell line data from", length(paclitaxel_cellline_data), "datasets:\n")
-for (dataset_name in names(paclitaxel_cellline_data)) {
-  cat(sprintf("- %s: %d samples\n", dataset_name, length(paclitaxel_cellline_data[[dataset_name]])))
-}
-
-# Example 5: Get ABCB1 data only for a specific tumor type (e.g., breast cancer)
-# Note: This example assumes breast cancer data is available in the loaded datasets
-cat("\nExample 5: Selecting ABCB1 data for breast cancer\n")
-abcb1_breast_data <- selectFeatures(
-  select_feas_type = "mRNA",
-  select_feas = "ABCB1",
-  data_type = "all",
-  tumor_type = "breast cancer"
-)
-
-# Print summary (note this will show an empty list if breast cancer data is not available)
-cat("Retrieved ABCB1 breast cancer data from", length(abcb1_breast_data), "datasets\n")
-if (length(abcb1_breast_data) > 0) {
-  for (dataset_name in names(abcb1_breast_data)) {
-    cat(sprintf("- %s: %d samples\n", dataset_name, length(abcb1_breast_data[[dataset_name]])))
-  }
+if (is.matrix(paclitaxel_data) && "Paclitaxel" %in% rownames(paclitaxel_data)) {
+  drug_vector <- as.numeric(paclitaxel_data["Paclitaxel", ])
+  names(drug_vector) <- colnames(paclitaxel_data)
+  drug_vector <- drug_vector[!is.na(drug_vector)]
+  cat(sprintf("Retrieved Paclitaxel data: %d samples\n", length(drug_vector)))
 } else {
-  cat("No breast cancer data available in the loaded datasets\n")
+  cat("Paclitaxel not found in treatment response data\n")
 }
 
-######################################
-# Example of Error Handling
-######################################
+# Example 2: Load mRNA data (ABCB1) from a single project
+cat("\nExample 2: Loading mRNA data for ABCB1 from gCSI\n")
+abcb1_data <- loadMolecularProfilesNormalized(gCSI,
+                                    molecular_type = "mRNA",
+                                    features = "ABCB1",
+                                    return_data = TRUE)
 
-# Example 6: Try to select a non-existent feature (should generate error)
-cat("\nExample 6: Attempting to select a non-existent feature\n")
+if (is.matrix(abcb1_data) && "ABCB1" %in% rownames(abcb1_data)) {
+  mrna_vector <- as.numeric(abcb1_data["ABCB1", ])
+  names(mrna_vector) <- colnames(abcb1_data)
+  mrna_vector <- mrna_vector[!is.na(mrna_vector)]
+  cat(sprintf("Retrieved ABCB1 data: %d samples\n", length(mrna_vector)))
+} else {
+  cat("ABCB1 not found in mRNA data\n")
+}
+
+# Example 3: Load mutation data (TP53) from a single project
+cat("\nExample 3: Loading mutation data for TP53 from gCSI\n")
+tp53_data <- loadMolecularProfilesNormalized(gCSI,
+                                   molecular_type = "mutation_gene",
+                                   features = "TP53",
+                                   return_data = TRUE)
+
+if (is.data.frame(tp53_data) && "genes" %in% colnames(tp53_data)) {
+  tp53_samples <- tp53_data$cells[tp53_data$genes == "TP53"]
+  cat(sprintf("Retrieved TP53 mutation data: %d samples with mutations\n", length(tp53_samples)))
+} else {
+  cat("TP53 mutation data not found\n")
+}
+
+# Multi-Project Feature Selection ----
+
+# Example 4: Load drug data across multiple projects
+cat("\nExample 4: Loading Paclitaxel data across multiple projects\n")
+multi_paclitaxel <- loadMultiProjectTreatmentResponseNormalized(multi_set,
+                                                     drugs = "Paclitaxel")
+
+cat("Retrieved Paclitaxel data from", length(multi_paclitaxel), "projects:\n")
+for (project_name in names(multi_paclitaxel)) {
+  if (is.matrix(multi_paclitaxel[[project_name]]) && "Paclitaxel" %in% rownames(multi_paclitaxel[[project_name]])) {
+    drug_vector <- as.numeric(multi_paclitaxel[[project_name]]["Paclitaxel", ])
+    drug_vector <- drug_vector[!is.na(drug_vector)]
+    cat(sprintf("- %s: %d samples\n", project_name, length(drug_vector)))
+  }
+}
+
+# Example 5: Load mRNA data across multiple projects
+cat("\nExample 5: Loading ABCB1 mRNA data across multiple projects\n")
+multi_abcb1 <- loadMultiProjectMolecularProfilesNormalized(multi_set,
+                                                 molecular_type = "mRNA",
+                                                 features = "ABCB1")
+
+cat("Retrieved ABCB1 data from", length(multi_abcb1), "projects:\n")
+for (project_name in names(multi_abcb1)) {
+  if (is.matrix(multi_abcb1[[project_name]]) && "ABCB1" %in% rownames(multi_abcb1[[project_name]])) {
+    mrna_vector <- as.numeric(multi_abcb1[[project_name]]["ABCB1", ])
+    mrna_vector <- mrna_vector[!is.na(mrna_vector)]
+    cat(sprintf("- %s: %d samples\n", project_name, length(mrna_vector)))
+  }
+}
+
+# Filtering by Data Type and Tumor Type ----
+
+# Example 6: Get Paclitaxel data only for cell lines
+cat("\nExample 6: Loading Paclitaxel data only for cell lines\n")
+paclitaxel_cellline <- loadTreatmentResponseNormalized(gCSI,
+                                            drugs = "Paclitaxel",
+                                            data_type = "CellLine",
+                                            return_data = TRUE)
+
+if (is.matrix(paclitaxel_cellline) && "Paclitaxel" %in% rownames(paclitaxel_cellline)) {
+  drug_vector <- as.numeric(paclitaxel_cellline["Paclitaxel", ])
+  drug_vector <- drug_vector[!is.na(drug_vector)]
+  cat(sprintf("Retrieved Paclitaxel cell line data: %d samples\n", length(drug_vector)))
+} else {
+  cat("No Paclitaxel cell line data found\n")
+}
+
+# Example 7: Get ABCB1 data for a specific tumor type
+cat("\nExample 7: Loading ABCB1 data for breast cancer\n")
+abcb1_breast <- loadMolecularProfilesNormalized(gCSI,
+                                     molecular_type = "mRNA",
+                                     features = "ABCB1",
+                                     tumor_type = "breast cancer",
+                                     return_data = TRUE)
+
+if (is.matrix(abcb1_breast) && "ABCB1" %in% rownames(abcb1_breast)) {
+  mrna_vector <- as.numeric(abcb1_breast["ABCB1", ])
+  mrna_vector <- mrna_vector[!is.na(mrna_vector)]
+  cat(sprintf("Retrieved ABCB1 breast cancer data: %d samples\n", length(mrna_vector)))
+} else {
+  cat("No ABCB1 breast cancer data found\n")
+}
+
+# Using DROMA.R Functions with DromaSet Objects ----
+
+# Example 8: Use processDrugData with DromaSet
+cat("\nExample 8: Using processDrugData with DromaSet object\n")
+drug_sensitivity_data <- processDrugData(
+  gCSI,
+  drug_name = "Paclitaxel",
+  data_type = "all",
+  tumor_type = "all"
+)
+
+if (!is.null(drug_sensitivity_data)) {
+  cat(sprintf("Processed drug sensitivity data: %d samples\n", nrow(drug_sensitivity_data)))
+  cat("Columns:", paste(colnames(drug_sensitivity_data), collapse = ", "), "\n")
+} else {
+  cat("No drug sensitivity data processed\n")
+}
+
+# Example 9: Use getDrugSensitivityData with MultiDromaSet
+cat("\nExample 9: Using getDrugSensitivityData with MultiDromaSet object\n")
+multi_drug_data <- getDrugSensitivityData(
+  multi_set,
+  drug_name = "Paclitaxel",
+  data_type = "all",
+  tumor_type = "all",
+  overlap_only = FALSE,
+  include_annotations = FALSE
+)
+
+if (!is.null(multi_drug_data)) {
+  cat(sprintf("Retrieved drug sensitivity data from multiple projects: %d samples\n", nrow(multi_drug_data)))
+  cat("Studies included:", paste(unique(multi_drug_data$study), collapse = ", "), "\n")
+} else {
+  cat("No multi-project drug sensitivity data retrieved\n")
+}
+
+# Error Handling Examples ----
+
+# Example 10: Handle non-existent features gracefully
+cat("\nExample 10: Handling non-existent features\n")
 tryCatch({
-  nonexistent_data <- selectFeatures(
-    select_feas_type = "drug",
-    select_feas = "NonExistentDrug",
-    data_type = "all",
-    tumor_type = "all"
-  )
+  nonexistent_data <- loadTreatmentResponseNormalized(gCSI,
+                                            drugs = "NonExistentDrug",
+                                            return_data = TRUE)
+
+  if (is.matrix(nonexistent_data) && "NonExistentDrug" %in% rownames(nonexistent_data)) {
+    cat("Found non-existent drug (unexpected)\n")
+  } else {
+    cat("Non-existent drug not found in data (as expected)\n")
+  }
+}, error = function(e) {
+  cat("Error caught:", conditionMessage(e), "\n")
+})
+
+# Example 11: Handle invalid molecular types
+cat("\nExample 11: Handling invalid molecular types\n")
+tryCatch({
+  invalid_data <- loadMolecularProfilesNormalized(gCSI,
+                                        molecular_type = "invalid_type",
+                                        features = "ABCB1",
+                                        return_data = TRUE)
 }, error = function(e) {
   cat("Error caught (as expected):", conditionMessage(e), "\n")
 })
 
-# Example 7: Try to use an invalid feature type (should generate error)
-cat("\nExample 7: Attempting to use an invalid feature type\n")
-tryCatch({
-  invalid_type_data <- selectFeatures(
-    select_feas_type = "invalid_type",
-    select_feas = "Paclitaxel",
-    data_type = "all",
-    tumor_type = "all"
-  )
-}, error = function(e) {
-  cat("Error caught (as expected):", conditionMessage(e), "\n")
-})
+cat("\nFeature selection examples completed!\n")
+cat("Key takeaways:\n")
+cat("1. Use createDromaSetFromDatabase() to create single project objects\n")
+cat("2. Use createMultiDromaSetFromDatabase() for multi-project analysis\n")
+cat("3. Use loadTreatmentResponseNormalized() for drug data\n")
+cat("4. Use loadMolecularProfilesNormalized() for omics data\n")
+cat("5. Use DROMA.R functions like processDrugData() with DromaSet objects\n")

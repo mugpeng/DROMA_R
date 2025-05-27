@@ -4,16 +4,40 @@
 \alias{annotateDrugData}
 \title{Annotate Drug Sensitivity Data}
 \usage{
-annotateDrugData(drug_data, sample_annotations = NULL)
+annotateDrugData(drug_data, sample_annotations = NULL, db_path = NULL)
 }
 \arguments{
 \item{drug_data}{Dataframe containing drug sensitivity data from processDrugData}
 
 \item{sample_annotations}{Dataframe containing sample annotations (default: uses global sample_anno)}
+
+\item{db_path}{Optional path to SQLite database for loading sample annotations if not provided and not in global environment}
 }
 \value{
 A dataframe with drug sensitivity data and sample annotations
 }
 \description{
 Adds sample annotations to drug sensitivity data
+}
+\details{
+This function merges drug sensitivity data with sample annotations.
+  It can obtain sample annotations from three sources, in order of preference:
+  1. From the provided `sample_annotations` parameter
+  2. From the global environment variable `sample_anno`
+  3. From the SQLite database specified by `db_path`
+}
+\examples{
+\dontrun{
+# Using existing sample_anno in global environment
+drug_data <- processDrugData(gCSI, "Paclitaxel")
+annotated_data <- annotateDrugData(drug_data)
+
+# Using provided sample annotations
+my_annotations <- data.frame(SampleID = c("sample1", "sample2"),
+                            TumorType = c("BRCA", "LUAD"))
+annotated_data <- annotateDrugData(drug_data, sample_annotations = my_annotations)
+
+# Loading directly from database
+annotated_data <- annotateDrugData(drug_data, db_path = "path/to/droma.sqlite")
+}
 }

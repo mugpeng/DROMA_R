@@ -2,19 +2,23 @@
 % Please edit documentation in R/FuncDrugOmicPair.R
 \name{analyzeDrugOmicPair}
 \alias{analyzeDrugOmicPair}
-\title{Analyze drug-omic pair associations}
+\title{Analyze drug-omic pair associations using DromaSet objects}
 \usage{
 analyzeDrugOmicPair(
+  dromaset_object,
   select_omics_type,
   select_omics,
   select_drugs,
   data_type = "all",
   tumor_type = "all",
+  overlap_only = FALSE,
   merged_enabled = TRUE,
   meta_enabled = TRUE
 )
 }
 \arguments{
+\item{dromaset_object}{Either a DromaSet or MultiDromaSet object}
+
 \item{select_omics_type}{Type of omics data to analyze (e.g., "mRNA", "mutation_gene")}
 
 \item{select_omics}{Name of the specific omics feature}
@@ -25,6 +29,8 @@ analyzeDrugOmicPair(
 
 \item{tumor_type}{Filter by tumor type ("all" or specific tumor types)}
 
+\item{overlap_only}{For MultiDromaSet, whether to use only overlapping samples (default: FALSE)}
+
 \item{merged_enabled}{Logical, whether to create a merged dataset from all studies}
 
 \item{meta_enabled}{Logical, whether to perform meta-analysis}
@@ -33,5 +39,16 @@ analyzeDrugOmicPair(
 A list containing plot, meta-analysis results, and data
 }
 \description{
-Main function for analyzing associations between a drug and an omic feature
+Main function for analyzing associations between a drug and an omic feature using DromaSet or MultiDromaSet objects
+}
+\examples{
+\dontrun{
+# Using DromaSet
+gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
+result <- analyzeDrugOmicPair(gCSI, "mRNA", "ABCB1", "Paclitaxel")
+
+# Using MultiDromaSet
+multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"), "path/to/droma.sqlite")
+result <- analyzeDrugOmicPair(multi_set, "mRNA", "ABCB1", "Paclitaxel")
+}
 }
