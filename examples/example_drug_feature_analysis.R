@@ -115,20 +115,6 @@ if (!is.null(multi_paclitaxel_data)) {
 cat("\nExample 4: Using the drug data table formatter and wrappers\n")
 cat("In an interactive R session, this would display a formatted datatable\n")
 
-# Example of using formatDrugTable
-cat("Demonstrating formatDrugTable function (outputs HTML table in interactive session):\n")
-if (!is.null(drug_data_with_db)) {
-  # Select a subset of columns for display
-  display_data <- drug_data_with_db %>%
-    select(sampleid, study, zscore_value, raw_value, TumorType, ModelType) %>%
-    head(10)  # Just show a few rows for the example
-
-  # In interactive session, this would render an HTML table
-  # formatted_table <- formatDrugTable(display_data, caption = "Paclitaxel sensitivity data with annotations")
-  cat("Table would show", nrow(display_data), "rows with columns:",
-      paste(colnames(display_data), collapse = ", "), "\n")
-}
-
 # Using the wrapper with database path for annotations
 cat("Using getDrugSensitivityData with database path for annotations:\n")
 drug_data_with_db <- getDrugSensitivityData(
@@ -145,6 +131,8 @@ if (!is.null(drug_data_with_db)) {
 } else {
   cat("No drug sensitivity data retrieved\n\n")
 }
+
+formatted_table <- formatDrugTable(drug_data_with_db, caption = "Paclitaxel sensitivity data with annotations")
 
 ######################################
 # Example 5: Visualization Functions
