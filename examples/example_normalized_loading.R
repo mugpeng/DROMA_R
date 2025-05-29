@@ -12,7 +12,8 @@ library(DROMA.R)    # For analysis functions
 ######################################
 
 # Note: Replace with your actual database path
-db_path <- "path/to/your/droma.sqlite"
+# db_path <- "path/to/your/droma.sqlite"
+db_path <- "sql_db/droma.sqlite"
 
 # Connect to DROMA database
 connectDROMADatabase(db_path)
