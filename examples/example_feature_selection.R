@@ -23,7 +23,7 @@ CCLE <- createDromaSetFromDatabase("CCLE", db_path)
 
 # Create a MultiDromaSet for cross-project analysis
 multi_set <- createMultiDromaSetFromDatabase(
-  project_names = c("gCSI", "CCLE"),
+  project_names = c("gCSI", "CCLE", "GDSC"),
   db_path = db_path
 )
 
@@ -48,7 +48,7 @@ if (is.matrix(paclitaxel_data) && "Paclitaxel" %in% rownames(paclitaxel_data)) {
 
 # Example 2: Load mRNA data (ABCB1) from a single project
 cat("\nExample 2: Loading mRNA data for ABCB1 from gCSI\n")
-abcb1_data <- loadMolecularProfilesNormalized(gCSI,
+abcb1_data <- loadMolecularProfilesNormalized(CCLE,
                                     molecular_type = "mRNA",
                                     features = "ABCB1",
                                     return_data = TRUE)
