@@ -12,6 +12,7 @@ library(meta)
 library(effsize)
 library(ggpubr)
 library(patchwork)
+library(grid)
 
 # Setup: Create DromaSet Objects ----
 
@@ -286,9 +287,48 @@ if (!is.null(meth_result) && !is.null(meth_result$meta)) {
 }
 
 # Example 9: Use create_plot_with_common_axes ----
-plot_with_axis <- create_plot_with_common_axes(selected_obj()$plot,
+plot_with_axis <- create_plot_with_common_axes(meth_result$plot,
                                                x_title = "Molecular State(mRNA expression or Mutation status)",
                                                y_title = "drug sensitivity (higher indicates resistance)")
+
+# Example 10: Use create_plot_with_common_axes ----
+multi_set_all <- createMultiDromaSetFromAllProjects(db_path = db_path)
+result_multi_all <- analyzeDrugOmicPair(
+  multi_set_all,
+  select_omics_type = "mRNA",
+  select_omics = "PSMB5",
+  select_drugs = "Bortezomib",
+  data_type = "all",
+  tumor_type = "all",
+  overlap_only = FALSE
+)
+result_multi_all$plot
+
+result_multi_all2 <- analyzeDrugOmicPair(
+  multi_set_all,
+  select_omics_type = "mutation_gene",
+  select_omics = "PSMB5",
+  select_drugs = "Bortezomib",
+  data_type = "all",
+  tumor_type = "all",
+  overlap_only = FALSE
+)
+
+
+# mRNA
+plot_sel <- result_multi_all$plot
+plot_sel2 <- as.list(plot_sel)[1:9]
+# plot_sel2 <- lapply(plot_sel[1:9], function(x) x[[1]])
+plot_sel2 <- wrap_plots(plot_sel2, ncol = 3)
+create_plot_with_common_axes(plot_sel2,
+                             x_title = "Molecular State(mRNA expression or Mutation status)",
+                             y_title = "drug sensitivity (higher indicates resistance)")()
+
+createForestPlot(result_multi_all$meta)
+
+# mut
+plot_mut <- as.list(result_multi_all2$plot)[1:2]
+plot_mut2 <- wrap_plots(plot_mut, ncol = 2)
 
 # Summary ----
 cat("\nDrug-omics pairing analysis examples completed!\n")

@@ -34,6 +34,8 @@ multi_set <- createMultiDromaSetFromDatabase(
   db_path = db_path
 )
 
+multi_set_all <- createMultiDromaSetFromAllProjects(db_path = db_path)
+
 cat("DromaSet objects created successfully!\n\n")
 
 ######################################
@@ -45,6 +47,13 @@ cat("Example 1: Processing data for Paclitaxel using DromaSet\n")
 paclitaxel_data <- processDrugData(
   gCSI,
   drug_name = "Paclitaxel",
+  data_type = "all",
+  tumor_type = "all"
+)
+
+sel_data2 <- processDrugData(
+  multi_set_all,
+  drug_name = "Doxorubicin",
   data_type = "all",
   tumor_type = "all"
 )
