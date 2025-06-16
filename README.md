@@ -302,15 +302,15 @@ Contributions to DROMA.R are welcome! Please feel free to submit issues or pull 
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MPL-2 License - see the LICENSE file for details.
 
 ## Citation
 
 If you use DROMA.R in your research, please cite:
 
 ```
-Zhong, P. Y. (2024). DROMA.R: Drug Omics Association Analysis Extension for DROMA.Set. 
-R package version 0.9.0. https://github.com/mugpeng/DROMA_R
+Li, S., Peng, Y., Chen, M. et al. Facilitating integrative and personalized oncology omics analysis with UCSCXenaShiny. Commun Biol 7, 1200 (2024). https://doi.org/10.1038/s42003-024-06891-2
+
 ```
 
 ## Contact
@@ -320,3 +320,17 @@ For questions and feedback, please contact Peng Yu Zhong at yc47680@um.edu.mo.
 ---
 
 **DROMA.R** - Advanced drug-omics association analysis powered by DROMA.Set 🧬💊📊
+
+## Changelog
+### Version 0.4.3
+Update DESCRIPTION and R functions for drug sensitivity analysis
+- Updated DESCRIPTION file to reflect new version (0.4.3) and changed R dependency to require R version 4.0.0.
+- Modified `processDrugData` function to standardize column names (`sampleid` to `SampleID`, `study` to `ProjectID`).
+- Enhanced `annotateDrugData` function to merge drug data with annotations using updated column names.
+- Reintroduced `formatDrugTable` function with improved formatting for drug sensitivity data.
+- Updated example scripts to demonstrate new functionalities in drug sensitivity rank plotting.
+
+### Version 0.4.2
+Add new functions for statistical analysis and update examples including createStatisticalDashboard and generateStatisticalPlots.
+Removed FuncStat.R as it is no longer needed.
+Updated example scripts to include new multi-set functionality for drug feature analysis and drug-omics pairing analysis.
