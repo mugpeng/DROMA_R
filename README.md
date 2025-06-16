@@ -317,10 +317,6 @@ Li, S., Peng, Y., Chen, M. et al. Facilitating integrative and personalized onco
 
 For questions and feedback, please contact Peng Yu Zhong at yc47680@um.edu.mo.
 
----
-
-**DROMA.R** - Advanced drug-omics association analysis powered by DROMA.Set 🧬💊📊
-
 ## Changelog
 ### Version 0.4.3
 Update DESCRIPTION and R functions for drug sensitivity analysis
@@ -334,3 +330,7 @@ Update DESCRIPTION and R functions for drug sensitivity analysis
 Add new functions for statistical analysis and update examples including createStatisticalDashboard and generateStatisticalPlots.
 Removed FuncStat.R as it is no longer needed.
 Updated example scripts to include new multi-set functionality for drug feature analysis and drug-omics pairing analysis.
+
+---
+
+**DROMA.R** - Advanced drug-omics association analysis powered by DROMA.Set 🧬💊📊
