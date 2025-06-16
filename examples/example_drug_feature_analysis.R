@@ -18,6 +18,7 @@ library(DROMA.R)    # For analysis functions
 ######################################
 
 # Note: Replace with your actual database path
+# db_path <- "250513-DROMA_R/sql_db/droma.sqlite"
 db_path <- "sql_db/droma.sqlite"
 
 # Connect to DROMA database
@@ -127,7 +128,7 @@ cat("In an interactive R session, this would display a formatted datatable\n")
 # Using the wrapper with database path for annotations
 cat("Using getDrugSensitivityData with database path for annotations:\n")
 drug_data_with_db <- getDrugSensitivityData(
-  gCSI,
+  multi_set,
   drug_name = "Paclitaxel",
   data_type = "all",
   tumor_type = "all",
@@ -230,3 +231,169 @@ cat("2. Use getDrugSensitivityData() for comprehensive drug data retrieval\n")
 cat("3. Use loadMolecularProfilesNormalized() to get omics data for visualization\n")
 cat("4. Combine drug and omics data for correlation analysis\n")
 cat("5. Use MultiDromaSet for cross-project comparisons\n")
+
+######################################
+# Example 6: Drug Sensitivity Rank Plots
+######################################
+
+multi_set2 <- createMultiDromaSetFromDatabase(c("Xeva", "gCSI", "CCLE"),
+                                              db_path = "250513-DROMA_R/sql_db/droma.sqlite")
+
+cat("\nExample 6: Drug Sensitivity Rank Plot Visualizations\n")
+
+if (!is.null(drug_data_with_db)) {
+  cat("Creating drug sensitivity rank plots for Paclitaxel...\n")
+
+  # Basic rank plot for DromaSet
+  cat("\n6.1 Basic rank plot using DromaSet:\n")
+  rank_plot_basic <- plotDrugSensitivityRank(
+    gCSI,
+    drug_name = "Paclitaxel",
+    db_path = db_path
+  )
+  cat("Created basic rank plot showing all samples ordered by drug sensitivity\n")
+
+  # Rank plot with highlighting by data type
+  cat("\n6.2 Highlighting cell line samples:\n")
+  rank_plot_highlight <- plotDrugSensitivityRank(
+    gCSI,
+    drug_name = "Paclitaxel",
+    highlight = "CellLine",
+    color = "DataType",
+    db_path = db_path
+  )
+  cat("Created rank plot highlighting CellLine samples and coloring by DataType\n")
+
+  # Rank plot with coloring by tumor type
+  cat("\n6.3 Coloring by tumor type:\n")
+  rank_plot_tumor <- plotDrugSensitivityRank(
+    gCSI,
+    drug_name = "Paclitaxel",
+    color = "TumorType",
+    db_path = db_path
+  )
+  cat("Created rank plot colored by tumor type\n")
+
+  # MultiDromaSet with separate plots for each project
+  cat("\n6.4 MultiDromaSet with separate plots per project:\n")
+  rank_plots_separate <- plotDrugSensitivityRank(
+    multi_set,
+    drug_name = "Paclitaxel",
+    merge = FALSE,
+    color = "TumorType",
+    db_path = db_path
+  )
+
+  if (is.list(rank_plots_separate)) {
+    cat("Created", length(rank_plots_separate), "separate rank plots for projects:",
+        paste(names(rank_plots_separate), collapse = ", "), "\n")
+  }
+
+  # MultiDromaSet with merged data (if applicable)
+  cat("\n6.5 MultiDromaSet with merged data:\n")
+  rank_plot_merged <- tryCatch({
+    plotDrugSensitivityRank(
+      multi_set2,
+      drug_name = "Paclitaxel",
+      zscore = TRUE,
+      merge = TRUE,
+      highlight = "breast cancer",
+      color = "ProjectID",
+      db_path = db_path
+    )
+  }, warning = function(w) {
+    cat("Warning:", w$message, "\n")
+    return(NULL)
+  })
+
+  if (!is.null(rank_plot_merged)) {
+    cat("Created merged rank plot combining data from multiple projects\n")
+  } else {
+    cat("Merged plot not created (may require drug in multiple projects)\n")
+  }
+
+  # Example with specific sample highlighting
+  cat("\n6.6 Highlighting specific samples:\n")
+
+  # Get some sample IDs from the data
+  if ("SampleID" %in% colnames(drug_data_with_db)) {
+    # Take first 5 samples as example
+    sample_ids <- head(drug_data_with_db$SampleID, 5)
+
+    rank_plot_specific <- plotDrugSensitivityRank(
+      gCSI,
+      drug_name = "Paclitaxel",
+      highlight = sample_ids,
+      color = "TumorType",
+      db_path = db_path
+    )
+    cat("Created rank plot highlighting", length(sample_ids), "specific samples\n")
+  }
+
+  # Example with raw values instead of z-scores
+  cat("\n6.7 Using raw values instead of z-scores:\n")
+  rank_plot_raw <- plotDrugSensitivityRank(
+    gCSI,
+    drug_name = "Paclitaxel",
+    zscore = FALSE,
+    color = "DataType",
+    db_path = db_path
+  )
+  cat("Created rank plot using raw drug sensitivity values\n")
+
+  # Example with tumor type highlighting
+  cat("\n6.8 Highlighting by tumor type:\n")
+
+  # Check what tumor types are available
+  if ("TumorType" %in% colnames(drug_data_with_db)) {
+    tumor_types <- unique(drug_data_with_db$TumorType)
+    if (length(tumor_types) > 0) {
+      # Highlight the first tumor type
+      first_tumor <- tumor_types[1]
+
+      rank_plot_tumor_highlight <- plotDrugSensitivityRank(
+        gCSI,
+        drug_name = "Paclitaxel",
+        highlight = first_tumor,
+        color = "TumorType",
+        db_path = db_path
+      )
+      cat("Created rank plot highlighting", first_tumor, "samples\n")
+    }
+  }
+
+  # Example demonstrating the 20-sample labeling limit
+  cat("\n6.9 Testing large highlight groups (demonstrating 20-sample limit):\n")
+
+  # Create a large highlight group by using a common data type
+  if ("DataType" %in% colnames(drug_data_with_db)) {
+    data_types <- table(drug_data_with_db$DataType)
+    # Find a data type with many samples (> 20 if possible)
+    large_group <- names(data_types)[which.max(data_types)]
+
+    rank_plot_large <- plotDrugSensitivityRank(
+      gCSI,
+      drug_name = "Paclitaxel",
+      highlight = large_group,
+      color = "TumorType",
+      db_path = db_path
+    )
+    cat("Created rank plot highlighting", large_group, "samples\n")
+    cat("(Note: If >20 samples highlighted, only top 20 most sensitive will be labeled)\n")
+  }
+
+  cat("\nRank plot examples completed!\n")
+  cat("Key features demonstrated:\n")
+  cat("- Basic rank plotting with automatic sample ordering\n")
+  cat("- Highlighting by data type, tumor type, or specific sample IDs\n")
+  cat("- Coloring by categorical variables using DROMA color palette\n")
+  cat("- MultiDromaSet support with separate or merged plots\n")
+  cat("- Z-score vs raw value visualization options\n")
+  cat("- Automatic limiting of labels to top 20 highlighted samples\n")
+  cat("- Professional styling with summary statistics\n")
+
+} else {
+  cat("No drug sensitivity data available for rank plot examples\n")
+}
+
+cat("\nDrug feature analysis examples completed!\n")
