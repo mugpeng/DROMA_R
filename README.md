@@ -1,6 +1,7 @@
 # DROMA.R: Drug Omics Association Analysis Extension for DROMA.Set
 
-[![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)](https://github.com/mugpeng/DROMA_R)
+[![R](https://img.shields.io/badge/R-%3E%3D4.0.0-blue.svg)](https://www.r-project.org/)
+[![License: mpl-2-0](https://img.shields.io/badge/MPL-2.0-yellow.svg)](https://opensource.org/licenses/mpl-2-0)
 
 ## Overview
 
