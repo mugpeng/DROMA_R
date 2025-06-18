@@ -10,7 +10,7 @@ Description: DROMA.R provides advanced analysis functions for drug-omics associa
     visualization tools, and batch processing of features. This package extends 
     DROMA.Set with statistical analysis capabilities for biomarker discovery in 
     precision medicine.
-License: MIT + file LICENSE
+License: MPL-2 + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Depends: 
