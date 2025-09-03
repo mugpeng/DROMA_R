@@ -70,6 +70,16 @@ result_multi <- analyzeDrugOmicPair(
   overlap_only = FALSE
 )
 
+result_multi <- analyzeDrugOmicPair(
+  multi_set_all,
+  select_omics_type = "mRNA",
+  select_omics = "PSMB5",
+  select_drugs = "Bortezomib",
+  data_type = "all",
+  tumor_type = "all",
+  overlap_only = FALSE
+)
+
 # Overlap
 result_multi2 <- analyzeDrugOmicPair(
   multi_set,
