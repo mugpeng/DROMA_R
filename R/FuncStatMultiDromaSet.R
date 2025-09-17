@@ -176,7 +176,7 @@ generateCountPlots <- function(project_info, use_gap_plots = TRUE) {
   source_totals <- aggregate(counts ~ source + group, data = all_stat, FUN = sum)
 
   # Ensure all expected group levels are present, ordered by typical hierarchy
-  expected_groups <- c("CellLine", "PDC", "PDO", "PDX", "Other")
+  expected_groups <- c("CellLine", "PDC", "PDO", "PDX", "Clinical", "Other")
   present_groups <- intersect(expected_groups, unique(all_stat$group))
   all_stat$group <- factor(all_stat$group, levels = present_groups)
 
@@ -226,7 +226,7 @@ generateCountPlots <- function(project_info, use_gap_plots = TRUE) {
     p_count_no_labels_gap <- gg.gap(
       plot = p_count_no_labels,
       ylim = c(0, max(all_stat$counts) * 1.05),
-      segments = list(c(2000, 54000)),
+      segments = list(c(3500, 54000)),
       tick_width = c(250, 1000),
       rel_heights = c(0.7, 0.05, 0.25)
     )
@@ -476,6 +476,7 @@ generateCharacteristicsPlot <- function(project_info) {
     "PDC" = "#1F78B4",         # Blue
     "PDO" = "#33A02C",         # Green
     "PDX" = "#FF7F00",         # Orange
+    "Clinical" = "#9966CC",    # Purple
     "Unavailable" = "#CCCCCC"        # Gray
   )
 
