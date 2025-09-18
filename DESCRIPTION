@@ -31,6 +31,7 @@ Imports:
     utils,
     patchwork,
     ggrepel,
+    gg.gap,
     gridExtra,
     grid,
     RSQLite,

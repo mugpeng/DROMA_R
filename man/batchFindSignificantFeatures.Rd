@@ -14,7 +14,7 @@ batchFindSignificantFeatures(
   overlap_only = FALSE,
   cores = 1,
   progress_callback = NULL,
-  test_top_100 = FALSE
+  test_top_n = NULL
 )
 }
 \arguments{
@@ -36,7 +36,7 @@ batchFindSignificantFeatures(
 
 \item{progress_callback}{Optional callback function for progress updates}
 
-\item{test_top_100}{Logical, whether to test only top 100 features (for debugging)}
+\item{test_top_n}{Integer, number of top features to test (default: NULL for all features)}
 }
 \value{
 Data frame with meta-analysis results (p_value, effect_size, name)
@@ -53,5 +53,8 @@ results <- batchFindSignificantFeatures(gCSI, "drug", "Paclitaxel", "mRNA")
 # Using MultiDromaSet
 multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"), "path/to/droma.sqlite")
 results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA")
+
+# Test only top 50 features for debugging
+results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", test_top_n = 50)
 }
 }

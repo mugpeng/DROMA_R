@@ -16,7 +16,7 @@ library(treemapify)
 # Connect to database and create individual DromaSet objects first
 # Replace with your actual database path
 # db_path <- "path/to/your/droma.sqlite"
-db_path <- "250513-DROMA_R/sql_db/droma.sqlite"
+# db_path <- "250513-DROMA_R/sql_db/droma.sqlite"
 connectDROMADatabase(db_path)
 
 # Create individual DromaSet objects
@@ -33,7 +33,7 @@ multi_set <- MultiDromaSet(
 # Generate all statistical plots
 cat("Generating comprehensive statistical plots...\n")
 all_plots <- generateStatisticalPlots(
-  data_source = multi_set,
+  project_names = "all",
   plot_types = "all",
   use_gap_plots = TRUE
 )
