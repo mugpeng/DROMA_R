@@ -826,7 +826,9 @@ batchFindSignificantFeatures <- function(dromaset_object,
       }
     }
   } else {
-    # MultiDromaSet - get features from first project that has the data
+    # MultiDromaSet - get features from all projects that have the data (union)
+    all_feature_lists <- list()
+    
     for (project_name in names(dromaset_object@DromaSets)) {
       dromaset <- dromaset_object@DromaSets[[project_name]]
 
@@ -835,8 +837,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
         if ("drug" %in% available_features) {
           all_drug_data <- loadTreatmentResponseNormalized(dromaset, return_data = TRUE)
           if (is.matrix(all_drug_data)) {
-            feature2_list <- rownames(all_drug_data)
-            break
+            all_feature_lists[[project_name]] <- rownames(all_drug_data)
           }
         }
       } else {
@@ -848,14 +849,17 @@ batchFindSignificantFeatures <- function(dromaset_object,
                                                  tumor_type = tumor_type,
                                                  return_data = TRUE)
           if (is.matrix(all_omics_data)) {
-            feature2_list <- rownames(all_omics_data)
-            break
+            all_feature_lists[[project_name]] <- rownames(all_omics_data)
           } else if (is.data.frame(all_omics_data) && "genes" %in% colnames(all_omics_data)) {
-            feature2_list <- unique(all_omics_data$genes)
-            break
+            all_feature_lists[[project_name]] <- unique(all_omics_data$genes)
           }
         }
       }
+    }
+    
+    # Take union of all features across projects
+    if (length(all_feature_lists) > 0) {
+      feature2_list <- unique(unlist(all_feature_lists))
     }
   }
 
