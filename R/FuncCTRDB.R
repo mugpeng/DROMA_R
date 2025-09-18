@@ -1,5 +1,10 @@
 # Clinical Trial Database (CTRDB) Analysis Functions ----
 
+#' @importFrom ggpubr ggboxplot stat_compare_means
+#' @importFrom ggplot2 theme theme_bw element_blank element_text coord_cartesian ggtitle
+#' @importFrom meta forest
+#' @importFrom patchwork wrap_plots plot_annotation
+
 #' Analyze clinical drug response with omics data from CTRDB
 #'
 #' @description Performs analysis of clinical drug response associations with omics features using CTRDB data
@@ -309,11 +314,11 @@ analyzeClinicalMeta <- function(patient_data_list) {
   tryCatch({
     # Only perform meta-analysis if we have at least 2 studies
     if (nrow(meta_df) >= 2) {
-      meta_result <- meta::metagen(TE = effect,
-                                   seTE = se,
+      meta_result <- meta::metagen(TE = meta_df$effect,
+                                   seTE = meta_df$se,
                                    data = meta_df,
                                    sm = "CMD",  # Custom Mean Difference (using Cliff's Delta)
-                                   studlab = study)
+                                   studlab = meta_df$study)
       return(meta_result)
     } else {
       return(NULL)
@@ -384,52 +389,38 @@ plotAllClinicaldatasets <- function(patient_data_list, select_omics, select_drug
   }
 }
 
-#' Plot clinical drug response for a single patient
+#' Plot clinical drug response for a single dataset
 #'
 #' @description Creates a boxplot comparing omics expression between response and non-response samples
 #' @param response_values Expression values for response samples
 #' @param non_response_values Expression values for non-response samples
-#' @param patient_id Patient identifier for plot title
+#' @param patient_id Dataset identifier for plot title
 #' @return A ggplot2 object with boxplot and statistical test
 #' @export
 plotClinicalPatient <- function(response_values, non_response_values, patient_id) {
-
   # Combine data into dataframe
   box_df <- data.frame(
     expression = c(non_response_values, response_values),
-    response = rep(c("Non-Response", "Response"),
+    response = rep(c("NR", "R"),
                    times = c(length(non_response_values), length(response_values)))
   )
 
   # Create boxplot with statistical test
-  p <- ggplot2::ggplot(box_df, ggplot2::aes(x = response, y = expression, fill = response)) +
-    ggplot2::geom_boxplot(alpha = 0.7, outlier.shape = NA) +
-    ggplot2::geom_jitter(width = 0.2, alpha = 0.6, size = 1.5) +
-    ggplot2::scale_fill_manual(values = c("Non-Response" = "#BEBADAFF", "Response" = "#FB8072FF")) +
-    ggplot2::theme_bw() +
-    ggplot2::theme(
-      axis.title.x = ggplot2::element_blank(),
-      title = ggplot2::element_text(size = 12, face = "bold"),
-      axis.title.y = ggplot2::element_text(size = 11),
-      axis.text = ggplot2::element_text(size = 10),
-      legend.position = "none",
-      panel.grid.minor = ggplot2::element_blank()
+  ggboxplot(data = box_df, x = "response", y = "expression",
+            fill = "response", palette = c("#BEBADAFF", "#FB8072FF"),
+            add = "jitter", add.params = list(alpha = 0.15)) +
+    stat_compare_means(size = 6, label.x = 0.8,
+                       label.y = (max(box_df$expression) - max(box_df$expression)/8),
+                       label = "p.format") +
+    theme_bw() +
+    theme(
+      axis.title = element_blank(),
+      title = element_text(size = 15, face = "bold"),
+      axis.text = element_text(size = 12),
+      legend.position = "none"
     ) +
-    ggplot2::ylab("Expression Level") +
-    ggplot2::ggtitle(paste("Patient:", patient_id))
-
-  # Add statistical test if ggpubr is available
-  if (requireNamespace("ggpubr", quietly = TRUE)) {
-    p <- p + ggpubr::stat_compare_means(
-      method = "wilcox.test",
-      label = "p.format",
-      size = 3.5,
-      label.x = 1.5,
-      label.y = max(box_df$expression) * 1.1
-    )
-  }
-
-  return(p)
+    coord_cartesian(ylim = c(NA, max(box_df$expression) + max(box_df$expression)/20)) +
+    ggtitle(patient_id)
 }
 
 #' Create a forest plot for clinical meta-analysis results
@@ -443,7 +434,6 @@ plotClinicalPatient <- function(response_values, non_response_values, patient_id
 createClinicalForestPlot <- function(meta_obj,
                                    xlab = "Effect Size (95% CI)",
                                    show_common = FALSE) {
-
   # Validate input
   if (!inherits(meta_obj, "meta") && !inherits(meta_obj, "metagen")) {
     stop("Input must be a meta-analysis object from the 'meta' package")
@@ -457,27 +447,19 @@ createClinicalForestPlot <- function(meta_obj,
     paste("Random-Effects Model (p =", round(p_val, 3), ")")
   }
 
-  # Create forest plot with clinical-specific styling
-  tryCatch({
-    meta::forest(meta_obj,
-                 xlab = xlab,
-                 slab = paste("Patient", meta_obj$studlab),
-                 print.pval.common = show_common,
-                 boxsize = 0.3,
-                 lineheight = "auto",
-                 print.pval.Q = TRUE,
-                 print.I2 = TRUE,
-                 print.tau2 = FALSE,
-                 common = show_common,
-                 text.random = p_text,
-                 col.diamond = "red",
-                 col.diamond.lines = "red",
-                 colgap.forest.left = "2cm",
-                 colgap.forest.right = "2cm")
-  }, error = function(e) {
-    warning("Could not create forest plot: ", e$message)
-    return(NULL)
-  })
+  # Create forest plot
+  meta::forest(meta_obj,
+               xlab = xlab,
+               slab = "study",
+               print.pval.common = show_common,
+               boxsize = 0.2,
+               lineheight = "auto",
+               print.pval.Q = FALSE,
+               print.I2 = FALSE,
+               print.tau2 = FALSE,
+               common = show_common,
+               text.random = p_text
+  )
 }
 
 #' Get clinical drug response summary statistics

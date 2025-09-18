@@ -25,6 +25,8 @@ cat("Connecting to DROMA database...\n")
 connectDROMADatabase(db_path)
 cat("Database connected successfully!\n\n")
 
+connectCTRDatabase("Data/ctrdb.sqlite")
+
 # Check available clinical data
 cat("Checking available clinical data in CTRDB...\n")
 sample_anno <- getDROMAAnnotation("sample")

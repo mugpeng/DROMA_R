@@ -564,18 +564,18 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
           myOmics[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
         }
       } else {
-        # Discrete data (mutations, fusions)
-        if (is.data.frame(myOmics)) {
-          # Extract sample IDs where the feature is present
-          if ("cells" %in% colnames(myOmics)) {
-            sample_ids <- myOmics$cells[myOmics$genes == select_omics]
-          } else if ("samples" %in% colnames(myOmics)) {
-            sample_ids <- myOmics$samples[myOmics$genes == select_omics]
-          } else {
-            sample_ids <- character(0)
-          }
+        # Discrete data (mutations, fusions) - now in matrix format like continuous data
+        if (is.matrix(myOmics) && select_omics %in% rownames(myOmics)) {
+          # Get the row for the selected gene
+          gene_row <- myOmics[select_omics, ]
+          # Get sample IDs where the feature is present (value != 0)
+          # When extracting a row from matrix, it becomes a named vector
+          present_samples <- names(gene_row)[gene_row != 0]
           myOmics <- list()
-          myOmics[[dromaset_object@name]] <- sample_ids
+          myOmics[[dromaset_object@name]] <- present_samples
+        } else {
+          myOmics <- list()
+          myOmics[[dromaset_object@name]] <- character(0)
         }
       }
     }
@@ -620,18 +620,15 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
           return(NULL)
         })
       } else {
-        # Discrete data (mutations, fusions)
-        myOmics <- lapply(myOmics, function(omics_df) {
-          if (is.data.frame(omics_df)) {
-            # Extract sample IDs where the feature is present
-            if ("cells" %in% colnames(omics_df)) {
-              sample_ids <- omics_df$cells[omics_df$genes == select_omics]
-            } else if ("samples" %in% colnames(omics_df)) {
-              sample_ids <- omics_df$samples[omics_df$genes == select_omics]
-            } else {
-              sample_ids <- character(0)
-            }
-            return(sample_ids)
+        # Discrete data (mutations, fusions) - now in matrix format like continuous data
+        myOmics <- lapply(myOmics, function(omics_matrix) {
+          if (is.matrix(omics_matrix) && select_omics %in% rownames(omics_matrix)) {
+            # Get the row for the selected gene
+            gene_row <- omics_matrix[select_omics, ]
+            # Get sample IDs where the feature is present (value != 0)
+            # When extracting a row from matrix, it becomes a named vector
+            present_samples <- names(gene_row)[gene_row != 0]
+            return(present_samples)
           }
           return(NULL)
         })
