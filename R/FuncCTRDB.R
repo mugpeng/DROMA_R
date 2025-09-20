@@ -1,12 +1,6 @@
 # Clinical Trial Database (CTRDB) Analysis Functions ----
 
-#' @importFrom ggpubr ggboxplot stat_compare_means
-#' @importFrom ggplot2 theme theme_bw element_blank element_text coord_cartesian ggtitle
-#' @importFrom meta forest
-#' @importFrom patchwork wrap_plots plot_annotation
-
-#' Analyze clinical drug response with omics data from CTRDB
-#'
+#' @title Analyze Clinical Drug Response with Omics Data from CTRDB
 #' @description Performs analysis of clinical drug response associations with omics features using CTRDB data
 #' @param select_omics Character string specifying the omics feature name
 #' @param select_drugs Character string specifying the drug name

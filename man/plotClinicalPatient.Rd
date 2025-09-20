@@ -14,7 +14,7 @@ plotClinicalPatient(response_values, non_response_values, patient_id)
 \item{patient_id}{Dataset identifier for plot title}
 }
 \value{
-A ggpubr ggboxplot object with statistical test
+A ggplot2 object with boxplot and statistical test
 }
 \description{
 Creates a boxplot comparing omics expression between response and non-response samples

@@ -2,7 +2,7 @@
 % Please edit documentation in R/FuncCTRDB.R
 \name{analyzeClinicalDrugResponse}
 \alias{analyzeClinicalDrugResponse}
-\title{Analyze clinical drug response with omics data from CTRDB}
+\title{Analyze Clinical Drug Response with Omics Data from CTRDB}
 \usage{
 analyzeClinicalDrugResponse(
   select_omics,

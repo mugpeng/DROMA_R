@@ -63,8 +63,8 @@ cat("\nExample 2: Analyzing association between Paclitaxel and ABCB1 gene expres
 result_multi <- analyzeDrugOmicPair(
   multi_set,
   select_omics_type = "mRNA",
-  select_omics = "ABCB1",
-  select_drugs = "Paclitaxel",
+  select_omics = "AASS",
+  select_drugs = "Bortezomib",
   data_type = "all",
   tumor_type = "all",
   overlap_only = FALSE

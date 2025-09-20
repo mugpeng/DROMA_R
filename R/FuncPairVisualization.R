@@ -1,0 +1,247 @@
+# Visualization Functions Module ----
+
+#' Plot correlation between two continuous variables
+#'
+#' @description Creates a scatter plot with correlation statistics
+#' @param x_values Vector of x-axis values
+#' @param y_values Vector of y-axis values
+#' @param x_label Label for x-axis
+#' @param y_label Label for y-axis
+#' @param title Plot title
+#' @param method Correlation method ("spearman", "pearson")
+#' @return A ggplot2 object with scatter plot and correlation statistics
+#' @export
+plotCorrelation <- function(x_values, y_values,
+                           x_label = "Feature 1",
+                           y_label = "Feature 2",
+                           title = "Correlation Plot",
+                           method = "spearman") {
+  # Combine data into dataframe
+  cor_df <- data.frame(
+    x = x_values,
+    y = y_values
+  )
+
+  # Create scatter plot with correlation statistics
+  p <- ggscatter(cor_df, x = "x", y = "y", alpha = 0.2) +
+    stat_cor(size = 6, method = method) +
+    stat_smooth(formula = y ~ x, method = "lm") +
+    theme_bw() +
+    theme(
+      axis.title = element_blank(),
+      title = element_text(size = 15, face = "bold"),
+      axis.text = element_text(size = 12)
+    ) +
+    ggtitle(title) +
+    xlab(x_label) +
+    ylab(y_label)
+
+  return(p)
+}
+
+#' Plot continuous values by discrete groups
+#'
+#' @description Creates a boxplot comparing continuous values between discrete groups
+#' @param yes_values Values for group with feature present
+#' @param no_values Values for group without feature present
+#' @param group_labels Labels for the two groups
+#' @param title Plot title
+#' @param y_label Label for y-axis
+#' @return A ggplot2 object with boxplot and statistical test
+#' @export
+plotGroupComparison <- function(yes_values, no_values,
+                                group_labels = c("Yes", "No"),
+                                title = "Group Comparison",
+                                y_label = "Value") {
+  # Combine data into dataframe
+  box_df <- data.frame(
+    values = c(no_values, yes_values),
+    group = rep(group_labels, times = c(length(no_values), length(yes_values)))
+  )
+
+  # Create boxplot with statistical test
+  p <- ggboxplot(data = box_df, x = "group", y = "values",
+                 fill = "group", palette = c("#BEBADAFF", "#FB8072FF"),
+                 add = "jitter", add.params = list(alpha = 0.15)) +
+    stat_compare_means(size = 6, label.x = 0.8,
+                       label.y = (max(box_df$values) - max(box_df$values)/8),
+                       label = "p.format") +
+    theme_bw() +
+    theme(
+      axis.title = element_blank(),
+      title = element_text(size = 15, face = "bold"),
+      axis.text = element_text(size = 12),
+      legend.position = "none"
+    ) +
+    coord_cartesian(ylim = c(NA, max(box_df$values) + max(box_df$values)/20)) +
+    ggtitle(title) +
+    ylab(y_label)
+
+  return(p)
+}
+
+#' Plot multiple correlation plots in a grid
+#'
+#' @description Creates and combines multiple correlation plots
+#' @param pairs_list List of paired datasets with feature1 and feature2 values
+#' @param x_label Common x-axis label
+#' @param y_label Common y-axis label
+#' @param ncol Number of columns in the grid
+#' @return A combined plot with all correlations or NULL if no valid pairs
+#' @export
+plotMultipleCorrelations <- function(pairs_list,
+                                    x_label = "Feature 1",
+                                    y_label = "Feature 2",
+                                    ncol = 3) {
+  # Initialize list to store plots
+  p_list <- list()
+
+  # Create plot for each pair
+  for (i in seq_along(pairs_list)) {
+    # Skip merged dataset for individual plots
+    if (names(pairs_list)[i] == "merged_dataset") next
+
+    tryCatch({
+      feat1_vals <- pairs_list[[i]]$feature1
+      feat2_vals <- pairs_list[[i]]$feature2
+
+      # Ensure adequate data for plotting
+      if (length(feat1_vals) < 3 || length(feat2_vals) < 3) next
+
+      # Create plot and add to list
+      p_list[[i]] <- plotCorrelation(feat1_vals, feat2_vals,
+                                     title = names(pairs_list)[i],
+                                     x_label = x_label,
+                                     y_label = y_label)
+    }, error = function(e) {
+      warning("Error creating plot for pair ", names(pairs_list)[i], ": ", e$message)
+    })
+  }
+
+  # Remove NULL entries from list
+  p_list <- p_list[!sapply(p_list, is.null)]
+
+  # Combine plots using patchwork if plots exist
+  if (length(p_list) > 0) {
+    if (requireNamespace("patchwork", quietly = TRUE)) {
+      if (length(p_list) <= 3) {
+        combined_plot <- patchwork::wrap_plots(p_list, ncol = length(p_list))
+      } else {
+        combined_plot <- patchwork::wrap_plots(p_list, ncol = ncol)
+      }
+
+      # Add overall title if we have multiple plots
+      if (length(p_list) > 1) {
+        combined_plot <- combined_plot +
+          patchwork::plot_annotation(
+            title = paste("Multiple Correlations:", x_label, "vs", y_label),
+            theme = theme(plot.title = element_text(size = 16, hjust = 0.5, face = "bold"))
+          )
+      }
+
+      return(combined_plot)
+    } else {
+      warning("patchwork package not available. Returning list of individual plots.")
+      return(p_list)
+    }
+  } else {
+    return(NULL)
+  }
+}
+
+#' Plot multiple group comparisons in a grid
+#'
+#' @description Creates and combines multiple group comparison plots
+#' @param pairs_list List of paired datasets with yes/no groups
+#' @param y_label Common y-axis label
+#' @param ncol Number of columns in the grid
+#' @return A combined plot with all comparisons or NULL if no valid pairs
+#' @export
+plotMultipleGroupComparisons <- function(pairs_list,
+                                        y_label = "Value",
+                                        ncol = 3) {
+  # Initialize list to store plots
+  p_list <- list()
+
+  # Create plot for each pair
+  for (i in seq_along(pairs_list)) {
+    # Skip merged dataset for individual plots
+    if (names(pairs_list)[i] == "merged_dataset") next
+
+    tryCatch({
+      yes_vals <- pairs_list[[i]]$yes
+      no_vals <- pairs_list[[i]]$no
+
+      # Ensure adequate data for plotting
+      if (length(yes_vals) < 3 || length(no_vals) < 3) next
+
+      # Create plot and add to list
+      p_list[[i]] <- plotGroupComparison(yes_vals, no_vals,
+                                         title = names(pairs_list)[i],
+                                         y_label = y_label)
+    }, error = function(e) {
+      warning("Error creating plot for pair ", names(pairs_list)[i], ": ", e$message)
+    })
+  }
+
+  # Remove NULL entries from list
+  p_list <- p_list[!sapply(p_list, is.null)]
+
+  # Combine plots using patchwork if plots exist
+  if (length(p_list) > 0) {
+    if (requireNamespace("patchwork", quietly = TRUE)) {
+      combined_plot <- patchwork::wrap_plots(p_list, ncol = ncol)
+
+      # Add overall title
+      combined_plot <- combined_plot +
+        patchwork::plot_annotation(
+          title = "Multiple Group Comparisons",
+          theme = theme(plot.title = element_text(size = 16, hjust = 0.5, face = "bold"))
+        )
+
+      return(combined_plot)
+    } else {
+      warning("patchwork package not available. Returning list of individual plots.")
+      return(p_list)
+    }
+  } else {
+    return(NULL)
+  }
+}
+
+#' Create plot with common axis labels
+#'
+#' @description Creates a plot with common axis labels for multiple subplots
+#' @param p A patchwork object containing multiple plots
+#' @param x_title Common x-axis title
+#' @param y_title Common y-axis title
+#' @return A function that generates the plot when called
+#' @export
+createPlotWithCommonAxes <- function(p, x_title = "Common X-Axis Title",
+                                     y_title = "Common Y-Axis Title") {
+  # Create a function that will generate the plot when called
+  function() {
+    # Convert patchwork to a grob
+    p_grob <- patchworkGrob(p)
+
+    # Create a new plotting area
+    grid.newpage()
+
+    # Draw the patchwork
+    grid.draw(p_grob)
+
+    # Add common x-axis title
+    grid.text(x_title,
+              x = 0.5, y = 0.02,
+              gp = gpar(fontsize = 18, fontface = "bold"))
+
+    # Add common y-axis title (rotated)
+    grid.text(y_title,
+              x = 0.01, y = 0.5,
+              rot = 90,
+              gp = gpar(fontsize = 18, fontface = "bold"))
+
+    # Return the grob for potential further use
+    invisible(p_grob)
+  }
+}
