@@ -203,7 +203,7 @@ createPlotWithCommonAxes <- function(p, x_title = "Common X-Axis Title",
 #' @param overlap_only For MultiDromaSet, whether to use only overlapping samples (default: FALSE)
 #' @param merged_enabled Logical, whether to create a merged dataset from all studies
 #' @param meta_enabled Logical, whether to perform meta-analysis
-#' @return A list containing plot, meta-analysis results, and data
+#' @return A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), meta-analysis results, and data
 #' @export
 #' @examples
 #' \dontrun{
@@ -390,12 +390,30 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
     # Pair data
     myPairs <- pairDrugOmic(myOmics, myDrugs, merged = merged_enabled)
 
-    # Create plots
-    result$plot <- plotAllContinuousDrugOmic(myPairs)
+    # Separate individual pairs from merged pairs for analysis
+    individual_pairs <- myPairs
+    merged_pair <- NULL
 
-    # Perform meta-analysis
-    if(meta_enabled){
-      meta_result <- analyzeContinuousDrugOmic(myPairs)
+    # Extract merged dataset if it exists
+    if (merged_enabled && "merged_dataset" %in% names(myPairs)) {
+      merged_pair <- myPairs[["merged_dataset"]]
+      # Remove merged dataset from individual pairs for meta-analysis
+      individual_pairs <- myPairs[names(myPairs) != "merged_dataset"]
+    }
+
+    # Create plots for individual studies
+    result$plot <- plotAllContinuousDrugOmic(individual_pairs)
+
+    # Create plot for merged dataset if available
+    if (!is.null(merged_pair) && merged_enabled) {
+      result$merged_plot <- plotContinuousDrugOmic(merged_pair$omic,
+                                                   merged_pair$drug,
+                                                   "Merged Dataset")
+    }
+
+    # Perform meta-analysis on individual pairs only (exclude merged data)
+    if(meta_enabled && length(individual_pairs) > 0){
+      meta_result <- analyzeContinuousDrugOmic(individual_pairs)
       if (!is.null(meta_result)) {
         result$meta <- meta_result
       }
@@ -407,12 +425,28 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
     # Pair data
     myPairs <- pairDiscreteDrugOmic(myOmics, myDrugs, merged = merged_enabled)
 
-    # Create plots
-    result$plot <- plotAllDiscreteDrugOmic(myPairs)
+    # Separate individual pairs from merged pairs for analysis
+    individual_pairs <- myPairs
+    merged_pair <- NULL
 
-    # Perform meta-analysis
-    if(meta_enabled){
-      meta_result <- analyzeDiscreteDrugOmic(myPairs)
+    # Extract merged dataset if it exists
+    if (merged_enabled && "merged_dataset" %in% names(myPairs)) {
+      merged_pair <- myPairs[["merged_dataset"]]
+      # Remove merged dataset from individual pairs for meta-analysis
+      individual_pairs <- myPairs[names(myPairs) != "merged_dataset"]
+    }
+
+    # Create plots for individual studies
+    result$plot <- plotAllDiscreteDrugOmic(individual_pairs)
+
+    # Create plot for merged dataset if available
+    if (!is.null(merged_pair) && merged_enabled) {
+      result$merged_plot <- plotDiscreteDrugOmic(merged_pair$yes, merged_pair$no, "Merged Dataset")
+    }
+
+    # Perform meta-analysis on individual pairs only (exclude merged data)
+    if(meta_enabled && length(individual_pairs) > 0){
+      meta_result <- analyzeDiscreteDrugOmic(individual_pairs)
       if (!is.null(meta_result)) {
         result$meta <- meta_result
       }
@@ -422,8 +456,8 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
     result$data <- myPairs
   }
 
-  # Return results if there's a plot
-  if (is.null(result$plot)) {
+  # Return results if there's a plot or merged plot
+  if (is.null(result$plot) && is.null(result$merged_plot)) {
     return(list())
   } else {
     return(result)

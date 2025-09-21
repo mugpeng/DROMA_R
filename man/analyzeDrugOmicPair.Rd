@@ -36,7 +36,7 @@ analyzeDrugOmicPair(
 \item{meta_enabled}{Logical, whether to perform meta-analysis}
 }
 \value{
-A list containing plot, meta-analysis results, and data
+A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), meta-analysis results, and data
 }
 \description{
 Main function for analyzing associations between a drug and an omic feature using DromaSet or MultiDromaSet objects
