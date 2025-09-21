@@ -129,7 +129,7 @@ createStratifiedDromaSets <- function(dromaset_object,
       }
 
       # Get original DromaSet
-      original_set <- dromaset_object@project_list[[project_name]]
+      original_set <- dromaset_object@DromaSets[[project_name]]
 
       # Create stratified DromaSet objects
       sensitive_sets[[project_name]] <- createDromaSetFromDromaSet(
@@ -182,8 +182,15 @@ createStratifiedDromaSets <- function(dromaset_object,
 #' @return New DromaSet object with subset of samples
 createDromaSetFromDromaSet <- function(original_set, sample_subset, new_name) {
 
-  # Validate samples
-  valid_samples <- sample_subset[sample_subset %in% colnames(original_set@molecular_data)]
+  # Validate samples - check across all molecular profiles
+  valid_samples <- character(0)
+  for (mol_type in names(original_set@molecularProfiles)) {
+    if (is.matrix(original_set@molecularProfiles[[mol_type]])) {
+      valid_samples <- unique(c(valid_samples,
+                              colnames(original_set@molecularProfiles[[mol_type]])))
+    }
+  }
+  valid_samples <- intersect(sample_subset, valid_samples)
 
   if (length(valid_samples) == 0) {
     stop("No valid samples found for subset creation")
@@ -195,27 +202,50 @@ createDromaSetFromDromaSet <- function(original_set, sample_subset, new_name) {
   # Copy basic attributes
   new_set@name <- new_name
   new_set@description <- paste0("Subset of ", original_set@name, " (", length(valid_samples), " samples)")
-  new_set@data_source <- original_set@data_source
-  new_set@creation_date <- date()
 
-  # Copy and filter molecular data
-  new_set@molecular_data <- original_set@molecular_data[, valid_samples, drop = FALSE]
-
-  # Copy and filter treatment response data
-  new_set@treatment_response <- original_set@treatment_response[, valid_samples, drop = FALSE]
-
-  # Copy and filter sample annotations
-  if (nrow(original_set@sample_annotations) > 0) {
-    new_set@sample_annotations <- original_set@sample_annotations[
-      original_set@sample_annotations$sample_id %in% valid_samples,
-    ]
-  } else {
-    new_set@sample_annotations <- data.frame(sample_id = valid_samples)
+  # Copy treatment response data and filter samples
+  new_set@treatmentResponse <- list()
+  for (drug_type in names(original_set@treatmentResponse)) {
+    if (is.matrix(original_set@treatmentResponse[[drug_type]]) &&
+        ncol(original_set@treatmentResponse[[drug_type]]) > 0) {
+      # Filter samples that exist in this matrix
+      valid_samples_matrix <- intersect(valid_samples,
+                                       colnames(original_set@treatmentResponse[[drug_type]]))
+      if (length(valid_samples_matrix) > 0) {
+        new_set@treatmentResponse[[drug_type]] <-
+          original_set@treatmentResponse[[drug_type]][, valid_samples_matrix, drop = FALSE]
+      }
+    }
   }
 
-  # Copy feature annotations unchanged
-  new_set@molecular_annotations <- original_set@molecular_annotations
-  new_set@treatment_annotations <- original_set@treatment_annotations
+  # Copy molecular profiles data and filter samples
+  new_set@molecularProfiles <- list()
+  for (mol_type in names(original_set@molecularProfiles)) {
+    if (is.matrix(original_set@molecularProfiles[[mol_type]]) &&
+        ncol(original_set@molecularProfiles[[mol_type]]) > 0) {
+      # Filter samples that exist in this matrix
+      valid_samples_matrix <- intersect(valid_samples,
+                                       colnames(original_set@molecularProfiles[[mol_type]]))
+      if (length(valid_samples_matrix) > 0) {
+        new_set@molecularProfiles[[mol_type]] <-
+          original_set@molecularProfiles[[mol_type]][, valid_samples_matrix, drop = FALSE]
+      }
+    }
+  }
+
+  # Copy and filter sample metadata
+  if (nrow(original_set@sampleMetadata) > 0) {
+    new_set@sampleMetadata <- original_set@sampleMetadata[
+      original_set@sampleMetadata$sample_id %in% valid_samples,
+    ]
+  } else {
+    new_set@sampleMetadata <- data.frame(sample_id = valid_samples)
+  }
+
+  # Copy metadata unchanged
+  new_set@treatmentMetadata <- original_set@treatmentMetadata
+  new_set@datasetType <- original_set@datasetType
+  new_set@db_info <- original_set@db_info
 
   return(new_set)
 }
@@ -232,12 +262,30 @@ createMultiDromaSetFromList <- function(dromaset_list, group_name) {
   multi_set <- new("MultiDromaSet")
 
   # Set basic attributes
-  multi_set@name <- paste0("Multi_", group_name)
+  multi_set@name <- names(dromaset_list)
   multi_set@description <- paste0("Multi-project analysis for ", group_name)
-  multi_set@creation_date <- date()
 
-  # Store project list
-  multi_set@project_list <- dromaset_list
+  # Store DromaSet objects
+  multi_set@DromaSets <- dromaset_list
+
+  # Merge sample metadata
+  all_sample_metadata <- do.call(rbind, lapply(dromaset_list, function(set) {
+    if (nrow(set@sampleMetadata) > 0) {
+      return(set@sampleMetadata)
+    } else {
+      return(data.frame(sample_id = colnames(set@molecularProfiles$mRNA)))
+    }
+  }))
+  multi_set@sampleMetadata <- all_sample_metadata
+
+  # Copy treatment metadata from first set
+  multi_set@treatmentMetadata <- dromaset_list[[1]]@treatmentMetadata
+
+  # Set dataset types
+  multi_set@datasetType <- unique(sapply(dromaset_list, function(set) set@datasetType))
+
+  # Copy db info from first set
+  multi_set@db_info <- dromaset_list[[1]]@db_info
 
   return(multi_set)
 }
@@ -302,28 +350,35 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
   extra_params <- list(...)
 
   # Perform analysis in sensitive group
-  sensitive_result <- analyzeDrugOmicPair(
-    dromaset_object = stratified_sets$sensitive,
-    select_omics_type = select_omics_type,
-    select_omics = select_omics,
-    select_drugs = select_drugs,
-    names(extra_params)
-  )
+  sensitive_result <- do.call(analyzeDrugOmicPair, c(
+    list(
+      dromaset_object = stratified_sets$sensitive,
+      select_omics_type = select_omics_type,
+      select_omics = select_omics,
+      select_drugs = select_drugs
+    ),
+    extra_params
+  ))
 
   # Perform analysis in resistant group
-  resistant_result <- analyzeDrugOmicPair(
-    dromaset_object = stratified_sets$resistant,
-    select_omics_type = select_omics_type,
-    select_omics = select_omics,
-    select_drugs = select_drugs,
-    names(extra_params)
-  )
+  resistant_result <- do.call(analyzeDrugOmicPair, c(
+    list(
+      dromaset_object = stratified_sets$resistant,
+      select_omics_type = select_omics_type,
+      select_omics = select_omics,
+      select_drugs = select_drugs
+    ),
+    extra_params
+  ))
 
   # Compare results between strata
   comparison_result <- compareStratifiedResults(
     sensitive_result = sensitive_result,
     resistant_result = resistant_result,
-    stratification_info = stratified_sets$stratification_info
+    stratification_info = stratified_sets$stratification_info,
+    select_omics_type = select_omics_type,
+    select_omics = select_omics,
+    select_drugs = select_drugs
   )
 
   # Compile final results
@@ -354,8 +409,12 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
 #' @param sensitive_result Analysis result from sensitive group
 #' @param resistant_result Analysis result from resistant group
 #' @param stratification_info Information about stratification
+#' @param select_omics_type Type of omics data analyzed
+#' @param select_omics Name of the omics feature
+#' @param select_drugs Name of the drug analyzed
 #' @return Comparison results with statistical tests
-compareStratifiedResults <- function(sensitive_result, resistant_result, stratification_info) {
+compareStratifiedResults <- function(sensitive_result, resistant_result, stratification_info,
+                                   select_omics_type, select_omics, select_drugs) {
 
   comparison <- list()
 
