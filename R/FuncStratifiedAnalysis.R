@@ -37,7 +37,7 @@ getStratificationInfo <- function(dromaset_object,
                                                  return_data = TRUE)
 
     if (!is.matrix(strat_data) || !stratification_drug %in% rownames(strat_data)) {
-      stop("Stratification drug not found in the dataset")
+      stop("Stratification drug '", stratification_drug, "' not found in dataset")
     }
 
     # Extract drug response vector
@@ -46,7 +46,7 @@ getStratificationInfo <- function(dromaset_object,
     drug_response <- drug_response[!is.na(drug_response)]
 
     if (length(drug_response) < (2 * min_samples)) {
-      stop("Insufficient samples for stratification")
+      stop("Insufficient samples (", length(drug_response), ") for stratification. Minimum required: ", 2 * min_samples)
     }
 
     # Calculate quantiles
@@ -59,7 +59,8 @@ getStratificationInfo <- function(dromaset_object,
 
     # Validate sample sizes
     if (length(sensitive_samples) < min_samples || length(resistant_samples) < min_samples) {
-      stop("Insufficient samples in one or more strata after stratification")
+      stop("Insufficient samples in strata. Sensitive: ", length(sensitive_samples),
+           ", Resistant: ", length(resistant_samples), ". Minimum required: ", min_samples)
     }
 
     result <- list()
@@ -82,12 +83,30 @@ getStratificationInfo <- function(dromaset_object,
       tumor_type = "all"
     )
 
+    # Check if any projects have the stratification drug
+    projects_with_drug <- names(strat_data_list)[
+      sapply(strat_data_list, function(mat) is.matrix(mat) && stratification_drug %in% rownames(mat))
+    ]
+
+    if (length(projects_with_drug) == 0) {
+      stop("Stratification drug '", stratification_drug, "' not found in any project")
+    }
+
+    # Warn about projects without the drug
+    all_projects <- names(dromaset_object@DromaSets)
+    if (length(all_projects) > length(projects_with_drug)) {
+      projects_without <- setdiff(all_projects, projects_with_drug)
+      warning("Stratification drug not found in projects: ",
+              paste(projects_without, collapse = ", "))
+    }
+
     stratification_info <- list()
 
     for (project_name in names(strat_data_list)) {
       strat_data <- strat_data_list[[project_name]]
 
       if (!is.matrix(strat_data) || !stratification_drug %in% rownames(strat_data)) {
+        # Skip projects without the drug
         next
       }
 
@@ -97,6 +116,8 @@ getStratificationInfo <- function(dromaset_object,
       drug_response <- drug_response[!is.na(drug_response)]
 
       if (length(drug_response) < (2 * min_samples)) {
+        warning("Project ", project_name, ": Insufficient samples (", length(drug_response),
+                ") for stratification. Minimum required: ", 2 * min_samples)
         next
       }
 
@@ -110,6 +131,9 @@ getStratificationInfo <- function(dromaset_object,
 
       # Skip if insufficient samples
       if (length(sensitive_samples) < min_samples || length(resistant_samples) < min_samples) {
+        warning("Project ", project_name, ": Insufficient samples in strata. Sensitive: ",
+                length(sensitive_samples), ", Resistant: ", length(resistant_samples),
+                ". Minimum required: ", min_samples)
         next
       }
 
@@ -133,157 +157,14 @@ getStratificationInfo <- function(dromaset_object,
 }
 
 #' Load data for stratified analysis project by project
-#'
-#' @description Loads drug and omics data for each project, skipping projects without data
-#' @param dromaset_object A DromaSet or MultiDromaSet object
-#' @param stratification_drug Name of the drug used for stratification
-#' @param select_omics_type Type of omics data to analyze
-#' @param select_omics Name of the specific omics feature
-#' @param select_drugs Name of the target drug for association analysis
-#' @param stratification_info List containing sample stratification information
-#' @param data_type Filter by data type
-#' @param tumor_type Filter by tumor type
-#' @param overlap_only For MultiDromaSet, whether to use only overlapping samples
-#' @return List with drugs and omics data for each project
-loadStratifiedDataByProject <- function(dromaset_object,
-                                      stratification_drug,
-                                      select_omics_type,
-                                      select_omics,
-                                      select_drugs,
-                                      stratification_info,
-                                      data_type = "all",
-                                      tumor_type = "all",
-                                      overlap_only = FALSE) {
-
-  drugs <- list()
-  omics <- list()
-
-  if (inherits(dromaset_object, "DromaSet")) {
-    # Single DromaSet
-    project_name <- dromaset_object@name
-
-    # Load drug data
-    drug_data <- tryCatch({
-      loadTreatmentResponseNormalized(dromaset_object,
-                                   drugs = select_drugs,
-                                   data_type = data_type,
-                                   tumor_type = tumor_type,
-                                   return_data = TRUE)
-    }, error = function(e) NULL)
-
-    if (!is.null(drug_data) && is.matrix(drug_data) && select_drugs %in% rownames(drug_data)) {
-      drug_vector <- as.numeric(drug_data[select_drugs, ])
-      names(drug_vector) <- colnames(drug_data)
-      drugs[[project_name]] <- drug_vector[!is.na(drug_vector)]
-    }
-
-    # Load omics data
-    if (select_omics_type %in% c("drug", "drug_raw")) {
-      omics_data <- tryCatch({
-        loadTreatmentResponseNormalized(dromaset_object,
-                                      drugs = select_omics,
-                                      data_type = data_type,
-                                      tumor_type = tumor_type,
-                                      return_data = TRUE)
-      }, error = function(e) NULL)
-
-      if (!is.null(omics_data) && is.matrix(omics_data) && select_omics %in% rownames(omics_data)) {
-        omics_vector <- as.numeric(omics_data[select_omics, ])
-        names(omics_vector) <- colnames(omics_data)
-        omics[[project_name]] <- omics_vector[!is.na(omics_vector)]
-      }
-    } else {
-      omics_data <- tryCatch({
-        loadMolecularProfilesNormalized(dromaset_object,
-                                      molecular_type = select_omics_type,
-                                      features = select_omics,
-                                      data_type = data_type,
-                                      tumor_type = tumor_type,
-                                      return_data = TRUE)
-      }, error = function(e) NULL)
-
-      if (!is.null(omics_data) && is.matrix(omics_data) && select_omics %in% rownames(omics_data)) {
-        if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
-          # Continuous data
-          omics_vector <- as.numeric(omics_data[select_omics, ])
-          names(omics_vector) <- colnames(omics_data)
-          omics[[project_name]] <- omics_vector[!is.na(omics_vector)]
-        } else {
-          # Discrete data
-          gene_row <- omics_data[select_omics, ]
-          present_samples <- names(gene_row)[gene_row != 0]
-          omics[[project_name]] <- present_samples
-        }
-      }
-    }
-  } else {
-    # MultiDromaSet - handle each project separately
-    for (project_name in names(dromaset_object@DromaSets)) {
-      # Skip project if not in stratification info
-      if (!project_name %in% names(stratification_info)) {
-        next
-      }
-
-      project_set <- dromaset_object@DromaSets[[project_name]]
-
-      # Load drug data
-      drug_data <- tryCatch({
-        loadTreatmentResponseNormalized(project_set,
-                                     drugs = select_drugs,
-                                     data_type = data_type,
-                                     tumor_type = tumor_type,
-                                     return_data = TRUE)
-      }, error = function(e) NULL)
-
-      if (!is.null(drug_data) && is.matrix(drug_data) && select_drugs %in% rownames(drug_data)) {
-        drug_vector <- as.numeric(drug_data[select_drugs, ])
-        names(drug_vector) <- colnames(drug_data)
-        drugs[[project_name]] <- drug_vector[!is.na(drug_vector)]
-      }
-
-      # Load omics data
-      if (select_omics_type %in% c("drug", "drug_raw")) {
-        omics_data <- tryCatch({
-          loadTreatmentResponseNormalized(project_set,
-                                        drugs = select_omics,
-                                        data_type = data_type,
-                                        tumor_type = tumor_type,
-                                        return_data = TRUE)
-        }, error = function(e) NULL)
-
-        if (!is.null(omics_data) && is.matrix(omics_data) && select_omics %in% rownames(omics_data)) {
-          omics_vector <- as.numeric(omics_data[select_omics, ])
-          names(omics_vector) <- colnames(omics_data)
-          omics[[project_name]] <- omics_vector[!is.na(omics_vector)]
-        }
-      } else {
-        omics_data <- tryCatch({
-          loadMolecularProfilesNormalized(project_set,
-                                        molecular_type = select_omics_type,
-                                        features = select_omics,
-                                        data_type = data_type,
-                                        tumor_type = tumor_type,
-                                        return_data = TRUE)
-        }, error = function(e) NULL)
-
-        if (!is.null(omics_data) && is.matrix(omics_data) && select_omics %in% rownames(omics_data)) {
-          if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
-            # Continuous data
-            omics_vector <- as.numeric(omics_data[select_omics, ])
-            names(omics_vector) <- colnames(omics_data)
-            omics[[project_name]] <- omics_vector[!is.na(omics_vector)]
-          } else {
-            # Discrete data
-            gene_row <- omics_data[select_omics, ]
-            present_samples <- names(gene_row)[gene_row != 0]
-            omics[[project_name]] <- present_samples
-          }
-        }
-      }
-    }
-  }
-
-  list(drugs = drugs, omics = omics)
+#' @description This function is deprecated and no longer used in the stratified analysis workflow.
+#' Data loading is now handled directly within analyzeStratifiedDrugOmic using the standard
+#' loading functions from FuncPairDrugOmicPair.R
+#' @export
+loadStratifiedDataByProject <- function(...) {
+  warning("loadStratifiedDataByProject is deprecated and no longer used.",
+          " Data loading is handled within analyzeStratifiedDrugOmic.")
+  return(NULL)
 }
 
 #' Stratified version of pairContinuousFeatures
@@ -518,6 +399,11 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
 
   # Extract additional parameters
   extra_params <- list(...)
+  data_type <- extra_params$data_type %||% "all"
+  tumor_type <- extra_params$tumor_type %||% "all"
+  overlap_only <- extra_params$overlap_only %||% FALSE
+  merged_enabled <- extra_params$merged_enabled %||% TRUE
+  meta_enabled <- extra_params$meta_enabled %||% TRUE
 
   # Step 1: Get stratification information (sensitive/resistant sample names for each project)
   cat("Getting stratification info...\n")
@@ -528,54 +414,167 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
     min_samples = min_samples
   )
 
-  # Step 2: Load and filter data for each stratum
-  cat("Loading and filtering data for sensitive group...\n")
-  
-  # Load data and filter for sensitive samples
-  sensitive_data <- loadAndFilterStratifiedData(
-    dromaset_object = dromaset_object,
-    select_omics_type = select_omics_type,
-    select_omics = select_omics,
-    select_drugs = select_drugs,
-    stratification_info = stratification_info,
-    stratum = "sensitive",
-    data_type = extra_params$data_type %||% "all",
-    tumor_type = extra_params$tumor_type %||% "all",
-    overlap_only = extra_params$overlap_only %||% FALSE
-  )
+  # Step 2: Load original data (same as analyzeDrugOmicPair)
+  cat("Loading drug data...\n")
+  if (inherits(dromaset_object, "DromaSet")) {
+    # Single DromaSet
+    drug_data <- loadTreatmentResponseNormalized(dromaset_object,
+                                              drugs = select_drugs,
+                                              data_type = data_type,
+                                              tumor_type = tumor_type,
+                                              return_data = TRUE)
 
-  cat("Loading and filtering data for resistant group...\n")
-  
-  # Load data and filter for resistant samples  
-  resistant_data <- loadAndFilterStratifiedData(
-    dromaset_object = dromaset_object,
-    select_omics_type = select_omics_type,
-    select_omics = select_omics,
-    select_drugs = select_drugs,
-    stratification_info = stratification_info,
-    stratum = "resistant",
-    data_type = extra_params$data_type %||% "all",
-    tumor_type = extra_params$tumor_type %||% "all",
-    overlap_only = extra_params$overlap_only %||% FALSE
-  )
+    # Convert matrix to list format
+    if (is.matrix(drug_data) && select_drugs %in% rownames(drug_data)) {
+      drug_vector <- as.numeric(drug_data[select_drugs, ])
+      names(drug_vector) <- colnames(drug_data)
+      drug_data_list <- list()
+      drug_data_list[[dromaset_object@name]] <- drug_vector[!is.na(drug_vector)]
+    } else {
+      drug_data_list <- list()
+    }
+  } else {
+    # MultiDromaSet
+    drug_data_list <- loadMultiProjectTreatmentResponseNormalized(
+      dromaset_object,
+      drugs = select_drugs,
+      overlap_only = overlap_only,
+      data_type = data_type,
+      tumor_type = tumor_type
+    )
 
-  # Step 3: Run analysis on each stratified group
+    # Extract specific drug from each project
+    drug_data_list <- lapply(drug_data_list, function(drug_matrix) {
+      if (is.matrix(drug_matrix) && select_drugs %in% rownames(drug_matrix)) {
+        drug_vector <- as.numeric(drug_matrix[select_drugs, ])
+        names(drug_vector) <- colnames(drug_matrix)
+        return(drug_vector[!is.na(drug_vector)])
+      }
+      return(NULL)
+    })
+    drug_data_list <- drug_data_list[!sapply(drug_data_list, is.null)]
+  }
+
+  # Load omics data
+  cat("Loading omics data...\n")
+  if (select_omics_type %in% c("drug", "drug_raw")) {
+    # Another drug
+    if (inherits(dromaset_object, "DromaSet")) {
+      omics_data <- loadTreatmentResponseNormalized(dromaset_object,
+                                                   drugs = select_omics,
+                                                   data_type = data_type,
+                                                   tumor_type = tumor_type,
+                                                   return_data = TRUE)
+
+      if (is.matrix(omics_data) && select_omics %in% rownames(omics_data)) {
+        omics_vector <- as.numeric(omics_data[select_omics, ])
+        names(omics_vector) <- colnames(omics_data)
+        omics_data_list <- list()
+        omics_data_list[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
+      } else {
+        omics_data_list <- list()
+      }
+    } else {
+      omics_data_list <- loadMultiProjectTreatmentResponseNormalized(
+        dromaset_object,
+        drugs = select_omics,
+        overlap_only = overlap_only,
+        data_type = data_type,
+        tumor_type = tumor_type
+      )
+
+      omics_data_list <- lapply(omics_data_list, function(drug_matrix) {
+        if (is.matrix(drug_matrix) && select_omics %in% rownames(drug_matrix)) {
+          drug_vector <- as.numeric(drug_matrix[select_omics, ])
+          names(drug_vector) <- colnames(drug_matrix)
+          return(drug_vector[!is.na(drug_vector)])
+        }
+        return(NULL)
+      })
+      omics_data_list <- omics_data_list[!sapply(omics_data_list, is.null)]
+    }
+  } else {
+    # Molecular profiles
+    if (inherits(dromaset_object, "DromaSet")) {
+      omics_data <- loadMolecularProfilesNormalized(dromaset_object,
+                                                  molecular_type = select_omics_type,
+                                                  features = select_omics,
+                                                  data_type = data_type,
+                                                  tumor_type = tumor_type,
+                                                  return_data = TRUE)
+
+      if (is.matrix(omics_data) && select_omics %in% rownames(omics_data)) {
+        omics_data_list <- list()
+        if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
+          # Continuous
+          omics_vector <- as.numeric(omics_data[select_omics, ])
+          names(omics_vector) <- colnames(omics_data)
+          omics_data_list[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
+        } else {
+          # Discrete
+          gene_row <- omics_data[select_omics, ]
+          present_samples <- names(gene_row)[gene_row != 0]
+          omics_data_list[[dromaset_object@name]] <- present_samples
+        }
+      } else {
+        omics_data_list <- list()
+      }
+    } else {
+      omics_data_list <- loadMultiProjectMolecularProfilesNormalized(
+        dromaset_object,
+        molecular_type = select_omics_type,
+        features = select_omics,
+        overlap_only = overlap_only,
+        data_type = data_type,
+        tumor_type = tumor_type
+      )
+
+      omics_data_list <- lapply(omics_data_list, function(omics_matrix) {
+        if (is.matrix(omics_matrix) && select_omics %in% rownames(omics_matrix)) {
+          if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
+            # Continuous
+            omics_vector <- as.numeric(omics_matrix[select_omics, ])
+            names(omics_vector) <- colnames(omics_matrix)
+            return(omics_vector[!is.na(omics_vector)])
+          } else {
+            # Discrete
+            gene_row <- omics_matrix[select_omics, ]
+            present_samples <- names(gene_row)[gene_row != 0]
+            return(present_samples)
+          }
+        }
+        return(NULL)
+      })
+      omics_data_list <- omics_data_list[!sapply(omics_data_list, is.null)]
+    }
+  }
+
+  # Check if we have data
+  if (length(drug_data_list) == 0 || length(omics_data_list) == 0) {
+    stop("No data found for the specified drug-omics pair")
+  }
+
+  # Step 3: Filter data for each stratum and analyze
   cat("Analyzing sensitive group...\n")
+  sensitive_loaded_data <- list(drugs = drug_data_list, omics = omics_data_list)
+  sensitive_data <- filterStratifiedData(sensitive_loaded_data, stratification_info, "sensitive")
   sensitive_result <- analyzeStratifiedData(
     omics_data = sensitive_data$omics,
     drug_data = sensitive_data$drugs,
     select_omics_type = select_omics_type,
-    merged_enabled = extra_params$merged_enabled %||% TRUE,
-    meta_enabled = extra_params$meta_enabled %||% TRUE
+    merged_enabled = merged_enabled,
+    meta_enabled = meta_enabled
   )
 
   cat("Analyzing resistant group...\n")
+  resistant_loaded_data <- list(drugs = drug_data_list, omics = omics_data_list)
+  resistant_data <- filterStratifiedData(resistant_loaded_data, stratification_info, "resistant")
   resistant_result <- analyzeStratifiedData(
     omics_data = resistant_data$omics,
     drug_data = resistant_data$drugs,
     select_omics_type = select_omics_type,
-    merged_enabled = extra_params$merged_enabled %||% TRUE,
-    meta_enabled = extra_params$meta_enabled %||% TRUE
+    merged_enabled = merged_enabled,
+    meta_enabled = meta_enabled
   )
 
   # Compare results between strata
@@ -696,74 +695,198 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
   return(NULL)
 }
 
-#' Load and filter data for stratified analysis
+#' Filter data for stratified analysis
 #'
-#' @description Loads omics and drug data, then filters to keep only samples from specified stratum
+#' @description Filters loaded omics and drug data to keep only samples from specified stratum
 #' @param dromaset_object DromaSet or MultiDromaSet object
-#' @param select_omics_type Type of omics data
-#' @param select_omics Name of omics feature
-#' @param select_drugs Name of drug
-#' @param stratification_info Stratification information
+#' @param stratification_info Stratification information from getStratificationInfo
 #' @param stratum Which stratum ("sensitive" or "resistant")
-#' @param data_type Data type filter
-#' @param tumor_type Tumor type filter
-#' @param overlap_only Whether to use overlapping samples only
 #' @return List with filtered omics and drug data
 #' @export
-loadAndFilterStratifiedData <- function(dromaset_object, select_omics_type, select_omics, 
-                                       select_drugs, stratification_info, stratum,
-                                       data_type = "all", tumor_type = "all", 
-                                       overlap_only = FALSE) {
-  
-  # Load original data
-  loaded_data <- loadStratifiedDataByProject(
-    dromaset_object = dromaset_object,
-    stratification_drug = names(stratification_info)[1], # Not used in this context
-    select_omics_type = select_omics_type,
-    select_omics = select_omics,
-    select_drugs = select_drugs,
-    stratification_info = stratification_info,
-    data_type = data_type,
-    tumor_type = tumor_type,
-    overlap_only = overlap_only
-  )
-  
+filterStratifiedData <- function(loaded_data, stratification_info, stratum) {
+
+  # Validate stratum
+  stratum <- match.arg(stratum, c("sensitive", "resistant"))
+
   # Filter data to keep only samples from specified stratum
   filtered_omics <- list()
   filtered_drugs <- list()
-  
+
   for (project_name in names(loaded_data$omics)) {
     if (project_name %in% names(stratification_info)) {
       # Get stratum samples for this project
       stratum_samples <- stratification_info[[project_name]][[stratum]]
-      
+
       # Filter omics data
-      if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
+      omics_data <- loaded_data$omics[[project_name]]
+      if (is.numeric(omics_data)) {
         # Continuous omics data
-        omics_data <- loaded_data$omics[[project_name]]
         filtered_omics_data <- omics_data[names(omics_data) %in% stratum_samples]
         if (length(filtered_omics_data) >= 3) {
           filtered_omics[[project_name]] <- filtered_omics_data
         }
-      } else {
+      } else if (is.character(omics_data)) {
         # Discrete omics data - keep samples that are both in omics and in stratum
-        omics_data <- loaded_data$omics[[project_name]]
         filtered_omics_data <- omics_data[omics_data %in% stratum_samples]
         if (length(filtered_omics_data) >= 3) {
           filtered_omics[[project_name]] <- filtered_omics_data
         }
       }
-      
+
       # Filter drug data
       drug_data <- loaded_data$drugs[[project_name]]
-      filtered_drug_data <- drug_data[names(drug_data) %in% stratum_samples]
-      if (length(filtered_drug_data) >= 3) {
-        filtered_drugs[[project_name]] <- filtered_drug_data
+      if (!is.null(drug_data)) {
+        filtered_drug_data <- drug_data[names(drug_data) %in% stratum_samples]
+        if (length(filtered_drug_data) >= 3) {
+          filtered_drugs[[project_name]] <- filtered_drug_data
+        }
       }
     }
   }
-  
+
   return(list(omics = filtered_omics, drugs = filtered_drugs))
+}
+
+#' Backward compatibility wrapper for loadAndFilterStratifiedData
+#' @description This function is deprecated. Use filterStratifiedData instead.
+#' @export
+loadAndFilterStratifiedData <- function(dromaset_object, select_omics_type, select_omics,
+                                       select_drugs, stratification_info, stratum,
+                                       data_type = "all", tumor_type = "all",
+                                       overlap_only = FALSE) {
+
+  # Load original data using standard functions
+  loaded_data <- list()
+
+  # Load drug data
+  if (inherits(dromaset_object, "DromaSet")) {
+    # Single DromaSet
+    drug_data <- loadTreatmentResponseNormalized(dromaset_object,
+                                              drugs = select_drugs,
+                                              data_type = data_type,
+                                              tumor_type = tumor_type,
+                                              return_data = TRUE)
+
+    if (is.matrix(drug_data) && select_drugs %in% rownames(drug_data)) {
+      drug_vector <- as.numeric(drug_data[select_drugs, ])
+      names(drug_vector) <- colnames(drug_data)
+      loaded_data$drugs <- list()
+      loaded_data$drugs[[dromaset_object@name]] <- drug_vector[!is.na(drug_vector)]
+    }
+  } else {
+    # MultiDromaSet
+    loaded_data$drugs <- loadMultiProjectTreatmentResponseNormalized(
+      dromaset_object,
+      drugs = select_drugs,
+      overlap_only = overlap_only,
+      data_type = data_type,
+      tumor_type = tumor_type
+    )
+
+    # Extract specific drug
+    loaded_data$drugs <- lapply(loaded_data$drugs, function(drug_matrix) {
+      if (is.matrix(drug_matrix) && select_drugs %in% rownames(drug_matrix)) {
+        drug_vector <- as.numeric(drug_matrix[select_drugs, ])
+        names(drug_vector) <- colnames(drug_matrix)
+        return(drug_vector[!is.na(drug_vector)])
+      }
+      return(NULL)
+    })
+    loaded_data$drugs <- loaded_data$drugs[!sapply(loaded_data$drugs, is.null)]
+  }
+
+  # Load omics data
+  if (select_omics_type %in% c("drug", "drug_raw")) {
+    # Another drug
+    if (inherits(dromaset_object, "DromaSet")) {
+      omics_data <- loadTreatmentResponseNormalized(dromaset_object,
+                                                   drugs = select_omics,
+                                                   data_type = data_type,
+                                                   tumor_type = tumor_type,
+                                                   return_data = TRUE)
+
+      if (is.matrix(omics_data) && select_omics %in% rownames(omics_data)) {
+        omics_vector <- as.numeric(omics_data[select_omics, ])
+        names(omics_vector) <- colnames(omics_data)
+        loaded_data$omics <- list()
+        loaded_data$omics[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
+      }
+    } else {
+      loaded_data$omics <- loadMultiProjectTreatmentResponseNormalized(
+        dromaset_object,
+        drugs = select_omics,
+        overlap_only = overlap_only,
+        data_type = data_type,
+        tumor_type = tumor_type
+      )
+
+      loaded_data$omics <- lapply(loaded_data$omics, function(omics_matrix) {
+        if (is.matrix(omics_matrix) && select_omics %in% rownames(omics_matrix)) {
+          omics_vector <- as.numeric(omics_matrix[select_omics, ])
+          names(omics_vector) <- colnames(omics_matrix)
+          return(omics_vector[!is.na(omics_vector)])
+        }
+        return(NULL)
+      })
+      loaded_data$omics <- loaded_data$omics[!sapply(loaded_data$omics, is.null)]
+    }
+  } else {
+    # Molecular profiles
+    if (inherits(dromaset_object, "DromaSet")) {
+      omics_data <- loadMolecularProfilesNormalized(dromaset_object,
+                                                  molecular_type = select_omics_type,
+                                                  features = select_omics,
+                                                  data_type = data_type,
+                                                  tumor_type = tumor_type,
+                                                  return_data = TRUE)
+
+      if (is.matrix(omics_data) && select_omics %in% rownames(omics_data)) {
+        if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
+          # Continuous
+          omics_vector <- as.numeric(omics_data[select_omics, ])
+          names(omics_vector) <- colnames(omics_data)
+          loaded_data$omics <- list()
+          loaded_data$omics[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
+        } else {
+          # Discrete
+          gene_row <- omics_data[select_omics, ]
+          present_samples <- names(gene_row)[gene_row != 0]
+          loaded_data$omics <- list()
+          loaded_data$omics[[dromaset_object@name]] <- present_samples
+        }
+      }
+    } else {
+      loaded_data$omics <- loadMultiProjectMolecularProfilesNormalized(
+        dromaset_object,
+        molecular_type = select_omics_type,
+        features = select_omics,
+        overlap_only = overlap_only,
+        data_type = data_type,
+        tumor_type = tumor_type
+      )
+
+      loaded_data$omics <- lapply(loaded_data$omics, function(omics_matrix) {
+        if (is.matrix(omics_matrix) && select_omics %in% rownames(omics_matrix)) {
+          if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
+            # Continuous
+            omics_vector <- as.numeric(omics_matrix[select_omics, ])
+            names(omics_vector) <- colnames(omics_matrix)
+            return(omics_vector[!is.na(omics_vector)])
+          } else {
+            # Discrete
+            gene_row <- omics_matrix[select_omics, ]
+            present_samples <- names(gene_row)[gene_row != 0]
+            return(present_samples)
+          }
+        }
+        return(NULL)
+      })
+      loaded_data$omics <- loaded_data$omics[!sapply(loaded_data$omics, is.null)]
+    }
+  }
+
+  # Now filter the loaded data
+  return(filterStratifiedData(loaded_data, stratification_info, stratum))
 }
 
 #' Analyze stratified data

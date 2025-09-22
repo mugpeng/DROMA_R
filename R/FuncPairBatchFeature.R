@@ -245,6 +245,16 @@ getSampleMetadata <- function(dromaset_object, feature1_type, feature2_type) {
 #' Batch analysis to find significant features associated with a reference feature using DromaSet objects
 #'
 #' @description Performs batch analysis to identify features significantly associated with a reference feature using DromaSet or MultiDromaSet objects
+#'
+#' @section Execution Flow:
+#' The function follows this high-level workflow:
+#' 1. Input validation and parameter setup
+#' 2. Feature type determination (continuous vs discrete)
+#' 3. Load and validate reference feature (feature1) data
+#' 4. Get list of features to test (feature2)
+#' 5. Parallel/sequential processing of feature pairs
+#' 6. Statistical testing based on feature types
+#' 7. Result aggregation and reporting
 #' @param dromaset_object Either a DromaSet or MultiDromaSet object
 #' @param feature1_type Type of the reference feature (e.g., "drug", "mRNA")
 #' @param feature1_name Name of the reference feature
