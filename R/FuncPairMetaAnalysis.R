@@ -36,6 +36,11 @@ metaCalcConCon <- function(selected_pair) {
   if (length(cal_list) < 1) return(NULL)
 
   cal_re <- do.call(rbind, cal_list)
+  
+  # Handle extreme correlation values to prevent infinite z-scores
+  # Clamp correlation coefficients to avoid numerical issues in Fisher's z transform
+  cal_re$effect <- pmax(pmin(cal_re$effect, 0.999), -0.999)
+  
   cal_re$se <- sqrt((1 - cal_re$effect^2) / (cal_re$N - 2))
   cal_re$z <- 0.5 * log((1 + cal_re$effect) / (1 - cal_re$effect))  # Fisher's z
   cal_re$se_z <- 1 / sqrt(cal_re$N - 3)
