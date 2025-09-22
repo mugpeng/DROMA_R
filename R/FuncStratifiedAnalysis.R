@@ -448,7 +448,7 @@ compareStratifiedResults <- function(sensitive_result, resistant_result, stratif
         Group = c("Sensitive", "Resistant", "Difference"),
         Correlation = c(sens_cor, res_cor, sens_cor - res_cor),
         SE = c(sens_se, res_se, sqrt(sens_se^2 + res_se^2)),
-        P_value = c(NA, NA, p_diff)
+        P_value = c(sensitive_result$meta$pval.random, resistant_result$meta$pval.random, p_diff)
       )
     } else {
       # Discrete analysis - compare effect sizes
@@ -465,7 +465,7 @@ compareStratifiedResults <- function(sensitive_result, resistant_result, stratif
         Group = c("Sensitive", "Resistant", "Difference"),
         Effect_Size = c(sens_es, res_es, sens_es - res_es),
         SE = c(sens_se, res_se, sqrt(sens_se^2 + res_se^2)),
-        P_value = c(NA, NA, p_diff)
+        P_value = c(sensitive_result$meta$pval.random, resistant_result$meta$pval.random, p_diff)
       )
     }
   }

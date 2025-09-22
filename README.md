@@ -8,6 +8,13 @@
 
 **DROMA.R** is an R package that provides advanced analysis functions for drug-omics associations using DromaSet and MultiDromaSet objects from the **DROMA.Set** package. It supports meta-analysis of drug-omics associations across multiple datasets, comprehensive visualization tools, and batch processing of features. This package extends DROMA.Set with statistical analysis capabilities for biomarker discovery in precision medicine. **All data loading functions now apply z-score normalization by default** for improved analysis consistency.
 
+### Core Design Principles
+
+1. **Modular Architecture**: Functions organized into data loading, pairing, meta-analysis, and visualization modules
+2. **Z-score Normalization**: All continuous data normalized by default for cross-dataset comparability
+3. **Statistical Rigor**: Appropriate methods for continuous (Spearman) and discrete (Wilcoxon + Cliff's Delta) data
+4. **Flexible Analysis**: Supports both single dataset and multi-dataset meta-analysis workflows
+
 It is a part of [DROMA project](https://github.com/mugpeng/DROMA). Visit the [official DROMA website](https://droma01.github.io/) for comprehensive documentation and interactive examples.
 
 ## Features
@@ -68,7 +75,24 @@ multi_set <- createMultiDromaSetFromDatabase(
 )
 ```
 
-### 3. Analyze Drug-Omics Associations
+### 3. Load Data with Z-score Normalization
+
+```r
+# Load molecular profiles (automatically z-score normalized)
+mrna_data <- loadMolecularProfilesNormalized(
+  gCSI,
+  molecular_type = "mRNA",
+  features = "ABCB1"
+)
+
+# Load drug response data (automatically z-score normalized)
+drug_data <- loadTreatmentResponseNormalized(
+  gCSI,
+  drugs = "Paclitaxel"
+)
+```
+
+### 4. Analyze Drug-Omics Associations
 
 ```r
 # Single project analysis
@@ -81,7 +105,7 @@ result <- analyzeDrugOmicPair(
   tumor_type = "all"
 )
 
-# Multi-project analysis
+# Multi-project meta-analysis
 multi_result <- analyzeDrugOmicPair(
   multi_set,
   select_omics_type = "mRNA",
@@ -95,7 +119,7 @@ print(result$meta)
 plot(result$plot)
 ```
 
-### 4. Batch Feature Analysis
+### 5. Batch Feature Analysis
 
 ```r
 # Find genes associated with drug response
@@ -112,43 +136,51 @@ volcano_plot <- plotMetaVolcano(batch_results, es_t = 0.3, P_t = 0.05)
 print(volcano_plot)
 ```
 
-## Core Functions
+## Core Functions by Module
 
-### Analysis Functions
-- **`analyzeDrugOmicPair()`**: Analyze association between drug response and omics feature
-- **`batchFindSignificantFeatures()`**: Batch analysis of multiple features
-- **`analyzeContinuousDrugOmic()`**: Meta-analysis for continuous data
-- **`analyzeDiscreteDrugOmic()`**: Meta-analysis for discrete data
-
-### Data Loading Functions (Z-score Normalized by Default)
-- **`loadMolecularProfilesNormalized()`**: Load molecular profiles with z-score normalization (default: TRUE)
-- **`loadTreatmentResponseNormalized()`**: Load treatment response data with z-score normalization (default: TRUE)
-- **`loadMultiProjectMolecularProfilesNormalized()`**: Load multi-project molecular profiles with normalization
-- **`loadMultiProjectTreatmentResponseNormalized()`**: Load multi-project treatment response with normalization
+### 🔧 Data Loading Module (Z-score Normalized by Default)
+- **`loadMolecularProfilesNormalized()`**: Load molecular profiles with automatic z-score normalization
+- **`loadTreatmentResponseNormalized()`**: Load drug response data with automatic z-score normalization
+- **`loadMultiProjectMolecularProfilesNormalized()`**: Load multi-project molecular profiles
+- **`loadMultiProjectTreatmentResponseNormalized()`**: Load multi-project drug response data
 - **`applyZscoreNormalization()`**: Apply z-score normalization to existing data
 - **`isZscoreNormalized()`**: Check if data has been z-score normalized
 
-### Data Pairing Functions
+### 🔗 Data Pairing Module
 - **`pairDrugOmic()`**: Pair continuous drug and omics data
 - **`pairDiscreteDrugOmic()`**: Pair discrete omics with drug data
-- **`pairContinuousFeatures()`**: Pair continuous feature data
-- **`pairDiscreteFeatures()`**: Pair discrete with continuous features
+- **`pairContinuousFeatures()`**: General function for pairing continuous features
+- **`pairDiscreteFeatures()`**: General function for pairing discrete and continuous features
 
-### Visualization Functions
-- **`createForestPlot()`**: Create forest plots for meta-analysis results
-- **`plotMetaVolcano()`**: Create volcano plots for batch analysis results
-- **`plotContinuousDrugOmic()`**: Scatter plots for continuous associations
-- **`plotDiscreteDrugOmic()`**: Box plots for discrete associations
+### 📊 Meta-Analysis Module
+- **`metaCalcConCon()`**: Meta-analysis for continuous vs continuous data (Spearman correlation)
+- **`metaCalcConDis()`**: Meta-analysis for continuous vs discrete data (Wilcoxon + Cliff's Delta)
+- **`analyzeContinuousDrugOmic()`**: Wrapper for continuous drug-omics analysis
+- **`analyzeDiscreteDrugOmic()`**: Wrapper for discrete drug-omics analysis
 
-### Utility Functions
-- **`bright_palette_26`**: Pre-defined palette of 26 distinct colors
-- **`formatTime()`**: Format time durations
-- **`estimateTimeRemaining()`**: Estimate remaining processing time
+### 🎨 Visualization Module
+- **`createForestPlot()`**: Forest plots for meta-analysis results
+- **`plotMetaVolcano()`**: Volcano plots for batch analysis results
+- **`plotContinuousDrugOmic()`**: Scatter plots with correlation statistics
+- **`plotDiscreteDrugOmic()`**: Box plots for group comparisons
 
-### Data Processing Functions
-- **`processDrugData()`**: Process drug sensitivity data using DromaSet objects
-- **`annotateDrugData()`**: Add sample annotations to drug sensitivity data (now with database loading support)
-- **`getDrugSensitivityData()`**: Wrapper for processing and annotating drug data
+### 🚀 High-Level Analysis Functions
+- **`analyzeDrugOmicPair()`**: Complete workflow for single drug-omics pair analysis
+- **`batchFindSignificantFeatures()`**: Batch screening of multiple features
+- **`processDrugData()`**: Process drug sensitivity data with normalization
+- **`getDrugSensitivityData()`**: Combined processing and annotation
+- **`analyzeStratifiedDrugOmic()`**: Stratified analysis by another drug's response
+- **`createStatisticalDashboard()`**: Interactive dashboard for statistical results
+- **`generateStatisticalPlots()`**: Generate comprehensive statistical overview plots
+
+### 🛠 Utility Functions
+- **`bright_palette_26`**: Pre-defined color palette for visualizations
+- **`formatTime()`**: Format processing time outputs
+- **`estimateTimeRemaining()`**: Estimate batch processing time
+- **`formatDrugTable()`**: Format drug sensitivity data for display
+- **`annotateDrugData()`**: Add clinical annotations to drug data
+- **`loadFeatureData()`**: Load feature data for batch analysis
+- **`filterFeatureData()`**: Filter features by minimum sample size
 
 ## Examples
 
@@ -278,6 +310,46 @@ volcano_plot <- plotMetaVolcano(batch_results)
 print(volcano_plot)
 ```
 
+### Example 6: Stratified Analysis
+
+```r
+# Analyze drug response stratified by another drug's sensitivity
+# This helps identify context-dependent biomarkers
+
+stratified_result <- analyzeStratifiedDrugOmic(
+  dromaset_object = multi_set,
+  stratification_drug = "Cisplatin",     # Drug for stratification
+  select_omics_type = "mRNA",            # Omics data type
+  select_omics = "ERCC1",                # Target gene
+  select_drugs = "Bortezomib",           # Drug to analyze
+  stratify_by = "response_median",       # Stratification method
+  tumor_type = "all"
+)
+
+# View stratified results
+print(stratified_result$statistics)
+print(stratified_result$comparison)
+```
+
+### Example 7: Drug Sensitivity Data Processing
+
+```r
+# Process drug data with annotations
+drug_data <- getDrugSensitivityData(
+  dromaset_object = gCSI,
+  drug_name = "Paclitaxel",
+  data_type = "all",
+  tumor_type = "all",
+  db_path = "path/to/droma.sqlite"  # For loading annotations
+)
+
+# View processed data
+head(drug_data)
+
+# Create sensitivity rank plot
+formatDrugTable(drug_data, drug_name = "Paclitaxel")
+```
+
 ## Data Types Supported
 
 ### Molecular Profiles
@@ -292,6 +364,29 @@ print(volcano_plot)
 
 ### Treatment Response
 - **drug**: Drug sensitivity/response data
+
+## Statistical Methods
+
+### Continuous vs Continuous Analysis
+When analyzing relationships between two continuous variables (e.g., gene expression vs drug response):
+- **Spearman Correlation**: Non-parametric rank correlation coefficient
+- **Fisher's Z-transformation**: Converts correlation coefficients to normally distributed values for meta-analysis
+- **Random-Effects Model**: Combines results across multiple studies accounting for heterogeneity
+
+### Continuous vs Discrete Analysis
+When comparing continuous values between discrete groups (e.g., mutated vs wild-type):
+- **Wilcoxon Rank-Sum Test**: Non-parametric test for group differences
+- **Cliff's Delta**: Effect size measurement for group differences (range: -1 to 1)
+  - |d| < 0.147: Negligible effect
+  - 0.147 ≤ |d| < 0.33: Small effect
+  - 0.33 ≤ |d| < 0.474: Medium effect
+  - |d| ≥ 0.474: Large effect
+
+### Meta-Analysis Approach
+1. **Within-study analysis**: Calculate effect sizes and p-values for each dataset
+2. **Quality control**: Filter results based on sample size and data quality
+3. **Cross-study combination**: Use random-effects meta-analysis to combine results
+4. **Heterogeneity assessment**: Evaluate variability between studies
 
 ## Performance Tips
 
