@@ -30,15 +30,16 @@ analyzeStratifiedDrugOmic(
 
 \item{min_samples}{Minimum samples per stratum (default: 5)}
 
-\item{...}{Additional parameters passed to analyzeDrugOmicPair}
+\item{...}{Additional parameters passed to the analysis functions}
 }
 \value{
 List containing stratified analysis results and between-stratum comparisons
 }
 \description{
 Performs drug-omic association analysis within strata defined by
-response to a stratification drug. This approach reveals context-dependent
-associations that may differ between biological subgroups.
+response to a stratification drug. This approach follows the pairing principle
+by filtering samples within each pairing operation rather than creating pre-filtered datasets.
+Designed for ACC (Activity Area Above the Curve) data where higher values indicate greater sensitivity.
 }
 \examples{
 \dontrun{

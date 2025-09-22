@@ -8,7 +8,8 @@ createStratifiedComparisonPlot(
   sensitive_result,
   resistant_result,
   select_omics,
-  select_drugs
+  select_drugs,
+  select_omics_type
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ createStratifiedComparisonPlot(
 \item{select_omics}{Name of omics feature}
 
 \item{select_drugs}{Name of drug}
+
+\item{select_omics_type}{Type of omics data}
 }
 \value{
 ggplot object

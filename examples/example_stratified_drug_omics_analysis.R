@@ -1,16 +1,25 @@
 # Stratified Drug-Omics Analysis Example
-# Analysis of bortezomib response stratified by cisplatin sensitivity
+# Analysis of Bortezomib response stratified by Cisplatin sensitivity
 
 # This example demonstrates how to perform stratified analysis to uncover
 # context-dependent associations between molecular features and drug response.
 # The core principle is that biological associations may differ between
 # resistant and sensitive subgroups.
+#
+# Updated for FuncStratifiedAnalysis.R v3.0
+# Key changes:
+# - Removed deprecated functions (loadStratifiedDataByProject)
+# - Removed unused stratified pairing functions
+# - Removed backward compatibility wrapper (loadAndFilterStratifiedData)
+# - Implemented createStratifiedComparisonPlot for better visualization
+# - Cleaner, more focused API with essential functions only
 
 # Load required libraries
 library(DROMA.Set)
 library(DROMA.R)
 library(ggplot2)
 library(patchwork)
+library(meta)
 
 # Set database path
 db_path <- "path/to/droma.sqlite"
@@ -26,47 +35,69 @@ multi_set <- createMultiDromaSetFromDatabase(
   db_path = db_path
 )
 
-# Example 1: Stratified analysis of ERCC1 and bortezomib
+# Example 1: Stratified analysis of ERCC1 and Bortezomib
 # ------------------------------------------------------
 # ERCC1 is involved in DNA repair and may affect response to
-# DNA-damaging agents. Stratifying by cisplatin response may
-# reveal context-dependent associations with bortezomib.
+# DNA-damaging agents. Stratifying by Cisplatin response may
+# reveal context-dependent associations with Bortezomib.
 
-cat("\nExample 1: ERCC1 expression vs bortezomib response\n")
-cat("Stratified by cisplatin sensitivity\n\n")
+cat("\nExample 1: ERCC1 expression vs Bortezomib response\n")
+cat("Stratified by Cisplatin sensitivity\n\n")
 
 # Perform stratified analysis
 result_ercc1 <- analyzeStratifiedDrugOmic(
   dromaset_object = multi_set,
-  stratification_drug = "cisplatin",      # Drug for stratification
+  stratification_drug = "Cisplatin",      # Drug for stratification
   strata_quantile = 0.33,                 # Use tertiles
   select_omics_type = "mRNA",             # Gene expression
   select_omics = "ERCC1",                 # Target gene
-  select_drugs = "bortezomib",            # Target drug
-  data_type = "CellLine",                 # Filter by data type
+  select_drugs = "Bortezomib",            # Target drug
+  data_type = "all",                 # Filter by data type
   tumor_type = "all",                     # All tumor types
   overlap_only = TRUE,                    # Use overlapping samples
   merged_enabled = TRUE,                  # Create merged dataset
   meta_enabled = TRUE                     # Perform meta-analysis
 )
 
+# Understanding the result structure:
+# ----------------------------------
+# result$sensitive        - Analysis results for sensitive samples
+# result$resistant        - Analysis results for resistant samples  
+# result$comparison       - Between-group statistical comparisons
+# result$stratification_info - Project-specific sample assignments:
+#   - Each project contains $sensitive and $resistant sample names
+#   - Each project contains $thresholds with lower/upper cutoffs
+# result$analysis_parameters - All analysis settings and parameters
+
 # Display stratification information
 cat("Stratification Summary:\n")
-cat("- Stratification drug:", result_ercc1$stratification_info$drug, "\n")
-cat("- Quantile threshold:", result_ercc1$stratification_info$quantile, "\n")
-cat("- Lower threshold:", round(result_ercc1$stratification_info$lower_threshold, 2), "\n")
-cat("- Upper threshold:", round(result_ercc1$stratification_info$upper_threshold, 2), "\n")
+cat("- Stratification drug:", result_ercc1$analysis_parameters$stratification_drug, "\n")
+cat("- Quantile threshold:", result_ercc1$analysis_parameters$strata_quantile, "\n")
+
+# Display project-specific stratification details
+for (project_name in names(result_ercc1$stratification_info)) {
+  project_info <- result_ercc1$stratification_info[[project_name]]
+  cat("- Project", project_name, ":\n")
+  cat("  * Sensitive samples:", length(project_info$sensitive), "\n")
+  cat("  * Resistant samples:", length(project_info$resistant), "\n")
+  cat("  * Lower threshold:", round(project_info$thresholds["lower"], 2), "\n")
+  cat("  * Upper threshold:", round(project_info$thresholds["upper"], 2), "\n")
+}
+
+# Calculate total sample sizes across projects
+total_sensitive <- sum(sapply(result_ercc1$stratification_info, function(x) length(x$sensitive)))
+total_resistant <- sum(sapply(result_ercc1$stratification_info, function(x) length(x$resistant)))
 
 # View sensitive group results
 if (!is.null(result_ercc1$sensitive$meta)) {
-  cat("\nSensitive Group (n =", result_ercc1$stratification_info$n_sensitive, "):\n")
-  cat("Correlation with bortezomib:", round(result_ercc1$sensitive$meta$TE.random, 3),
+  cat("\nSensitive Group (n =", total_sensitive, "):\n")
+  cat("Correlation with Bortezomib:", round(result_ercc1$sensitive$meta$TE.random, 3),
       "(p =", round(result_ercc1$sensitive$meta$pval.random, 4), ")\n")
 }
 
 # View resistant group results
 if (!is.null(result_ercc1$resistant$meta)) {
-  cat("\nResistant Group (n =", result_ercc1$stratification_info$n_resistant, "):\n")
+  cat("\nResistant Group (n =", total_resistant, "):\n")
   cat("Correlation with bortezomib:", round(result_ercc1$resistant$meta$TE.random, 3),
       "(p =", round(result_ercc1$resistant$meta$pval.random, 4), ")\n")
 }
@@ -79,7 +110,7 @@ if (!is.null(result_ercc1$comparison$correlation_comparison)) {
 
 # Example 2: Multiple genes analysis
 # ----------------------------------
-# Analyze multiple DNA repair genes in the context of cisplatin stratification
+# Analyze multiple DNA repair genes in the context of Cisplatin stratification
 
 dna_repair_genes <- c("ERCC1", "ERCC2", "XPA", "XPC", "BRCA1")
 stratified_results <- list()
@@ -92,12 +123,12 @@ for (gene in dna_repair_genes) {
   result <- tryCatch({
     analyzeStratifiedDrugOmic(
       dromaset_object = multi_set,
-      stratification_drug = "cisplatin",
+      stratification_drug = "Cisplatin",
       strata_quantile = 0.33,
       select_omics_type = "mRNA",
       select_omics = gene,
-      select_drugs = "bortezomib",
-      data_type = "CellLine",
+      select_drugs = "Bortezomib",
+      data_type = "all",
       tumor_type = "all",
       overlap_only = TRUE,
       merged_enabled = FALSE,  # Skip merged for speed
@@ -141,12 +172,12 @@ for (q in quantiles_to_test) {
   result <- tryCatch({
     analyzeStratifiedDrugOmic(
       dromaset_object = multi_set,
-      stratification_drug = "cisplatin",
+      stratification_drug = "Cisplatin",
       strata_quantile = q,
       select_omics_type = "mRNA",
       select_omics = "ERCC1",
-      select_drugs = "bortezomib",
-      data_type = "CellLine",
+      select_drugs = "Bortezomib",
+      data_type = "all",
       tumor_type = "all",
       overlap_only = TRUE,
       merged_enabled = FALSE,
@@ -160,9 +191,10 @@ for (q in quantiles_to_test) {
   if (!is.null(result)) {
     quantile_results[[paste0("q", q)]] <- result
 
-    # Report sample sizes
-    info <- result$stratification_info
-    cat("  Samples per stratum:", info$n_sensitive, "/", info$n_resistant, "\n")
+    # Report sample sizes across projects
+    total_sens <- sum(sapply(result$stratification_info, function(x) length(x$sensitive)))
+    total_res <- sum(sapply(result$stratification_info, function(x) length(x$resistant)))
+    cat("  Samples per stratum:", total_sens, "/", total_res, "\n")
 
     # Report correlations if available
     if (!is.null(result$sensitive$meta) && !is.null(result$resistant$meta)) {
@@ -175,8 +207,9 @@ for (q in quantiles_to_test) {
 # Example 4: Visualization of stratified results
 # ----------------------------------------------
 # Create comprehensive visualizations for stratified analysis
+# The new createStratifiedComparisonPlot function provides integrated visualization
 
-cat("Example 4: Creating visualizations\n\n")
+cat("Example 4: Creating visualizations with createStratifiedComparisonPlot\n\n")
 
 if (!is.null(result_ercc1$sensitive$plot) && !is.null(result_ercc1$resistant$plot)) {
   # Combine plots from both strata
@@ -193,49 +226,145 @@ if (!is.null(result_ercc1$sensitive$plot) && !is.null(result_ercc1$resistant$plo
   cat("Saved combined plot to stratified_ercc1_bortezomib.png\n")
 }
 
-# Create forest plots for meta-analysis results
-if (!is.null(result_ercc1$sensitive$meta) && !is.null(result_ercc1$resistant$meta)) {
-  # Forest plot for sensitive group
-  forest_sensitive <- createForestPlot(
-    result_ercc1$sensitive$meta,
-    xlab = "Correlation with Bortezomib IC50 (Sensitive Group)"
-  )
+# Create comparison plots using the new createStratifiedComparisonPlot function
+if (!is.null(result_ercc1$comparison$comparison_plot)) {
+  # The comparison plot can be:
+  # 1. A forest plot showing correlations/effect sizes for both strata
+  # 2. Side-by-side individual plots from each stratum
 
-  # Forest plot for resistant group
-  forest_resistant <- createForestPlot(
-    result_ercc1$resistant$meta,
-    xlab = "Correlation with Bortezomib IC50 (Resistant Group)"
-  )
+  # Save the comparison plot
+  ggsave("stratified_comparison_plot.png", result_ercc1$comparison$comparison_plot,
+         width = 10, height = 8, dpi = 300)
 
-  # Combine forest plots
-  forest_combined <- forest_sensitive + forest_resistant +
-    plot_layout(guides = "collect") +
-    plot_annotation(
-      title = "Meta-analysis Results by Cisplatin Sensitivity Stratum"
-    )
+  cat("Saved stratified comparison plot to stratified_comparison_plot.png\n")
 
-  ggsave("stratified_forest_plots.png", forest_combined,
-         width = 12, height = 8, dpi = 300)
-
-  cat("Saved forest plots to stratified_forest_plots.png\n")
+  # If the result is a list of individual plots (when patchwork is not available)
+  if (is.list(result_ercc1$comparison$comparison_plot)) {
+    cat("Individual plots saved as list elements\n")
+  }
 }
 
-# Example 5: Batch stratified analysis
+# Example 5: Direct use of createStratifiedComparisonPlot
+# ------------------------------------------------------
+# This example shows how to directly call createStratifiedComparisonPlot
+# with results from stratified analysis
+
+cat("\nExample 5: Direct use of createStratifiedComparisonPlot function\n")
+
+# First, let's create a simple stratified analysis result
+cat("Performing stratified analysis for BRCA1 vs Cisplatin...\n")
+
+result_brca1 <- tryCatch({
+  analyzeStratifiedDrugOmic(
+    dromaset_object = multi_set,
+    stratification_drug = "Cisplatin",
+    strata_quantile = 0.33,
+    select_omics_type = "mRNA",
+    select_omics = "BRCA1",
+    select_drugs = "Cisplatin",
+    data_type = "all",
+    tumor_type = "all",
+    overlap_only = TRUE,
+    meta_enabled = TRUE
+  )
+}, error = function(e) {
+  cat("Error:", e$message, "\n")
+  return(NULL)
+})
+
+if (!is.null(result_brca1)) {
+  # Now directly use createStratifiedComparisonPlot
+  cat("Creating comparison plot directly using createStratifiedComparisonPlot...\n")
+
+  comparison_plot <- createStratifiedComparisonPlot(
+    sensitive_result = result_brca1$sensitive,
+    resistant_result = result_brca1$resistant,
+    select_omics = "BRCA1",
+    select_drugs = "Cisplatin",
+    select_omics_type = "mRNA"
+  )
+
+  if (!is.null(comparison_plot)) {
+    # Save the direct comparison plot
+    if (is.list(comparison_plot)) {
+      # If it returns a list (e.g., when patchwork is not available)
+      cat("Comparison plot returned as a list with elements:\n")
+      print(names(comparison_plot))
+
+      # Save individual plots if available
+      if ("forest_plot" %in% names(comparison_plot)) {
+        ggsave("brca1_cisplatin_forest_plot.png",
+               comparison_plot$forest_plot,
+               width = 8, height = 6, dpi = 300)
+        cat("Saved forest plot to brca1_cisplatin_forest_plot.png\n")
+      }
+    } else {
+      # Single plot object
+      ggsave("brca1_cisplatin_direct_comparison.png",
+             comparison_plot,
+             width = 10, height = 8, dpi = 300)
+      cat("Saved direct comparison plot to brca1_cisplatin_direct_comparison.png\n")
+    }
+  }
+}
+
+# Example 5b: Using createStratifiedComparisonPlot with discrete data
+# ----------------------------------------------------------------
+cat("\nExample 5b: createStratifiedComparisonPlot with discrete data\n")
+
+# Analyze mutation data (discrete)
+result_tp53_mut <- tryCatch({
+  analyzeStratifiedDrugOmic(
+    dromaset_object = multi_set,
+    stratification_drug = "Cisplatin",
+    strata_quantile = 0.33,
+    select_omics_type = "mutation",
+    select_omics = "TP53",
+    select_drugs = "Bortezomib",
+    data_type = "CellLine",
+    tumor_type = "all",
+    overlap_only = TRUE,
+    meta_enabled = TRUE
+  )
+}, error = function(e) {
+  cat("Error:", e$message, "\n")
+  return(NULL)
+})
+
+if (!is.null(result_tp53_mut)) {
+  # Create comparison plot for discrete data
+  discrete_comparison <- createStratifiedComparisonPlot(
+    sensitive_result = result_tp53_mut$sensitive,
+    resistant_result = result_tp53_mut$resistant,
+    select_omics = "TP53",
+    select_drugs = "Bortezomib",
+    select_omics_type = "mutation"
+  )
+
+  if (!is.null(discrete_comparison)) {
+    ggsave("tp53_mutation_discrete_comparison.png",
+           discrete_comparison,
+           width = 10, height = 8, dpi = 300)
+    cat("Saved discrete data comparison plot to tp53_mutation_discrete_comparison.png\n")
+  }
+}
+
+# Example 6: Batch stratified analysis
 # ------------------------------------
 # Perform stratified analysis for multiple drug-omics pairs
 
-cat("\nExample 5: Batch stratified analysis\n")
+cat("\nExample 6: Batch stratified analysis\n")
 
 # Define analysis parameters
 analysis_pairs <- expand.grid(
   omics_gene = c("ERCC1", "BRCA1", "TP53"),
-  target_drug = c("bortezomib", "carfilzomib"),
+  target_drug = c("Bortezomib", "Carfilzomib"),
   stringsAsFactors = FALSE
 )
 
 batch_results <- list()
 
-for (i in 1:nrow(analysis_pairs)) {
+for (i in seq_len(nrow(analysis_pairs))) {
   gene <- analysis_pairs$omics_gene[i]
   drug <- analysis_pairs$target_drug[i]
 
@@ -244,12 +373,12 @@ for (i in 1:nrow(analysis_pairs)) {
   result <- tryCatch({
     analyzeStratifiedDrugOmic(
       dromaset_object = multi_set,
-      stratification_drug = "cisplatin",
+      stratification_drug = "Cisplatin",
       strata_quantile = 0.33,
       select_omics_type = "mRNA",
       select_omics = gene,
       select_drugs = drug,
-      data_type = "CellLine",
+      data_type = "all",
       tumor_type = "all",
       overlap_only = TRUE,
       merged_enabled = FALSE,
@@ -325,5 +454,30 @@ if (length(batch_results) > 0) {
 # 2. The choice of stratification threshold affects results
 # 3. Different molecular features may show varying degrees of context-dependence
 # 4. Meta-analysis across studies increases robustness of findings
+# 5. The updated API provides project-specific stratification information
+# 6. Result structure is more organized with separate analysis parameters
+# 7. The createStratifiedComparisonPlot function provides integrated visualization
+
+# Key methodological principles:
+# - Follow pairing logic: filter samples within each analysis operation
+# - Use quantile-based stratification for robust sample assignment
+# - Leverage meta-analysis across projects for increased statistical power
+# - Always validate sufficient sample sizes in each stratum before analysis
+# - Use createStratifiedComparisonPlot for effective visualization of strata differences
+# - The cleaned API removes deprecated functions for better maintainability
+
+# Functions removed in v3.0:
+# - loadStratifiedDataByProject (deprecated)
+# - pairContinuousFeaturesStratified (unused)
+# - pairDiscreteFeaturesStratified (unused)
+# - loadAndFilterStratifiedData (backward compatibility wrapper)
+
+# Functions enhanced in v3.0:
+# - createStratifiedComparisonPlot: Now fully implemented with support for:
+#   * Forest plots for correlation/effect size comparisons
+#   * Side-by-side individual stratum plots
+#   * Both continuous and discrete data types
+#   * Automatic plot combination using patchwork (when available)
 
 cat("\nStratified analysis examples completed!\n")
+cat("For more information on the updated API, see ?analyzeStratifiedDrugOmic\n")

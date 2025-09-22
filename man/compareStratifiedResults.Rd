@@ -7,7 +7,10 @@
 compareStratifiedResults(
   sensitive_result,
   resistant_result,
-  stratification_info
+  stratification_info,
+  select_omics_type,
+  select_omics,
+  select_drugs
 )
 }
 \arguments{
@@ -16,6 +19,12 @@ compareStratifiedResults(
 \item{resistant_result}{Analysis result from resistant group}
 
 \item{stratification_info}{Information about stratification}
+
+\item{select_omics_type}{Type of omics data analyzed}
+
+\item{select_omics}{Name of the omics feature}
+
+\item{select_drugs}{Name of the drug analyzed}
 }
 \value{
 Comparison results with statistical tests
