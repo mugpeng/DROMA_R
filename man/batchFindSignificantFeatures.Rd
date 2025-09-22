@@ -47,6 +47,18 @@ Data frame with meta-analysis results (p_value, effect_size, name)
 \description{
 Performs batch analysis to identify features significantly associated with a reference feature using DromaSet or MultiDromaSet objects
 }
+\section{Execution Flow}{
+
+The function follows this high-level workflow:
+1. Input validation and parameter setup
+2. Feature type determination (continuous vs discrete)
+3. Load and validate reference feature (feature1) data
+4. Get list of features to test (feature2)
+5. Parallel/sequential processing of feature pairs
+6. Statistical testing based on feature types
+7. Result aggregation and reporting
+}
+
 \examples{
 \dontrun{
 # Using DromaSet
