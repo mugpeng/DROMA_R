@@ -18,11 +18,14 @@
 library(DROMA.Set)
 library(DROMA.R)
 library(ggplot2)
+library(ggpubr)
 library(patchwork)
 library(meta)
 
+
 # Set database path
-db_path <- "path/to/droma.sqlite"
+db_path <- "Data/droma.sqlite"
+connectDROMADatabase(db_path)
 
 # Create MultiDromaSet from multiple projects
 # -------------------------------------------------
@@ -35,6 +38,14 @@ multi_set <- createMultiDromaSetFromDatabase(
   db_path = db_path
 )
 
+project_anno <- DROMA.Set::listDROMAProjects()
+cellline_names <- project_anno[project_anno$dataset_type %in% "CellLine",]$project_name
+
+cellline_sets <- createMultiDromaSetFromDatabase(db_path = db_path,
+                                                 project_names = cellline_names)
+cellline_sets2 <- removeDromaSetFromMulti(cellline_sets, "NCI60")
+cellline_sets <- cellline_sets2
+
 # Example 1: Stratified analysis of ERCC1 and Bortezomib
 # ------------------------------------------------------
 # ERCC1 is involved in DNA repair and may affect response to
@@ -46,7 +57,7 @@ cat("Stratified by Cisplatin sensitivity\n\n")
 
 # Perform stratified analysis
 result_ercc1 <- analyzeStratifiedDrugOmic(
-  dromaset_object = multi_set,
+  dromaset_object = cellline_sets,
   stratification_drug = "Cisplatin",      # Drug for stratification
   strata_quantile = 0.33,                 # Use tertiles
   select_omics_type = "mRNA",             # Gene expression

@@ -393,6 +393,19 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
     select_drugs = select_drugs
   )
 
+  # Create omics expression comparison plot
+  cat("Creating omics expression comparison plot...\n")
+  expression_plot <- createStratifiedOmicExpressionPlot(
+    sensitive_result = sensitive_result,
+    resistant_result = resistant_result,
+    select_omics_type = select_omics_type,
+    select_omics = select_omics,
+    stratification_drug = stratification_drug
+  )
+
+  # Add expression plot to comparison results
+  comparison_result$expression_plot <- expression_plot
+
   # Compile final results
   result <- list(
     sensitive = sensitive_result,
@@ -956,6 +969,147 @@ plot.StratifiedComparisonPlots <- function(x, which = "forest", ...) {
     warning("Individual plots not available. Use which = 'forest' for forest plot.")
     return(x$forest_plot)
   }
+}
+
+#' Create stratified omics expression comparison plot
+#'
+#' @description Creates a boxplot comparing omics expression between sensitive and resistant groups
+#' defined by response to a stratification drug. Uses existing data from sensitive_result and resistant_result.
+#' Mimics the style from FuncPairVisualization.
+#' @param sensitive_result Analysis result from sensitive group
+#' @param resistant_result Analysis result from resistant group
+#' @param select_omics_type Type of omics data to visualize
+#' @param select_omics Name of the specific omics feature
+#' @param stratification_drug Name of the drug used for stratification
+#' @return A ggplot2 object with boxplot comparing omics expression between strata
+createStratifiedOmicExpressionPlot <- function(sensitive_result,
+                                               resistant_result,
+                                               select_omics_type,
+                                               select_omics,
+                                               stratification_drug) {
+
+  # Check if required packages are available
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    warning("ggplot2 package is required for plotting")
+    return(NULL)
+  }
+
+  if (!requireNamespace("ggpubr", quietly = TRUE)) {
+    warning("ggpubr package is required for plotting")
+    return(NULL)
+  }
+
+  # Extract omics data from sensitive_result
+  sensitive_omics <- NULL
+  if (!is.null(sensitive_result$data)) {
+    # Get omics data from the paired data
+    if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
+      # Continuous data
+      if ("merged_dataset" %in% names(sensitive_result$data)) {
+        sensitive_omics <- sensitive_result$data$merged_dataset$feature1
+      } else if (length(sensitive_result$data) > 0) {
+        # Take the first project with data
+        first_project <- names(sensitive_result$data)[1]
+        sensitive_omics <- sensitive_result$data[[first_project]]$feature1
+      }
+    } else {
+      # Discrete data - convert to presence/absence
+      # For discrete data, we need to reconstruct which samples have the feature
+      all_sensitive_samples <- c()
+      for (project_name in names(sensitive_result$data)) {
+        if (project_name != "merged_dataset") {
+          yes_samples <- sensitive_result$data[[project_name]]$yes
+          all_sensitive_samples <- c(all_sensitive_samples,
+                                    paste0(project_name, "_", yes_samples))
+        }
+      }
+      # Create binary vector (1 = present, 0 = absent)
+      sensitive_omics <- rep(0, length(all_sensitive_samples))
+      names(sensitive_omics) <- all_sensitive_samples
+      sensitive_omics[all_sensitive_samples %in% unlist(lapply(sensitive_result$data[names(sensitive_result$data) != "merged_dataset"], function(x) x$yes))] <- 1
+    }
+  }
+
+  # Extract omics data from resistant_result
+  resistant_omics <- NULL
+  if (!is.null(resistant_result$data)) {
+    # Get omics data from the paired data
+    if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
+      # Continuous data
+      if ("merged_dataset" %in% names(resistant_result$data)) {
+        resistant_omics <- resistant_result$data$merged_dataset$feature1
+      } else if (length(resistant_result$data) > 0) {
+        # Take the first project with data
+        first_project <- names(resistant_result$data)[1]
+        resistant_omics <- resistant_result$data[[first_project]]$feature1
+      }
+    } else {
+      # Discrete data - convert to presence/absence
+      all_resistant_samples <- c()
+      for (project_name in names(resistant_result$data)) {
+        if (project_name != "merged_dataset") {
+          yes_samples <- resistant_result$data[[project_name]]$yes
+          all_resistant_samples <- c(all_resistant_samples,
+                                   paste0(project_name, "_", yes_samples))
+        }
+      }
+      # Create binary vector (1 = present, 0 = absent)
+      resistant_omics <- rep(0, length(all_resistant_samples))
+      names(resistant_omics) <- all_resistant_samples
+      resistant_omics[all_resistant_samples %in% unlist(lapply(resistant_result$data[names(resistant_result$data) != "merged_dataset"], function(x) x$yes))] <- 1
+    }
+  }
+
+  # Check if we have omics data
+  if (is.null(sensitive_omics) || is.null(resistant_omics) ||
+      length(sensitive_omics) == 0 || length(resistant_omics) == 0) {
+    warning("No omics data found in sensitive_result or resistant_result")
+    return(NULL)
+  }
+
+  # Prepare data for plotting
+  plot_data <- data.frame(
+    expression = c(resistant_omics, sensitive_omics),
+    stratum = c(rep("Resistant", length(resistant_omics)),
+                rep("Sensitive", length(sensitive_omics))),
+    stringsAsFactors = FALSE
+  )
+
+  # Create plot title
+  plot_title <- paste0(select_omics, " Expression by ", stratification_drug, " Response")
+
+  # Create y-axis label based on omics type
+  if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
+    y_label <- "Expression Level"
+  } else {
+    y_label <- "Presence"
+  }
+
+  # Create boxplot mimicking FuncPairVisualization style
+  p <- ggpubr::ggboxplot(data = plot_data,
+                        x = "stratum",
+                        y = "expression",
+                        fill = "stratum",
+                        palette = c("#BEBADAFF", "#FB8072FF"),
+                        add = "jitter",
+                        add.params = list(alpha = 0.15)) +
+    ggpubr::stat_compare_means(size = 6,
+                              label.x = 0.8,
+                              label.y = (max(plot_data$expression) - max(plot_data$expression)/8),
+                              label = "p.format") +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      axis.title = ggplot2::element_blank(),
+      title = ggplot2::element_text(size = 15, face = "bold"),
+      axis.text = ggplot2::element_text(size = 12),
+      legend.position = "none"
+    ) +
+    ggplot2::coord_cartesian(ylim = c(NA, max(plot_data$expression) + max(plot_data$expression)/20)) +
+    ggplot2::ggtitle(plot_title) +
+    ggplot2::ylab(y_label) +
+    ggplot2::xlab("Response Group")
+
+  return(p)
 }
 
 # Helper function for NULL coalescing
