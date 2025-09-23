@@ -490,10 +490,14 @@ compareStratifiedResults <- function(sensitive_result, resistant_result, stratif
 #' @param select_omics Name of omics feature
 #' @param select_drugs Name of drug
 #' @param select_omics_type Type of omics data
+#' @param p_value_digits Number of decimal places for p-values (default: 3)
+#' @param add_difference_row Whether to add a row showing difference between groups (default: TRUE)
 #' @return ggplot object
 createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
                                           select_omics, select_drugs,
-                                          select_omics_type) {
+                                          select_omics_type,
+                                          p_value_digits = 3,
+                                          add_difference_row = TRUE) {
 
   # Check if required packages are available
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
@@ -512,6 +516,15 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
     return(NULL)
   }
 
+  # Format p-value for display
+  format_pvalue <- function(p, digits = 3) {
+    if (is.na(p) || is.null(p)) return("NA")
+    if (p < 0.001) return("<0.001")
+    if (p < 0.01) return(sprintf("<%.2f", p))
+    if (p < 0.05) return(sprintf("<%.3f", p))
+    return(sprintf("%.3f", round(p, digits)))
+  }
+
   # Create plot based on omics type
   if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
     # Continuous-continuous analysis - create forest plot
@@ -519,31 +532,69 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
 
     # Extract correlations if available
     if (!is.null(sensitive_result$plot) && !is.null(resistant_result$plot)) {
-      # Create a comparison forest plot
-      plot_data <- data.frame(
-        Group = c("Sensitive", "Resistant"),
-        Correlation = NA,
-        CI_lower = NA,
-        CI_upper = NA,
-        stringsAsFactors = FALSE
-      )
-
-      # Get correlations from meta-analysis if available
+      # Create a comparison forest plot with p-values
       if (!is.null(sensitive_result$meta) && !is.null(resistant_result$meta)) {
-        plot_data$Correlation[1] <- sensitive_result$meta$TE.random
-        plot_data$CI_lower[1] <- sensitive_result$meta$lower.random
-        plot_data$CI_upper[1] <- sensitive_result$meta$upper.random
+        # Extract values
+        sens_cor <- sensitive_result$meta$TE.random
+        sens_lower <- sensitive_result$meta$lower.random
+        sens_upper <- sensitive_result$meta$upper.random
+        sens_p <- sensitive_result$meta$pval.random
 
-        plot_data$Correlation[2] <- resistant_result$meta$TE.random
-        plot_data$CI_lower[2] <- resistant_result$meta$lower.random
-        plot_data$CI_upper[2] <- resistant_result$meta$upper.random
+        res_cor <- resistant_result$meta$TE.random
+        res_lower <- resistant_result$meta$lower.random
+        res_upper <- resistant_result$meta$upper.random
+        res_p <- resistant_result$meta$pval.random
 
-        # Create forest plot
+        # Calculate difference and p-value if requested
+        if (add_difference_row && !is.na(sens_cor) && !is.na(res_cor)) {
+          sens_se <- sensitive_result$meta$seTE.random
+          res_se <- resistant_result$meta$seTE.random
+          z_diff <- (sens_cor - res_cor) / sqrt(sens_se^2 + res_se^2)
+          p_diff <- 2 * pnorm(abs(z_diff), lower.tail = FALSE)
+        } else {
+          p_diff <- NA
+        }
+
+        # Create plot data
+        groups <- c("Sensitive", "Resistant")
+        correlations <- c(sens_cor, res_cor)
+        ci_lowers <- c(sens_lower, res_lower)
+        ci_uppers <- c(sens_upper, res_upper)
+        p_values <- c(sens_p, res_p)
+
+        # Add difference row if requested
+        if (add_difference_row && !is.na(p_diff)) {
+          groups <- c(groups, "Difference")
+          correlations <- c(correlations, sens_cor - res_cor)
+          ci_lowers <- c(ci_lowers, NA)
+          ci_uppers <- c(ci_uppers, NA)
+          p_values <- c(p_values, p_diff)
+        }
+
+        # Create group labels with p-values using newline
+        p_labels <- sapply(p_values, format_pvalue, digits = p_value_digits)
+        group_labels <- paste0(groups, "\np=", p_labels)
+
+        plot_data <- data.frame(
+          Group = group_labels,
+          Group_Name = groups,  # Keep original group names for reference
+          Correlation = correlations,
+          CI_lower = ci_lowers,
+          CI_upper = ci_uppers,
+          P_value = p_values,
+          stringsAsFactors = FALSE
+        )
+
+        # Create forest plot with p-values in group labels
         p <- ggplot2::ggplot(plot_data, ggplot2::aes(x = Group, y = Correlation)) +
           ggplot2::geom_point(size = 3) +
-          ggplot2::geom_errorbar(ggplot2::aes(ymin = CI_lower, ymax = CI_upper), width = 0.2) +
+          ggplot2::geom_errorbar(
+            data = plot_data[!is.na(plot_data$CI_lower), ],
+            ggplot2::aes(ymin = CI_lower, ymax = CI_upper),
+            width = 0.2
+          ) +
           ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
-          ggplot2::coord_flip() +
+          ggplot2::coord_flip(ylim = range(plot_data$Correlation, plot_data$CI_lower, plot_data$CI_upper, na.rm = TRUE) * c(1.1, 1.1)) +
           ggplot2::labs(
             title = paste("Stratified Analysis:", select_omics, "vs", select_drugs),
             subtitle = "Correlation with 95% Confidence Intervals",
@@ -553,8 +604,12 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
           ggplot2::theme_minimal() +
           ggplot2::theme(
             plot.title = ggplot2::element_text(hjust = 0.5),
-            plot.subtitle = ggplot2::element_text(hjust = 0.5)
+            plot.subtitle = ggplot2::element_text(hjust = 0.5),
+            axis.text.y = ggplot2::element_text(hjust = 1, face = "bold", lineheight = 0.8),
+            panel.grid.major.y = ggplot2::element_blank()
           )
+
+        # Note: Significance indicators removed as requested
 
         plot_list$forest_plot <- p
       }
@@ -564,9 +619,26 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
     if (!is.null(sensitive_result$plot) && !is.null(resistant_result$plot)) {
       # Arrange plots side by side
       if (requireNamespace("patchwork", quietly = TRUE)) {
+        # Add p-values to individual plots if available
+        if (!is.null(sensitive_result$meta$pval.random)) {
+          sens_p_label <- format_pvalue(sensitive_result$meta$pval.random, p_value_digits)
+          sensitive_plot <- sensitive_result$plot +
+            ggplot2::labs(caption = paste0("p = ", sens_p_label))
+        } else {
+          sensitive_plot <- sensitive_result$plot
+        }
+
+        if (!is.null(resistant_result$meta$pval.random)) {
+          res_p_label <- format_pvalue(resistant_result$meta$pval.random, p_value_digits)
+          resistant_plot <- resistant_result$plot +
+            ggplot2::labs(caption = paste0("p = ", res_p_label))
+        } else {
+          resistant_plot <- resistant_result$plot
+        }
+
         combined_plot <- patchwork::wrap_plots(
-          list(Sensitive = sensitive_result$plot,
-               Resistant = resistant_result$plot),
+          list(Sensitive = sensitive_plot,
+               Resistant = resistant_plot),
           ncol = 2
         ) +
           patchwork::plot_annotation(
@@ -584,41 +656,87 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
       }
     }
 
-    # Return the main plot or list of plots
+    # Return both main plot and individual plots in a named list
+    result <- list()
     if (!is.null(plot_list$forest_plot)) {
-      return(plot_list$forest_plot)
-    } else if (!is.null(plot_list$individual_plots)) {
-      return(plot_list$individual_plots)
-    } else {
+      result$forest_plot <- plot_list$forest_plot
+    }
+    if (!is.null(plot_list$individual_plots)) {
+      result$individual_plots <- plot_list$individual_plots
+    }
+
+    if (length(result) == 0) {
       return(NULL)
+    } else {
+      # Add class for method dispatch
+      class(result) <- "StratifiedComparisonPlots"
+      return(result)
     }
 
   } else {
     # Discrete analysis - create effect size comparison
-    plot_data <- data.frame(
-      Group = c("Sensitive", "Resistant"),
-      Effect_Size = NA,
-      CI_lower = NA,
-      CI_upper = NA,
-      stringsAsFactors = FALSE
-    )
-
-    # Get effect sizes from meta-analysis if available
     if (!is.null(sensitive_result$meta) && !is.null(resistant_result$meta)) {
-      plot_data$Effect_Size[1] <- sensitive_result$meta$TE.random
-      plot_data$CI_lower[1] <- sensitive_result$meta$lower.random
-      plot_data$CI_upper[1] <- sensitive_result$meta$upper.random
+      # Extract values
+      sens_es <- sensitive_result$meta$TE.random
+      sens_lower <- sensitive_result$meta$lower.random
+      sens_upper <- sensitive_result$meta$upper.random
+      sens_p <- sensitive_result$meta$pval.random
 
-      plot_data$Effect_Size[2] <- resistant_result$meta$TE.random
-      plot_data$CI_lower[2] <- resistant_result$meta$lower.random
-      plot_data$CI_upper[2] <- resistant_result$meta$upper.random
+      res_es <- resistant_result$meta$TE.random
+      res_lower <- resistant_result$meta$lower.random
+      res_upper <- resistant_result$meta$upper.random
+      res_p <- resistant_result$meta$pval.random
 
-      # Create forest plot for effect sizes
+      # Calculate difference and p-value if requested
+      if (add_difference_row && !is.na(sens_es) && !is.na(res_es)) {
+        sens_se <- sensitive_result$meta$seTE.random
+        res_se <- resistant_result$meta$seTE.random
+        z_diff <- (sens_es - res_es) / sqrt(sens_se^2 + res_se^2)
+        p_diff <- 2 * pnorm(abs(z_diff), lower.tail = FALSE)
+      } else {
+        p_diff <- NA
+      }
+
+      # Create plot data
+      groups <- c("Sensitive", "Resistant")
+      effect_sizes <- c(sens_es, res_es)
+      ci_lowers <- c(sens_lower, res_lower)
+      ci_uppers <- c(sens_upper, res_upper)
+      p_values <- c(sens_p, res_p)
+
+      # Add difference row if requested
+      if (add_difference_row && !is.na(p_diff)) {
+        groups <- c(groups, "Difference")
+        effect_sizes <- c(effect_sizes, sens_es - res_es)
+        ci_lowers <- c(ci_lowers, NA)
+        ci_uppers <- c(ci_uppers, NA)
+        p_values <- c(p_values, p_diff)
+      }
+
+      # Create group labels with p-values using newline
+      p_labels <- sapply(p_values, format_pvalue, digits = p_value_digits)
+      group_labels <- paste0(groups, "\np=", p_labels)
+
+      plot_data <- data.frame(
+        Group = group_labels,
+        Group_Name = groups,  # Keep original group names for reference
+        Effect_Size = effect_sizes,
+        CI_lower = ci_lowers,
+        CI_upper = ci_uppers,
+        P_value = p_values,
+        stringsAsFactors = FALSE
+      )
+
+      # Create forest plot for effect sizes with p-values
       p <- ggplot2::ggplot(plot_data, ggplot2::aes(x = Group, y = Effect_Size)) +
         ggplot2::geom_point(size = 3) +
-        ggplot2::geom_errorbar(ggplot2::aes(ymin = CI_lower, ymax = CI_upper), width = 0.2) +
+        ggplot2::geom_errorbar(
+          data = plot_data[!is.na(plot_data$CI_lower), ],
+          ggplot2::aes(ymin = CI_lower, ymax = CI_upper),
+          width = 0.2
+        ) +
         ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
-        ggplot2::coord_flip() +
+        ggplot2::coord_flip(ylim = range(plot_data$Effect_Size, plot_data$CI_lower, plot_data$CI_upper, na.rm = TRUE) * c(1.1, 1.1)) +
         ggplot2::labs(
           title = paste("Stratified Analysis:", select_omics, "vs", select_drugs),
           subtitle = "Effect Sizes with 95% Confidence Intervals",
@@ -628,8 +746,12 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
         ggplot2::theme_minimal() +
         ggplot2::theme(
           plot.title = ggplot2::element_text(hjust = 0.5),
-          plot.subtitle = ggplot2::element_text(hjust = 0.5)
+          plot.subtitle = ggplot2::element_text(hjust = 0.5),
+          axis.text.y = ggplot2::element_text(hjust = 1, face = "bold", lineheight = 0.8),
+          panel.grid.major.y = ggplot2::element_blank()
         )
+
+      # Note: Significance indicators removed as requested
 
       return(p)
     }
@@ -637,9 +759,26 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
     # If no meta-analysis, try to combine individual plots
     if (!is.null(sensitive_result$plot) && !is.null(resistant_result$plot)) {
       if (requireNamespace("patchwork", quietly = TRUE)) {
+        # Add p-values to individual plots if available
+        if (!is.null(sensitive_result$meta$pval.random)) {
+          sens_p_label <- format_pvalue(sensitive_result$meta$pval.random, p_value_digits)
+          sensitive_plot <- sensitive_result$plot +
+            ggplot2::labs(caption = paste0("p = ", sens_p_label))
+        } else {
+          sensitive_plot <- sensitive_result$plot
+        }
+
+        if (!is.null(resistant_result$meta$pval.random)) {
+          res_p_label <- format_pvalue(resistant_result$meta$pval.random, p_value_digits)
+          resistant_plot <- resistant_result$plot +
+            ggplot2::labs(caption = paste0("p = ", res_p_label))
+        } else {
+          resistant_plot <- resistant_result$plot
+        }
+
         return(patchwork::wrap_plots(
-          list(Sensitive = sensitive_result$plot,
-               Resistant = resistant_result$plot),
+          list(Sensitive = sensitive_plot,
+               Resistant = resistant_plot),
           ncol = 2
         ) +
           patchwork::plot_annotation(
@@ -785,6 +924,38 @@ analyzeStratifiedData <- function(omics_data, drug_data, select_omics_type,
   }
   
   return(result)
+}
+
+# Print method for StratifiedComparisonPlots
+print.StratifiedComparisonPlots <- function(x, ...) {
+  cat("Stratified Comparison Plots\n")
+  cat("========================\n")
+  if (!is.null(x$forest_plot)) {
+    cat("- Forest plot: Available (x$forest_plot)\n")
+  }
+  if (!is.null(x$individual_plots)) {
+    cat("- Individual plots: Available (x$individual_plots)\n")
+  }
+  cat("\nUse plot() to display the forest plot, or access plots directly.\n")
+  invisible(x)
+}
+
+# Plot method for StratifiedComparisonPlots
+plot.StratifiedComparisonPlots <- function(x, which = "forest", ...) {
+  if (which == "forest" && !is.null(x$forest_plot)) {
+    return(x$forest_plot)
+  } else if (which == "individual" && !is.null(x$individual_plots)) {
+    return(x$individual_plots)
+  } else if (is.null(x$forest_plot) && is.null(x$individual_plots)) {
+    warning("No plots available")
+    return(NULL)
+  } else if (which == "forest" && is.null(x$forest_plot)) {
+    warning("Forest plot not available. Use which = 'individual' for individual plots.")
+    return(x$individual_plots)
+  } else if (which == "individual" && is.null(x$individual_plots)) {
+    warning("Individual plots not available. Use which = 'forest' for forest plot.")
+    return(x$forest_plot)
+  }
 }
 
 # Helper function for NULL coalescing
