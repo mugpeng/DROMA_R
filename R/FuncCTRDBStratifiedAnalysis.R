@@ -776,8 +776,8 @@ performMetaAnalysisForCorrelations <- function(correlation_data) {
   # Calculate standard error for correlation difference
   # Using Fisher's z-transformation approximation
   meta_df$se_diff <- sqrt(
-    (1 - meta_df$mean_cor_resp^2)^2 / (meta_df$n_resp - 3) +
-    (1 - meta_df$mean_cor_non_resp^2)^2 / (meta_df$n_non_resp - 3)
+    (1 - meta_df$cor_resp^2)^2 / (meta_df$n_resp - 3) +
+    (1 - meta_df$cor_non_resp^2)^2 / (meta_df$n_non_resp - 3)
   )
 
   # Perform meta-analysis
