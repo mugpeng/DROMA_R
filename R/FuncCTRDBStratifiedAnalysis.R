@@ -8,7 +8,8 @@
 #' Stratified analysis for CTRDB clinical data
 #'
 #' @description Performs stratified analysis on CTRDB data to identify drug response signatures
-#' and analyze the correlation between specific omics features and the signature scores
+#' and analyze the correlation between specific omics features and the signature scores.
+#' Each patient's B drug signature is calculated using their own top upregulated genes.
 #' @param drug_b_name Name of drug B used for signature generation
 #' @param drug_a_name Name of drug A for signature application
 #' @param select_omics Character string specifying the omics feature name to analyze in drug A
@@ -97,8 +98,7 @@ analyzeStratifiedCTRDB <- function(drug_b_name,
   # Step 3: Calculate B drug response scores for each patient in Drug B
   cat("Step 3: Calculating B drug response scores...\n")
   drug_b_scores <- calculateDrugBScores(
-    patient_data_list = drug_b_result$patient_data,
-    signature_genes = final_signature_genes
+    patient_data_list = drug_b_result$patient_data
   )
   result$drug_b_scores <- drug_b_scores
 
@@ -275,7 +275,8 @@ analyzeDrugBForSignature <- function(drug_name, connection, top_n_genes,
         non_response_expr = non_response_expr,
         response_samples = response_samples,
         non_response_samples = non_response_samples,
-        metadata = patient_meta
+        metadata = patient_meta,
+        top_genes = top_genes
       )
 
       top_genes_per_patient[[patient_id]] <- top_genes
@@ -349,12 +350,11 @@ selectFinalSignatureGenes <- function(top_genes_per_patient) {
 
 #' Calculate B drug response scores using ssGSEA
 #'
-#' @description Calculates drug response scores using ssGSEA on signature genes
-#' @param patient_data_list List of patient expression data
-#' @param signature_genes Vector of signature genes
+#' @description Calculates drug response scores using ssGSEA on each patient's top genes
+#' @param patient_data_list List of patient expression data with top_genes included
 #' @return List of scores for each patient
 #' @keywords internal
-calculateDrugBScores <- function(patient_data_list, signature_genes) {
+calculateDrugBScores <- function(patient_data_list) {
 
   if (!requireNamespace("GSVA", quietly = TRUE)) {
     stop("GSVA package is required for ssGSEA calculation")
@@ -365,25 +365,31 @@ calculateDrugBScores <- function(patient_data_list, signature_genes) {
   for (patient_id in names(patient_data_list)) {
     patient_data <- patient_data_list[[patient_id]]
 
+    # Check if top_genes are available
+    if (!"top_genes" %in% names(patient_data)) {
+      warning("No top_genes found for patient ", patient_id)
+      next
+    }
+
+    # Get patient's top genes
+    patient_top_genes <- patient_data$top_genes
+
     # Combine response and non-response expression data
     all_expr <- cbind(patient_data$response_expr, patient_data$non_response_expr)
 
-    # Filter to signature genes
-    signature_expr <- all_expr[rownames(all_expr) %in% signature_genes, ]
-
-    if (nrow(signature_expr) == 0) {
-      warning("No signature genes found in patient ", patient_id)
+    if (nrow(all_expr) == 0) {
+      warning("No top genes found in expression data for patient ", patient_id)
       next
     }
 
     # Create gene set list
-    gene_sets <- list(signature = signature_genes)
+    gene_sets <- list(signature = patient_top_genes)
 
     # Calculate ssGSEA scores
     tryCatch({
       # Create ssGSEA parameter object for new GSVA API
       ssgsea_param <- GSVA::ssgseaParam(
-        exprData = as.matrix(signature_expr),
+        exprData = as.matrix(all_expr),
         geneSets = gene_sets,
         alpha = 0.25,
         normalize = TRUE
