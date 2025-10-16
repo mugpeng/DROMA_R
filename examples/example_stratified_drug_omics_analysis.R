@@ -24,7 +24,7 @@ library(meta)
 
 
 # Set database path
-db_path <- "Data/droma.sqlite"
+db_path <- "../Data/droma.sqlite"
 connectDROMADatabase(db_path)
 
 # Create MultiDromaSet from multiple projects
@@ -73,7 +73,7 @@ result_ercc1 <- analyzeStratifiedDrugOmic(
 # Understanding the result structure:
 # ----------------------------------
 # result$sensitive        - Analysis results for sensitive samples
-# result$resistant        - Analysis results for resistant samples  
+# result$resistant        - Analysis results for resistant samples
 # result$comparison       - Between-group statistical comparisons
 # result$stratification_info - Project-specific sample assignments:
 #   - Each project contains $sensitive and $resistant sample names

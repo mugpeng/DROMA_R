@@ -394,7 +394,7 @@ calculateDrugBScores <- function(patient_data_list) {
         alpha = 0.25,
         normalize = TRUE
       )
-      
+
       # Run ssGSEA with parameter object
       gsva_result <- GSVA::gsva(ssgsea_param)
 

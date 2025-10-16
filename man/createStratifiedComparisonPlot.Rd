@@ -9,7 +9,9 @@ createStratifiedComparisonPlot(
   resistant_result,
   select_omics,
   select_drugs,
-  select_omics_type
+  select_omics_type,
+  p_value_digits = 3,
+  add_difference_row = TRUE
 )
 }
 \arguments{
@@ -22,6 +24,10 @@ createStratifiedComparisonPlot(
 \item{select_drugs}{Name of drug}
 
 \item{select_omics_type}{Type of omics data}
+
+\item{p_value_digits}{Number of decimal places for p-values (default: 3)}
+
+\item{add_difference_row}{Whether to add a row showing difference between groups (default: TRUE)}
 }
 \value{
 ggplot object
