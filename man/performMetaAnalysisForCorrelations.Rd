@@ -4,10 +4,10 @@
 \alias{performMetaAnalysisForCorrelations}
 \title{Perform meta-analysis for correlation differences}
 \usage{
-performMetaAnalysisForCorrelations(correlation_data)
+performMetaAnalysisForCorrelations(meta_data)
 }
 \arguments{
-\item{correlation_data}{List of correlation data from each study}
+\item{meta_data}{Data frame with correlation results from all studies and groups}
 }
 \value{
 Meta-analysis result

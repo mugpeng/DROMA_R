@@ -62,10 +62,13 @@ result <- analyzeStratifiedCTRDB(
 # View signature genes
 result$signature_genes
 
-# View correlation plots for EGFR
-result$correlation_plots
+# View comprehensive correlation comparison plot
+result$correlation_results$comprehensive_plot
+
+# View correlation data
+result$correlation_results$meta_data
 
 # View meta-analysis forest plot
-result$meta_forest_plot
+result$meta_analysis$forest_plot
 }
 }

@@ -26,8 +26,8 @@ library(dplyr)
 # Note: This example assumes a CTRDB database connection is available
 # Uncomment and modify the following lines to connect to your CTRDB database:
 #
-# ctrdb_path <- "Data/ctrdb.sqlite"
-# ctrdb_con <- connectCTRDatabase(ctrdb_path)
+ctrdb_path <- "../Data/ctrdb.sqlite"
+ctrdb_con <- connectCTRDatabase(ctrdb_path)
 # assign("ctrdb_connection", ctrdb_con, envir = .GlobalEnv)
 
 # Check if CTRDB connection exists
@@ -52,7 +52,7 @@ if (!use_simulated_data) {
   result_egfr <- tryCatch({
     analyzeStratifiedCTRDB(
       drug_b_name = "Cisplatin",      # Drug for signature generation
-      drug_a_name = "Paclitaxel",     # Drug for signature application
+      drug_a_name = "Bortezomib",     # Drug for signature application
       select_omics = "EGFR",          # Omics feature to analyze
       connection = ctrdb_connection,  # Database connection
       top_n_genes = 100,              # Number of top genes from each dataset

@@ -38,11 +38,14 @@
 #' # View signature genes
 #' result$signature_genes
 #'
-#' # View correlation plots for EGFR
-#' result$correlation_plots
+#' # View comprehensive correlation comparison plot
+#' result$correlation_results$comprehensive_plot
+#'
+#' # View correlation data
+#' result$correlation_results$meta_data
 #'
 #' # View meta-analysis forest plot
-#' result$meta_forest_plot
+#' result$meta_analysis$forest_plot
 #' }
 analyzeStratifiedCTRDB <- function(drug_b_name,
                                   drug_a_name,
@@ -120,24 +123,35 @@ analyzeStratifiedCTRDB <- function(drug_b_name,
   if (is.null(drug_a_result) || length(drug_a_result$patient_data) == 0) {
     warning("No valid data found for Drug A: ", drug_a_name)
     result$drug_a_analysis <- NULL
+    result$drug_a_scores <- NULL
     result$correlation_results <- NULL
     result$meta_analysis <- NULL
   } else {
     result$drug_a_analysis <- drug_a_result
 
-    # Step 6: Analyze correlation between specific omics feature and B drug scores in Drug A
-    cat("Step 6: Analyzing correlations for", select_omics, "in Drug A datasets...\n")
+    # Step 6: Calculate A drug response scores using B drug signature
+    cat("Step 6: Calculating A drug response scores using B drug signature...\n")
+    drug_a_scores <- calculateDrugAScores(
+      patient_data_list = drug_a_result$patient_data,
+      signature_genes = final_signature_genes
+    )
+    result$drug_a_scores <- drug_a_scores
+
+    # Step 7: Analyze correlation between specific omics feature and A drug scores in Drug A
+    cat("Step 7: Analyzing correlations for", select_omics, "in Drug A datasets...\n")
     correlation_results <- analyzeCorrelationsInDrugA(
       drug_a_data = drug_a_result$patient_data,
+      drug_a_scores = drug_a_scores,
       select_omics = select_omics,
-      drug_b_scores = drug_b_scores
+      drug_a_name = drug_a_name
     )
     result$correlation_results <- correlation_results
 
-    # Step 7: Perform meta-analysis if enabled
-    if (meta_enabled && length(correlation_results$correlation_data) > 1) {
-      cat("Step 7: Performing meta-analysis...\n")
-      meta_result <- performMetaAnalysisForCorrelations(correlation_results$correlation_data)
+    # Step 8: Perform meta-analysis if enabled
+    if (meta_enabled && !is.null(correlation_results$meta_data) &&
+        nrow(correlation_results$meta_data) > 1) {
+      cat("Step 8: Performing meta-analysis...\n")
+      meta_result <- performMetaAnalysisForCorrelations(correlation_results$meta_data)
       result$meta_analysis <- meta_result
     }
   }
@@ -267,7 +281,8 @@ analyzeDrugBForSignature <- function(drug_name, connection, top_n_genes,
 
       # Sort by logFC (descending) and get top upregulated genes
       de_results <- de_results[order(de_results$logFC, decreasing = TRUE), ]
-      top_genes <- de_results$gene[1:min(top_n_genes, nrow(de_results))]
+      n_top <- min(top_n_genes, nrow(de_results))
+      top_genes <- if (n_top > 0) de_results$gene[seq_len(n_top)] else character(0)
 
       # Store data
       patient_data_list[[patient_id]] <- list(
@@ -339,11 +354,14 @@ selectFinalSignatureGenes <- function(top_genes_per_patient) {
   gene_ranking <- gene_ranking[order(-gene_ranking$count, -gene_ranking$avg_logfc_rank), ]
 
   # Select top 100 genes
-  final_genes <- gene_ranking$gene[1:min(100, nrow(gene_ranking))]
+  n_final <- min(100, nrow(gene_ranking))
+  final_genes <- if (n_final > 0) gene_ranking$gene[seq_len(n_final)] else character(0)
 
   message("Selected ", length(final_genes), " signature genes")
-  message("Genes appear in ", round(mean(gene_ranking$count[1:length(final_genes)]), 1),
-          " datasets on average")
+  if (length(final_genes) > 0) {
+    message("Genes appear in ", round(mean(gene_ranking$count[seq_along(final_genes)]), 1),
+            " datasets on average")
+  }
 
   return(final_genes)
 }
@@ -384,6 +402,75 @@ calculateDrugBScores <- function(patient_data_list) {
 
     # Create gene set list
     gene_sets <- list(signature = patient_top_genes)
+
+    # Calculate ssGSEA scores
+    tryCatch({
+      # Create ssGSEA parameter object for new GSVA API
+      ssgsea_param <- GSVA::ssgseaParam(
+        exprData = as.matrix(all_expr),
+        geneSets = gene_sets,
+        alpha = 0.25,
+        normalize = TRUE
+      )
+
+      # Run ssGSEA with parameter object
+      gsva_result <- GSVA::gsva(ssgsea_param)
+
+      # Extract scores
+      scores <- as.numeric(gsva_result["signature", ])
+      names(scores) <- colnames(gsva_result)
+
+      scores_list[[patient_id]] <- list(
+        scores = scores,
+        response_samples = patient_data$response_samples,
+        non_response_samples = patient_data$non_response_samples
+      )
+
+    }, error = function(e) {
+      warning("Failed to calculate ssGSEA scores for patient ", patient_id, ": ", e$message)
+    })
+  }
+
+  return(scores_list)
+}
+
+#' Calculate A drug response scores using B drug signature
+#'
+#' @description Calculates drug A response scores using the signature genes from drug B
+#' @param patient_data_list List of patient expression data from Drug A
+#' @param signature_genes Final signature genes from Drug B analysis
+#' @return List of scores for each patient in Drug A
+#' @keywords internal
+calculateDrugAScores <- function(patient_data_list, signature_genes) {
+
+  if (!requireNamespace("GSVA", quietly = TRUE)) {
+    stop("GSVA package is required for ssGSEA calculation")
+  }
+
+  scores_list <- list()
+
+  for (patient_id in names(patient_data_list)) {
+    patient_data <- patient_data_list[[patient_id]]
+
+    # Get all expression data for this patient
+    all_expr <- patient_data$expr_data
+
+    if (nrow(all_expr) == 0) {
+      warning("No expression data found for patient ", patient_id)
+      next
+    }
+
+    # Filter signature genes present in expression data
+    available_genes <- intersect(signature_genes, rownames(all_expr))
+
+    if (length(available_genes) < 10) {
+      warning("Too few signature genes (", length(available_genes),
+              ") found in expression data for patient ", patient_id)
+      next
+    }
+
+    # Create gene set list
+    gene_sets <- list(signature = available_genes)
 
     # Calculate ssGSEA scores
     tryCatch({
@@ -465,10 +552,10 @@ analyzeDrugBScores <- function(drug_b_scores, drug_name) {
       ggpubr::stat_compare_means(method = "wilcox.test",
                                  label.x = 0.8,
                                  label.y = max(plot_data$score, na.rm = TRUE) * 0.95) +
-      labs(title = paste("B Drug Response Scores -", patient_id),
+      ggplot2::labs(title = paste("B Drug Response Scores -", patient_id),
            x = "", y = "ssGSEA Score") +
-      theme_bw() +
-      theme(plot.title = element_text(hjust = 0.5))
+      ggplot2::theme_bw() +
+      ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5))
 
     plots[[patient_id]] <- p
   }
@@ -479,7 +566,7 @@ analyzeDrugBScores <- function(drug_b_scores, drug_name) {
     combined_plot <- combined_plot +
       patchwork::plot_annotation(
         title = paste("B Drug (", drug_name, ") Response Scores Analysis", sep = ""),
-        theme = theme(plot.title = element_text(size = 16, hjust = 0.5, face = "bold"))
+        theme = ggplot2::theme(plot.title = ggplot2::element_text(size = 16, hjust = 0.5, face = "bold"))
       )
     results$combined_plot <- combined_plot
   }
@@ -590,31 +677,31 @@ analyzeDrugAWithSignature <- function(drug_name, connection, signature_genes,
 
 #' Analyze correlations in Drug A datasets
 #'
-#' @description Analyzes correlation between specific omics feature expression and B drug scores
+#' @description Analyzes correlation between specific omics feature expression and A drug scores
 #' @param drug_a_data Drug A patient data
+#' @param drug_a_scores Drug A scores calculated using B drug signature
 #' @param select_omics Name of the omics feature to analyze
-#' @param drug_b_scores B drug scores for reference
+#' @param drug_a_name Name of drug A
 #' @return List containing correlation results and plots
 #' @keywords internal
-analyzeCorrelationsInDrugA <- function(drug_a_data, select_omics, drug_b_scores) {
+analyzeCorrelationsInDrugA <- function(drug_a_data, drug_a_scores, select_omics, drug_a_name) {
 
-  correlation_results <- list()
-  correlation_data <- list()
-  plots <- list()
+  # Data frame to store all correlation results for meta-analysis
+  meta_data <- data.frame()
 
-  # Calculate reference B drug score once (average across all datasets)
-  all_b_scores <- unlist(lapply(drug_b_scores, function(x) x$scores))
-  all_b_scores <- all_b_scores[!is.na(all_b_scores)]
-
-  if (length(all_b_scores) == 0) {
-    ref_b_score <- 0
-    warning("No valid B drug scores found across all datasets")
-  } else {
-    ref_b_score <- mean(all_b_scores)
-  }
+  # List to store individual scatter plots
+  scatter_plots <- list()
 
   for (patient_id in names(drug_a_data)) {
     patient_data <- drug_a_data[[patient_id]]
+
+    # Check if we have scores for this patient
+    if (!patient_id %in% names(drug_a_scores)) {
+      warning("No scores found for patient ", patient_id)
+      next
+    }
+
+    score_data <- drug_a_scores[[patient_id]]
 
     # Get expression data for the selected omics feature
     if (!select_omics %in% rownames(patient_data$expr_data)) {
@@ -622,168 +709,191 @@ analyzeCorrelationsInDrugA <- function(drug_a_data, select_omics, drug_b_scores)
       next
     }
 
-    omics_expr <- patient_data$expr_data[select_omics, , drop = FALSE]
-
     # Calculate correlations for each response group
-    results_list <- list()
-
     for (group in c("Response", "Non_response")) {
       group_samples <- if (group == "Response") {
-        patient_data$response_samples
+        score_data$response_samples
       } else {
-        patient_data$non_response_samples
+        score_data$non_response_samples
       }
 
       if (length(group_samples) < 3) next
 
-      # Get expression values for this group
-      group_expr <- as.numeric(omics_expr[, group_samples])
-      names(group_expr) <- group_samples
+      # Get expression and score values for this group
+      group_expr <- as.numeric(patient_data$expr_data[select_omics, group_samples])
+      group_scores <- score_data$scores[group_samples]
 
       # Remove NA values
-      group_expr <- group_expr[!is.na(group_expr)]
+      valid_idx <- !is.na(group_expr) & !is.na(group_scores)
+      group_expr <- group_expr[valid_idx]
+      group_scores <- group_scores[valid_idx]
 
-      # Check if we have enough finite observations
       if (length(group_expr) < 3) {
-        warning("Insufficient finite observations for correlation in ", patient_id, " ", group)
+        warning("Insufficient observations for correlation in ", patient_id, " ", group)
         next
       }
 
-      # Since we're correlating with a constant, correlation is always 0
-      cor_estimate <- 0
-      cor_pvalue <- 1
+      # Calculate Spearman correlation
+      cor_test <- tryCatch({
+        cor.test(group_expr, group_scores, method = "spearman")
+      }, error = function(e) {
+        warning("Correlation test failed for ", patient_id, " ", group, ": ", e$message)
+        return(NULL)
+      })
 
-      # Additional check: if variance of group_expr is 0, correlation is undefined
-      if (var(group_expr) == 0) {
-        warning("Zero variance in expression values for ", select_omics, " in ", patient_id, " ", group)
-      }
+      if (is.null(cor_test)) next
 
-      results_list[[group]] <- data.frame(
-        feature = select_omics,
-        cor = cor_estimate,
-        p_value = cor_pvalue,
+      # Store results
+      result_row <- data.frame(
+        patient_id = patient_id,
+        group = group,
+        cor = as.numeric(cor_test$estimate),
+        p_value = cor_test$p.value,
         n_samples = length(group_expr),
         stringsAsFactors = FALSE
       )
-    }
 
-    correlation_results[[patient_id]] <- results_list
+      meta_data <- rbind(meta_data, result_row)
 
-    # Create plots
-    if ("Response" %in% names(results_list) && "Non_response" %in% names(results_list)) {
-      resp_data <- results_list$Response
-      non_resp_data <- results_list$Non_response
-
-      # Create scatter plots for each group
-      # Get expression values without NA
-      resp_expr <- as.numeric(patient_data$expr_data[select_omics, patient_data$response_samples])
-      resp_expr <- resp_expr[!is.na(resp_expr)]
-      names(resp_expr) <- patient_data$response_samples[!is.na(as.numeric(patient_data$expr_data[select_omics, patient_data$response_samples]))]
-
-      non_resp_expr <- as.numeric(patient_data$expr_data[select_omics, patient_data$non_response_samples])
-      non_resp_expr <- non_resp_expr[!is.na(non_resp_expr)]
-      names(non_resp_expr) <- patient_data$non_response_samples[!is.na(as.numeric(patient_data$expr_data[select_omics, patient_data$non_response_samples]))]
-
-      # Create stratified score vectors with proper names
-      if (length(resp_expr) > 0) {
-        resp_scores <- rep(ref_b_score, length(resp_expr))
-        names(resp_scores) <- names(resp_expr)
-
-        plots[[paste0(patient_id, "_Response")]] <- plotCorrelationWithStratifiedScore(
-          gene_expr = resp_expr,
-          stratified_score = resp_scores,
-          patient_id = paste(patient_id, "Response"),
-          group = "Response"
-        )
-      }
-
-      if (length(non_resp_expr) > 0) {
-        non_resp_scores <- rep(ref_b_score, length(non_resp_expr))
-        names(non_resp_scores) <- names(non_resp_expr)
-
-        plots[[paste0(patient_id, "_Non_response")]] <- plotCorrelationWithStratifiedScore(
-          gene_expr = non_resp_expr,
-          stratified_score = non_resp_scores,
-          patient_id = paste(patient_id, "Non_response"),
-          group = "Non_response"
-        )
-      }
-
-      # Create comparison boxplot
-      plot_df <- data.frame(
-        cor = c(resp_data$cor, non_resp_data$cor),
-        group = c("Response", "Non_response")
+      # Create scatter plot
+      plot_data <- data.frame(
+        expression = group_expr,
+        score = group_scores
       )
 
-      p_compare <- ggpubr::ggboxplot(plot_df, x = "group", y = "cor",
-                                    fill = "group", palette = c("#FB8072FF", "#BEBADAFF"),
-                                    add = "jitter", add.params = list(width = 0.1, alpha = 0.5)) +
-        ggpubr::stat_compare_means(method = "wilcox.test",
-                                   label.x = 0.8,
-                                   label.y = ifelse(is.na(max(plot_df$cor)), 0, max(plot_df$cor) * 0.9)) +
-        labs(title = paste(select_omics, "Correlation with B Drug Score -", patient_id),
-             x = "", y = "Spearman Correlation") +
-        theme_bw() +
-        theme(plot.title = element_text(hjust = 0.5))
+      cor_text <- paste0("rho = ", round(cor_test$estimate, 3),
+                        "\np = ", format.pval(cor_test$p.value, digits = 2))
 
-      plots[[paste0(patient_id, "_comparison")]] <- p_compare
+      p_scatter <- ggplot2::ggplot(plot_data, ggplot2::aes(x = !!rlang::sym("expression"), y = !!rlang::sym("score"))) +
+        ggplot2::geom_point(alpha = 0.6, size = 2.5, color = ifelse(group == "Response", "#FB8072", "#BEBADA")) +
+        ggplot2::geom_smooth(method = "lm", se = TRUE, color = "blue", linewidth = 0.8) +
+        ggplot2::labs(
+          title = paste(patient_id, "-", group),
+          x = paste(select_omics, "Expression"),
+          y = "Drug Response Score"
+        ) +
+        ggplot2::annotate("text", x = Inf, y = Inf,
+                 label = cor_text,
+                 hjust = 1.1, vjust = 1.1,
+                 size = 3.5) +
+        ggplot2::theme_bw() +
+        ggplot2::theme(
+          plot.title = ggplot2::element_text(hjust = 0.5, size = 10, face = "bold"),
+          axis.title = ggplot2::element_text(size = 9)
+        )
 
-      # Prepare data for meta-analysis
-      correlation_data[[patient_id]] <- data.frame(
-        study = patient_id,
-        cor_resp = resp_data$cor,
-        cor_non_resp = non_resp_data$cor,
-        diff_cor = resp_data$cor - non_resp_data$cor,
-        p_value = wilcox.test(resp_data$cor, non_resp_data$cor)$p.value,
-        n_resp = resp_data$n_samples,
-        n_non_resp = non_resp_data$n_samples
-      )
+      scatter_plots[[paste0(patient_id, "_", group)]] <- p_scatter
     }
   }
 
-  # Combine comparison plots
-  comparison_plots <- plots[grepl("_comparison$", names(plots))]
-  if (length(comparison_plots) > 0 && requireNamespace("patchwork", quietly = TRUE)) {
-    combined_plot <- patchwork::wrap_plots(comparison_plots, ncol = min(3, length(comparison_plots)))
-    combined_plot <- combined_plot +
-      patchwork::plot_annotation(
-        title = paste("Correlation of", select_omics, "with B Drug Response Signature"),
-        theme = theme(plot.title = element_text(size = 16, hjust = 0.5, face = "bold"))
+  # Create comprehensive comparison plot across all datasets
+  comprehensive_plot <- NULL
+  if (nrow(meta_data) > 0) {
+    # Prepare data for comprehensive comparison
+    plot_data <- meta_data
+    plot_data$group <- factor(plot_data$group, levels = c("Response", "Non_response"))
+
+    # Create comprehensive boxplot/violin plot
+    comprehensive_plot <- ggpubr::ggviolin(
+      plot_data,
+      x = "group",
+      y = "cor",
+      fill = "group",
+      palette = c("Response" = "#FB8072FF", "Non_response" = "#BEBADAFF"),
+      add = "boxplot",
+      add.params = list(fill = "white", width = 0.1)
+    ) +
+      ggplot2::geom_jitter(width = 0.1, alpha = 0.6, size = 2) +
+      ggpubr::stat_compare_means(
+        method = "wilcox.test",
+        label.x = 1.3,
+        label.y = max(plot_data$cor, na.rm = TRUE) * 1.05,
+        size = 4
+      ) +
+      ggplot2::labs(
+        title = paste("Correlation of", select_omics, "with", drug_a_name, "Response Signature"),
+        subtitle = paste("Across", length(unique(plot_data$patient_id)), "datasets"),
+        x = "",
+        y = "Spearman Correlation Coefficient"
+      ) +
+      ggplot2::theme_bw() +
+      ggplot2::theme(
+        plot.title = ggplot2::element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = ggplot2::element_text(hjust = 0.5, size = 11),
+        axis.title = ggplot2::element_text(size = 12),
+        axis.text = ggplot2::element_text(size = 11),
+        legend.position = "none"
       )
-  } else {
-    combined_plot <- NULL
+  }
+
+  # Combine scatter plots (optional visualization)
+  combined_scatter_plot <- NULL
+  if (length(scatter_plots) > 0 && requireNamespace("patchwork", quietly = TRUE)) {
+    combined_scatter_plot <- patchwork::wrap_plots(
+      scatter_plots,
+      ncol = min(4, ceiling(sqrt(length(scatter_plots))))
+    ) +
+      patchwork::plot_annotation(
+        title = paste("Individual Dataset Correlations:", select_omics, "vs Drug Response Score"),
+        theme = ggplot2::theme(plot.title = ggplot2::element_text(size = 14, hjust = 0.5, face = "bold"))
+      )
   }
 
   return(list(
-    correlation_results = correlation_results,
-    correlation_data = correlation_data,
-    plots = plots,
-    combined_plot = combined_plot,
-    comparison_plots = comparison_plots
+    meta_data = meta_data,
+    scatter_plots = scatter_plots,
+    comprehensive_plot = comprehensive_plot,
+    combined_scatter_plot = combined_scatter_plot
   ))
 }
 
 #' Perform meta-analysis for correlation differences
 #'
 #' @description Performs meta-analysis on correlation differences between groups
-#' @param correlation_data List of correlation data from each study
+#' @param meta_data Data frame with correlation results from all studies and groups
 #' @return Meta-analysis result
 #' @keywords internal
-performMetaAnalysisForCorrelations <- function(correlation_data) {
+performMetaAnalysisForCorrelations <- function(meta_data) {
 
-  if (length(correlation_data) < 2) {
-    warning("Insufficient studies for meta-analysis")
+  if (nrow(meta_data) == 0) {
+    warning("No data available for meta-analysis")
     return(NULL)
   }
 
-  # Combine data
-  meta_df <- do.call(rbind, correlation_data)
+  # Reshape data to get Response vs Non_response for each patient
+  response_data <- meta_data[meta_data$group == "Response", ]
+  non_response_data <- meta_data[meta_data$group == "Non_response", ]
+
+  # Match by patient_id
+  common_patients <- intersect(response_data$patient_id, non_response_data$patient_id)
+
+  if (length(common_patients) < 2) {
+    warning("Insufficient studies with both Response and Non_response data for meta-analysis")
+    return(NULL)
+  }
+
+  # Create paired data frame
+  meta_df <- data.frame()
+  for (patient_id in common_patients) {
+    resp_row <- response_data[response_data$patient_id == patient_id, ]
+    non_resp_row <- non_response_data[non_response_data$patient_id == patient_id, ]
+
+    meta_df <- rbind(meta_df, data.frame(
+      study = patient_id,
+      cor_resp = resp_row$cor,
+      cor_non_resp = non_resp_row$cor,
+      diff_cor = resp_row$cor - non_resp_row$cor,
+      n_resp = resp_row$n_samples,
+      n_non_resp = non_resp_row$n_samples,
+      stringsAsFactors = FALSE
+    ))
+  }
 
   # Calculate standard error for correlation difference
   # Using Fisher's z-transformation approximation
   meta_df$se_diff <- sqrt(
-    (1 - meta_df$cor_resp^2)^2 / (meta_df$n_resp - 3) +
-    (1 - meta_df$cor_non_resp^2)^2 / (meta_df$n_non_resp - 3)
+    (1 - meta_df$cor_resp^2)^2 / pmax(meta_df$n_resp - 3, 1) +
+    (1 - meta_df$cor_non_resp^2)^2 / pmax(meta_df$n_non_resp - 3, 1)
   )
 
   # Perform meta-analysis
@@ -812,57 +922,14 @@ performMetaAnalysisForCorrelations <- function(correlation_data) {
 
     return(list(
       meta_result = meta_result,
-      forest_plot = forest_plot
+      forest_plot = forest_plot,
+      meta_df = meta_df
     ))
 
   }, error = function(e) {
     warning("Meta-analysis failed: ", e$message)
     return(NULL)
   })
-}
-
-#' Plot correlation with stratified score for single patient
-#'
-#' @description Creates a scatter plot showing correlation between gene expression
-#' and stratified score for a single patient
-#' @param gene_expr Gene expression values
-#' @param stratified_score Stratified score values
-#' @param patient_id Patient identifier
-#' @param group Response group ("Response" or "Non_response")
-#' @return A ggplot2 scatter plot
-#' @export
-plotCorrelationWithStratifiedScore <- function(gene_expr, stratified_score,
-                                              patient_id, group) {
-
-  # Ensure data alignment
-  common_samples <- intersect(names(gene_expr), names(stratified_score))
-  if (length(common_samples) == 0) {
-    stop("No common samples between gene expression and stratified score")
-  }
-
-  plot_data <- data.frame(
-    expression = gene_expr[common_samples],
-    score = stratified_score[common_samples]
-  )
-
-  # Calculate correlation
-  cor_test <- cor.test(plot_data$expression, plot_data$score, method = "spearman")
-  cor_text <- paste0("rho = ", round(cor_test$estimate, 3),
-                     "\np = ", format.pval(cor_test$p.value))
-
-  # Create plot
-  ggplot2::ggplot(plot_data, aes(x = expression, y = score)) +
-    ggplot2::geom_point(alpha = 0.6, size = 3) +
-    ggplot2::geom_smooth(method = "lm", se = TRUE, color = "blue") +
-    ggplot2::labs(title = paste(patient_id, "-", group),
-         x = "Gene Expression",
-         y = "Stratified Score") +
-    ggplot2::annotate("text", x = Inf, y = Inf,
-             label = cor_text,
-             hjust = 1.1, vjust = 1.1,
-             size = 4, family = "mono") +
-    ggplot2::theme_bw() +
-    ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5, face = "bold"))
 }
 
 #' Get summary of stratified CTRDB analysis
@@ -897,6 +964,31 @@ getStratifiedCTRDBSummary <- function(result_obj) {
   if (!is.null(result_obj$drug_a_analysis)) {
     summary$drug_a_summary <- list(
       n_patients = length(result_obj$drug_a_analysis$patient_data)
+    )
+  }
+
+  # Drug A scores summary
+  if (!is.null(result_obj$drug_a_scores)) {
+    summary$drug_a_scores_summary <- list(
+      n_scored_patients = length(result_obj$drug_a_scores)
+    )
+  }
+
+  # Correlation results summary
+  if (!is.null(result_obj$correlation_results$meta_data)) {
+    meta_data <- result_obj$correlation_results$meta_data
+
+    response_data <- meta_data[meta_data$group == "Response", ]
+    non_response_data <- meta_data[meta_data$group == "Non_response", ]
+
+    summary$correlation_summary <- list(
+      n_datasets = length(unique(meta_data$patient_id)),
+      n_response_correlations = nrow(response_data),
+      n_non_response_correlations = nrow(non_response_data),
+      mean_response_cor = mean(response_data$cor, na.rm = TRUE),
+      mean_non_response_cor = mean(non_response_data$cor, na.rm = TRUE),
+      median_response_cor = median(response_data$cor, na.rm = TRUE),
+      median_non_response_cor = median(non_response_data$cor, na.rm = TRUE)
     )
   }
 
@@ -953,25 +1045,23 @@ getStratifiedCTRDBSummary <- function(result_obj) {
 #'   print(result$drug_b_score_analysis$combined_plot)
 #' }
 #'
-#' # 3. Correlation analysis plots for EGFR
-#' if (!is.null(result$correlation_results$combined_plot)) {
-#'   print(result$correlation_results$combined_plot)
+#' # 3. Comprehensive correlation comparison plot across all datasets
+#' if (!is.null(result$correlation_results$comprehensive_plot)) {
+#'   print(result$correlation_results$comprehensive_plot)
 #' }
 #'
 #' # 4. Individual scatter plots for each patient/group
-#' # View scatter plot for first patient's response group
-#' patient_names <- names(result$drug_a_analysis$patient_data)
-#' if (length(patient_names) > 0) {
-#'   resp_plot_name <- paste0(patient_names[1], "_Response")
-#'   if (resp_plot_name %in% names(result$correlation_results$plots)) {
-#'     print(result$correlation_results$plots[[resp_plot_name]])
-#'   }
+#' if (!is.null(result$correlation_results$combined_scatter_plot)) {
+#'   print(result$correlation_results$combined_scatter_plot)
 #' }
 #'
 #' # 5. Meta-analysis forest plot
 #' if (!is.null(result$meta_analysis$forest_plot)) {
 #'   print(result$meta_analysis$forest_plot)
 #' }
+#'
+#' # 6. View correlation meta data
+#' print(result$correlation_results$meta_data)
 #'
 #' # Get comprehensive summary
 #' summary <- getStratifiedCTRDBSummary(result)
@@ -1000,24 +1090,24 @@ getStratifiedCTRDBSummary <- function(result_obj) {
 #' cor_comparison <- data.frame(
 #'   Gene = character(),
 #'   Dataset = character(),
-#'   Response_Cor = numeric(),
-#'   NonResponse_Cor = numeric(),
+#'   Group = character(),
+#'   Correlation = numeric(),
+#'   P_Value = numeric(),
 #'   stringsAsFactors = FALSE
 #' )
 #'
 #' for (gene in names(results_list)) {
-#'   if (!is.null(results_list[[gene]]$correlation_results)) {
-#'     for (dataset in names(results_list[[gene]]$correlation_results$correlation_results)) {
-#'       corr_data <- results_list[[gene]]$correlation_results$correlation_results[[dataset]]
-#'       if ("Response" %in% names(corr_data) && "Non_response" %in% names(corr_data)) {
-#'         cor_comparison <- rbind(cor_comparison, data.frame(
-#'           Gene = gene,
-#'           Dataset = dataset,
-#'           Response_Cor = corr_data$Response$cor,
-#'           NonResponse_Cor = corr_data$Non_response$cor
-#'         ))
-#'       }
-#'     }
+#'   if (!is.null(results_list[[gene]]$correlation_results$meta_data)) {
+#'     meta_data <- results_list[[gene]]$correlation_results$meta_data
+#'     meta_data$Gene <- gene
+#'     cor_comparison <- rbind(cor_comparison, data.frame(
+#'       Gene = meta_data$Gene,
+#'       Dataset = meta_data$patient_id,
+#'       Group = meta_data$group,
+#'       Correlation = meta_data$cor,
+#'       P_Value = meta_data$p_value,
+#'       stringsAsFactors = FALSE
+#'     ))
 #'   }
 #' }
 #'
@@ -1036,33 +1126,27 @@ getStratifiedCTRDBSummary <- function(result_obj) {
 #' )
 #'
 #' # Example 4: Extract and analyze correlation results
-#' if (!is.null(result$correlation_results$correlation_results)) {
-#'   # Create summary table of correlations
-#'   cor_summary <- data.frame()
-#'
-#'   for (patient_id in names(result$correlation_results$correlation_results)) {
-#'     patient_corr <- result$correlation_results$correlation_results[[patient_id]]
-#'
-#'     if ("Response" %in% names(patient_corr) && "Non_response" %in% names(patient_corr)) {
-#'       cor_summary <- rbind(cor_summary, data.frame(
-#'         Patient = patient_id,
-#'         Response_Cor = patient_corr$Response$cor,
-#'         Response_P = patient_corr$Response$p_value,
-#'         NonResponse_Cor = patient_corr$Non_response$cor,
-#'         NonResponse_P = patient_corr$Non_response$p_value,
-#'         stringsAsFactors = FALSE
-#'       ))
-#'     }
-#'   }
+#' if (!is.null(result$correlation_results$meta_data)) {
+#'   # Use the meta_data directly for summary
+#'   cor_summary <- result$correlation_results$meta_data
 #'
 #'   print("Correlation Summary:")
 #'   print(cor_summary)
 #'
-#'   # Calculate average correlations
+#'   # Calculate average correlations by group
+#'   response_cor <- cor_summary[cor_summary$group == "Response", "cor"]
+#'   non_response_cor <- cor_summary[cor_summary$group == "Non_response", "cor"]
+#'
 #'   cat("\nAverage correlation in Response group:",
-#'       round(mean(cor_summary$Response_Cor, na.rm = TRUE), 3), "\n")
+#'       round(mean(response_cor, na.rm = TRUE), 3), "\n")
 #'   cat("Average correlation in Non-response group:",
-#'       round(mean(cor_summary$NonResponse_Cor, na.rm = TRUE), 3), "\n")
+#'       round(mean(non_response_cor, na.rm = TRUE), 3), "\n")
+#'
+#'   # Statistical test between groups
+#'   if (length(response_cor) > 0 && length(non_response_cor) > 0) {
+#'     test_result <- wilcox.test(response_cor, non_response_cor)
+#'     cat("Wilcoxon test p-value:", format.pval(test_result$p.value), "\n")
+#'   }
 #' }
 #'
 #' # Example 5: Analyze signature genes across datasets

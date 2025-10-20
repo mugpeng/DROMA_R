@@ -18,14 +18,14 @@ library(grid)
 
 # Note: Replace with your actual database path
 # db_path <- "path/to/your/droma.sqlite"
-db_path <- "Data/droma.sqlite"
+db_path <- "../Data/droma.sqlite"
 
 # Connect to DROMA database
 cat("Connecting to DROMA database...\n")
 connectDROMADatabase(db_path)
 cat("Database connected successfully!\n\n")
 
-connectCTRDatabase("Data/ctrdb.sqlite")
+connectCTRDatabase("../Data/ctrdb.sqlite")
 
 # Check available clinical data
 cat("Checking available clinical data in CTRDB...\n")

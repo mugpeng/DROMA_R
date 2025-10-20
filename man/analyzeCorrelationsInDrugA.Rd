@@ -4,19 +4,26 @@
 \alias{analyzeCorrelationsInDrugA}
 \title{Analyze correlations in Drug A datasets}
 \usage{
-analyzeCorrelationsInDrugA(drug_a_data, select_omics, drug_b_scores)
+analyzeCorrelationsInDrugA(
+  drug_a_data,
+  drug_a_scores,
+  select_omics,
+  drug_a_name
+)
 }
 \arguments{
 \item{drug_a_data}{Drug A patient data}
 
+\item{drug_a_scores}{Drug A scores calculated using B drug signature}
+
 \item{select_omics}{Name of the omics feature to analyze}
 
-\item{drug_b_scores}{B drug scores for reference}
+\item{drug_a_name}{Name of drug A}
 }
 \value{
 List containing correlation results and plots
 }
 \description{
-Analyzes correlation between specific omics feature expression and B drug scores
+Analyzes correlation between specific omics feature expression and A drug scores
 }
 \keyword{internal}

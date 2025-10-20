@@ -267,11 +267,13 @@ analyzeClinicalMeta <- function(patient_data_list) {
       if (length(response_values) < 2 || length(non_response_values) < 2) next
 
       # Perform statistical test (Wilcoxon test)
-      wilcox_test <- wilcox.test(non_response_values, response_values)
+      # Response vs Non-response (R - NR), so positive effect means higher expression in responders
+      wilcox_test <- wilcox.test(response_values, non_response_values)
 
       # Calculate effect size (Cliff's Delta)
+      # Response vs Non-response, so positive delta means higher expression in responders
       cliff_delta <- tryCatch({
-        effsize::cliff.delta(non_response_values, response_values)
+        effsize::cliff.delta(response_values, non_response_values)
       }, error = function(e) {
         # Fallback effect size calculation
         list(estimate = (median(response_values, na.rm = TRUE) - median(non_response_values, na.rm = TRUE)) /
@@ -489,14 +491,14 @@ getClinicalSummary <- function(result_obj) {
     mean_resp <- mean(patient_data$response, na.rm = TRUE)
     mean_non_resp <- mean(patient_data$non_response, na.rm = TRUE)
 
-    # Perform statistical test
+    # Perform statistical test (Response vs Non-response)
     test_result <- tryCatch({
-      wilcox.test(patient_data$non_response, patient_data$response)
+      wilcox.test(patient_data$response, patient_data$non_response)
     }, error = function(e) list(p.value = NA))
 
-    # Calculate effect size
+    # Calculate effect size (Response vs Non-response)
     effect_size <- tryCatch({
-      effsize::cliff.delta(patient_data$non_response, patient_data$response)$estimate
+      effsize::cliff.delta(patient_data$response, patient_data$non_response)$estimate
     }, error = function(e) NA)
 
     # Add to summary
