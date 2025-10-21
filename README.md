@@ -8,6 +8,8 @@
 
 **DROMA.R** is an R package that provides advanced analysis functions for drug-omics associations using DromaSet and MultiDromaSet objects from the **DROMA.Set** package. It supports meta-analysis of drug-omics associations across multiple datasets, comprehensive visualization tools, and batch processing of features. This package extends DROMA.Set with statistical analysis capabilities for biomarker discovery in precision medicine. **All data loading functions now apply z-score normalization by default** for improved analysis consistency.
 
+**CTRDB Support**: Includes specialized functions for analyzing Clinical Trial Database (CTRDB) data, enabling patient-level drug response analysis and cross-drug signature stratification.
+
 ### Core Design Principles
 
 1. **Modular Architecture**: Functions organized into data loading, pairing, meta-analysis, and visualization modules
@@ -21,6 +23,7 @@ It is a part of [DROMA project](https://github.com/mugpeng/DROMA). Visit the [of
 
 - **🔗 DROMA.Set Integration**: Works seamlessly with DromaSet and MultiDromaSet objects
 - **📊 Meta-analysis**: Advanced statistical analysis across multiple datasets
+- **🏥 Clinical Trial Database (CTRDB)**: Specialized functions for clinical drug response analysis
 - **🎨 Comprehensive Visualization**: Forest plots, volcano plots, comparison plots with consistent theming
 - **⚡ Batch Processing**: Efficient analysis of multiple features simultaneously
 - **🧮 Multiple Statistical Methods**: Spearman correlation, Wilcoxon tests, Cliff's Delta effect sizes
@@ -172,6 +175,15 @@ print(volcano_plot)
 - **`analyzeStratifiedDrugOmic()`**: Stratified analysis by another drug's response
 - **`createStatisticalDashboard()`**: Interactive dashboard for statistical results
 - **`generateStatisticalPlots()`**: Generate comprehensive statistical overview plots
+
+### 🏥 Clinical Trial Database (CTRDB) Module
+- **`analyzeClinicalDrugResponse()`**: Analyze clinical drug response with omics data
+- **`analyzeStratifiedCTRDB()`**: Stratified analysis across different drugs
+- **`getPatientExpressionData()`**: Retrieve patient expression data from CTRDB
+- **`analyzeClinicalMeta()`**: Meta-analysis across clinical datasets
+- **`createClinicalForestPlot()`**: Forest plots for clinical meta-analysis
+- **`getClinicalSummary()`**: Summary statistics for clinical analysis
+- **`getStratifiedCTRDBSummary()`**: Summary for stratified CTRDB analysis
 
 ### 🛠 Utility Functions
 - **`bright_palette_26`**: Pre-defined color palette for visualizations
@@ -350,6 +362,61 @@ head(drug_data)
 formatDrugTable(drug_data, drug_name = "Paclitaxel")
 ```
 
+### Example 8: Clinical Trial Database (CTRDB) Analysis
+
+```r
+# Connect to CTRDB database
+con <- connectCTRDatabase("path/to/ctrdb.sqlite")
+
+# Analyze clinical drug response
+result <- analyzeClinicalDrugResponse(
+  select_omics = "EGFR",
+  select_drugs = "Erlotinib",
+  data_type = "all",
+  tumor_type = "all",
+  connection = con,
+  meta_enabled = TRUE
+)
+
+# View individual patient plots
+print(result$plot)
+
+# View meta-analysis forest plot
+print(result$forest_plot)
+
+# Get summary statistics
+summary <- getClinicalSummary(result)
+print(summary)
+```
+
+### Example 9: Stratified CTRDB Analysis
+
+```r
+# Stratified analysis: Drug B signature applied to Drug A
+result <- analyzeStratifiedCTRDB(
+  drug_b_name = "Cisplatin",      # Signature generation
+  drug_a_name = "Paclitaxel",     # Signature application
+  select_omics = "EGFR",          # Feature to analyze
+  connection = con,
+  top_n_genes = 100,
+  data_type = "all",
+  tumor_type = "all"
+)
+
+# View signature genes
+print(result$signature_genes)
+
+# View forest plot with meta-analyzed correlations
+print(result$correlation_results$forest_plot)
+
+# View combined scatter plots
+print(result$correlation_results$combined_scatter_plot)
+
+# Get comprehensive summary
+summary <- getStratifiedCTRDBSummary(result)
+print(summary)
+```
+
 ## Data Types Supported
 
 ### Molecular Profiles
@@ -415,20 +482,6 @@ Li, S., Peng, Y., Chen, M. et al. Facilitating integrative and personalized onco
 ## Contact
 
 For questions and feedback, please contact Peng Yu Zhong at yc47680@um.edu.mo.
-
-## Changelog
-### Version 0.4.3
-Update DESCRIPTION and R functions for drug sensitivity analysis
-- Updated DESCRIPTION file to reflect new version (0.4.3) and changed R dependency to require R version 4.0.0.
-- Modified `processDrugData` function to standardize column names (`sampleid` to `SampleID`, `study` to `ProjectID`).
-- Enhanced `annotateDrugData` function to merge drug data with annotations using updated column names.
-- Reintroduced `formatDrugTable` function with improved formatting for drug sensitivity data.
-- Updated example scripts to demonstrate new functionalities in drug sensitivity rank plotting.
-
-### Version 0.4.2
-Add new functions for statistical analysis and update examples including createStatisticalDashboard and generateStatisticalPlots.
-Removed FuncStat.R as it is no longer needed.
-Updated example scripts to include new multi-set functionality for drug feature analysis and drug-omics pairing analysis.
 
 ---
 
