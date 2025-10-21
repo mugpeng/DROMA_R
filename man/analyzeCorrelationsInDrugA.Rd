@@ -8,7 +8,8 @@ analyzeCorrelationsInDrugA(
   drug_a_data,
   drug_a_scores,
   select_omics,
-  drug_a_name
+  drug_a_name,
+  drug_b_name = NULL
 )
 }
 \arguments{
@@ -19,9 +20,11 @@ analyzeCorrelationsInDrugA(
 \item{select_omics}{Name of the omics feature to analyze}
 
 \item{drug_a_name}{Name of drug A}
+
+\item{drug_b_name}{Name of drug B (for plot titles)}
 }
 \value{
-List containing correlation results and plots
+List containing correlation results, forest plot, and combined scatter plot
 }
 \description{
 Analyzes correlation between specific omics feature expression and A drug scores

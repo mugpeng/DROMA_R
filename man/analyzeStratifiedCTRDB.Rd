@@ -13,8 +13,7 @@ analyzeStratifiedCTRDB(
   data_type = "all",
   tumor_type = "all",
   min_response_size = 3,
-  min_non_response_size = 3,
-  meta_enabled = TRUE
+  min_non_response_size = 3
 )
 }
 \arguments{
@@ -35,8 +34,6 @@ analyzeStratifiedCTRDB(
 \item{min_response_size}{Minimum samples required in response group (default: 3)}
 
 \item{min_non_response_size}{Minimum samples required in non-response group (default: 3)}
-
-\item{meta_enabled}{Logical, whether to perform meta-analysis (default: TRUE)}
 }
 \value{
 A list containing analysis results, plots, and signature genes
@@ -62,13 +59,13 @@ result <- analyzeStratifiedCTRDB(
 # View signature genes
 result$signature_genes
 
-# View comprehensive correlation comparison plot
-result$correlation_results$comprehensive_plot
+# View forest plot with meta-analyzed correlations
+result$correlation_results$forest_plot
+
+# View combined scatter plots
+result$correlation_results$combined_scatter_plot
 
 # View correlation data
 result$correlation_results$meta_data
-
-# View meta-analysis forest plot
-result$meta_analysis$forest_plot
 }
 }

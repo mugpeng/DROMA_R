@@ -52,15 +52,14 @@ if (!use_simulated_data) {
   result_egfr <- tryCatch({
     analyzeStratifiedCTRDB(
       drug_b_name = "Cisplatin",      # Drug for signature generation
-      drug_a_name = "Bortezomib",     # Drug for signature application
+      drug_a_name = "Bevacizumab",     # Drug for signature application
       select_omics = "EGFR",          # Omics feature to analyze
       connection = ctrdb_connection,  # Database connection
       top_n_genes = 100,              # Number of top genes from each dataset
       data_type = "all",              # Data type filter
       tumor_type = "all",             # Tumor type filter
       min_response_size = 3,         # Minimum response samples
-      min_non_response_size = 3,      # Minimum non-response samples
-      meta_enabled = TRUE             # Enable meta-analysis
+      min_non_response_size = 3      # Minimum non-response samples
     )
   }, error = function(e) {
     cat("Error in real data analysis:", e$message, "\n")
@@ -190,8 +189,7 @@ for (gene in genes_to_test) {
         connection = ctrdb_connection,
         top_n_genes = 100,
         data_type = "all",
-        tumor_type = "all",
-        meta_enabled = TRUE
+        tumor_type = "all"
       )
     }, error = function(e) {
       cat("  Error:", e$message, "\n")
@@ -313,8 +311,7 @@ for (pair in drug_pairs) {
         connection = ctrdb_connection,
         top_n_genes = 100,
         data_type = "all",
-        tumor_type = "all",
-        meta_enabled = TRUE
+        tumor_type = "all"
       )
     }, error = function(e) {
       cat("  Error:", e$message, "\n")

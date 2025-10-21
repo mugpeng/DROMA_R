@@ -19,7 +19,6 @@
 #' @param tumor_type Filter by tumor type ("all" or specific tumor types)
 #' @param min_response_size Minimum samples required in response group (default: 3)
 #' @param min_non_response_size Minimum samples required in non-response group (default: 3)
-#' @param meta_enabled Logical, whether to perform meta-analysis (default: TRUE)
 #' @return A list containing analysis results, plots, and signature genes
 #' @export
 #' @examples
@@ -38,14 +37,14 @@
 #' # View signature genes
 #' result$signature_genes
 #'
-#' # View comprehensive correlation comparison plot
-#' result$correlation_results$comprehensive_plot
+#' # View forest plot with meta-analyzed correlations
+#' result$correlation_results$forest_plot
+#'
+#' # View combined scatter plots
+#' result$correlation_results$combined_scatter_plot
 #'
 #' # View correlation data
 #' result$correlation_results$meta_data
-#'
-#' # View meta-analysis forest plot
-#' result$meta_analysis$forest_plot
 #' }
 analyzeStratifiedCTRDB <- function(drug_b_name,
                                   drug_a_name,
@@ -55,8 +54,7 @@ analyzeStratifiedCTRDB <- function(drug_b_name,
                                   data_type = "all",
                                   tumor_type = "all",
                                   min_response_size = 3,
-                                  min_non_response_size = 3,
-                                  meta_enabled = TRUE) {
+                                  min_non_response_size = 3) {
 
   # Validate inputs
   if (missing(drug_b_name) || is.null(drug_b_name) || drug_b_name == "") {
@@ -125,7 +123,6 @@ analyzeStratifiedCTRDB <- function(drug_b_name,
     result$drug_a_analysis <- NULL
     result$drug_a_scores <- NULL
     result$correlation_results <- NULL
-    result$meta_analysis <- NULL
   } else {
     result$drug_a_analysis <- drug_a_result
 
@@ -143,17 +140,10 @@ analyzeStratifiedCTRDB <- function(drug_b_name,
       drug_a_data = drug_a_result$patient_data,
       drug_a_scores = drug_a_scores,
       select_omics = select_omics,
-      drug_a_name = drug_a_name
+      drug_a_name = drug_a_name,
+      drug_b_name = drug_b_name
     )
     result$correlation_results <- correlation_results
-
-    # Step 8: Perform meta-analysis if enabled
-    if (meta_enabled && !is.null(correlation_results$meta_data) &&
-        nrow(correlation_results$meta_data) > 1) {
-      cat("Step 8: Performing meta-analysis...\n")
-      meta_result <- performMetaAnalysisForCorrelations(correlation_results$meta_data)
-      result$meta_analysis <- meta_result
-    }
   }
 
   return(result)
@@ -215,18 +205,8 @@ analyzeDrugBForSignature <- function(drug_name, connection, top_n_genes,
       # Get metadata for this patient
       patient_samples <- ctrdb_samples[ctrdb_samples$PatientID == patient_id, ]
 
-      # Get expression data
-      table_name_db <- gsub("-", "_", patient_id)
-      expr_data <- tryCatch({
-        expr_query <- paste0("SELECT * FROM ", table_name_db)
-        full_expr <- DBI::dbGetQuery(connection, expr_query)
-        rownames(full_expr) <- full_expr$feature_id
-        full_expr$feature_id <- NULL
-        as.matrix(full_expr)
-      }, error = function(e) {
-        warning("Failed to retrieve expression data for patient ", patient_id)
-        return(NULL)
-      })
+      # Get expression data using the reusable function from DROMA package
+      expr_data <- getPatientExpressionData(patient_id, connection, auto_log = FALSE)
 
       if (is.null(expr_data) || nrow(expr_data) == 0) next
 
@@ -629,18 +609,8 @@ analyzeDrugAWithSignature <- function(drug_name, connection, signature_genes,
       # Get metadata
       patient_samples <- ctrdb_samples[ctrdb_samples$PatientID == patient_id, ]
 
-      # Get expression data
-      table_name_db <- gsub("-", "_", patient_id)
-      expr_data <- tryCatch({
-        expr_query <- paste0("SELECT * FROM ", table_name_db)
-        full_expr <- DBI::dbGetQuery(connection, expr_query)
-        rownames(full_expr) <- full_expr$feature_id
-        full_expr$feature_id <- NULL
-        as.matrix(full_expr)
-      }, error = function(e) {
-        warning("Failed to retrieve expression data for patient ", patient_id)
-        return(NULL)
-      })
+      # Get expression data using the reusable function from DROMA package
+      expr_data <- getPatientExpressionData(patient_id, connection, auto_log = FALSE)
 
       if (is.null(expr_data) || nrow(expr_data) == 0) next
 
@@ -675,6 +645,201 @@ analyzeDrugAWithSignature <- function(drug_name, connection, signature_genes,
   return(list(patient_data = patient_data_list))
 }
 
+#' Create forest plot for correlation meta-analysis
+#'
+#' @description Creates a forest plot comparing meta-analyzed correlations between Response and Non_response groups
+#' @param meta_data Data frame with correlation results (patient_id, group, cor, p_value, n_samples)
+#' @param select_omics Name of the omics feature
+#' @param drug_a_name Name of drug A
+#' @param drug_b_name Name of drug B
+#' @param p_value_digits Number of decimal places for p-values (default: 3)
+#' @param add_difference_row Whether to add difference row (default: TRUE)
+#' @return ggplot object or NULL
+#' @keywords internal
+createCorrelationForestPlot <- function(meta_data, select_omics, drug_a_name,
+                                       drug_b_name = NULL, p_value_digits = 3,
+                                       add_difference_row = TRUE) {
+
+  # Check if required packages are available
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    warning("ggplot2 package is required for plotting")
+    return(NULL)
+  }
+
+  if (!requireNamespace("meta", quietly = TRUE)) {
+    warning("meta package is required for meta-analysis")
+    return(NULL)
+  }
+
+  # Separate data by group
+  response_data <- meta_data[meta_data$group == "Response", ]
+  non_response_data <- meta_data[meta_data$group == "Non_response", ]
+
+  # Check if we have data for both groups
+  if (nrow(response_data) < 2 || nrow(non_response_data) < 2) {
+    warning("Insufficient data for meta-analysis in one or both groups")
+    return(NULL)
+  }
+
+  # Perform meta-analysis for Response group
+  response_meta <- performCorrelationMetaAnalysis(
+    correlations = response_data$cor,
+    sample_sizes = response_data$n_samples,
+    study_labels = response_data$patient_id
+  )
+
+  # Perform meta-analysis for Non_response group
+  non_response_meta <- performCorrelationMetaAnalysis(
+    correlations = non_response_data$cor,
+    sample_sizes = non_response_data$n_samples,
+    study_labels = non_response_data$patient_id
+  )
+
+  # Check if meta-analyses were successful
+  if (is.null(response_meta) || is.null(non_response_meta)) {
+    warning("Meta-analysis failed for one or both groups")
+    return(NULL)
+  }
+
+  # Extract meta-analysis results
+  response_cor <- response_meta$TE.random
+  response_lower <- response_meta$lower.random
+  response_upper <- response_meta$upper.random
+  response_p <- response_meta$pval.random
+  response_se <- response_meta$seTE.random
+
+  non_response_cor <- non_response_meta$TE.random
+  non_response_lower <- non_response_meta$lower.random
+  non_response_upper <- non_response_meta$upper.random
+  non_response_p <- non_response_meta$pval.random
+  non_response_se <- non_response_meta$seTE.random
+
+  # Calculate difference and p-value
+  if (add_difference_row && !is.na(response_cor) && !is.na(non_response_cor)) {
+    z_diff <- (response_cor - non_response_cor) / sqrt(response_se^2 + non_response_se^2)
+    p_diff <- 2 * pnorm(abs(z_diff), lower.tail = FALSE)
+  } else {
+    p_diff <- NA
+  }
+
+  # Format p-value for display
+  format_pvalue <- function(p, digits = 3) {
+    if (is.na(p) || is.null(p)) return("NA")
+    if (p < 0.001) return("<0.001")
+    if (p < 0.01) return(sprintf("<%.2f", p))
+    if (p < 0.05) return(sprintf("<%.3f", p))
+    return(sprintf("%.3f", round(p, digits)))
+  }
+
+  # Create plot data
+  groups <- c("Response", "Non_response")
+  correlations <- c(response_cor, non_response_cor)
+  ci_lowers <- c(response_lower, non_response_lower)
+  ci_uppers <- c(response_upper, non_response_upper)
+  p_values <- c(response_p, non_response_p)
+
+  # Add difference row if requested
+  if (add_difference_row && !is.na(p_diff)) {
+    groups <- c(groups, "Difference")
+    correlations <- c(correlations, response_cor - non_response_cor)
+    ci_lowers <- c(ci_lowers, NA)
+    ci_uppers <- c(ci_uppers, NA)
+    p_values <- c(p_values, p_diff)
+  }
+
+  # Create group labels with p-values using newline
+  p_labels <- sapply(p_values, format_pvalue, digits = p_value_digits)
+  group_labels <- paste0(groups, "\np=", p_labels)
+
+  plot_data <- data.frame(
+    Group = group_labels,
+    Group_Name = groups,
+    Correlation = correlations,
+    CI_lower = ci_lowers,
+    CI_upper = ci_uppers,
+    P_value = p_values,
+    stringsAsFactors = FALSE
+  )
+
+  # Create title
+  if (!is.null(drug_b_name)) {
+    plot_title <- paste0(select_omics, " vs ", drug_a_name, " (using ", drug_b_name, " signature)")
+  } else {
+    plot_title <- paste0(select_omics, " vs ", drug_a_name, " Response Signature")
+  }
+
+  # Create forest plot
+  p <- ggplot2::ggplot(plot_data, ggplot2::aes_string(x = "Group", y = "Correlation")) +
+    ggplot2::geom_point(size = 3) +
+    ggplot2::geom_errorbar(
+      data = plot_data[!is.na(plot_data$CI_lower), ],
+      ggplot2::aes_string(ymin = "CI_lower", ymax = "CI_upper"),
+      width = 0.2
+    ) +
+    ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+    ggplot2::coord_flip(ylim = range(c(plot_data$Correlation, plot_data$CI_lower, plot_data$CI_upper), na.rm = TRUE) * c(1.1, 1.1)) +
+    ggplot2::labs(
+      title = plot_title,
+      subtitle = "Meta-analyzed Correlation Coefficients with 95% CI",
+      y = "Correlation Coefficient (Spearman's rho)",
+      x = ""
+    ) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(hjust = 0.5, size = 14, face = "bold"),
+      plot.subtitle = ggplot2::element_text(hjust = 0.5, size = 11),
+      axis.text.y = ggplot2::element_text(hjust = 1, face = "bold", lineheight = 0.8, size = 11),
+      axis.text.x = ggplot2::element_text(size = 10),
+      axis.title = ggplot2::element_text(size = 12),
+      panel.grid.major.y = ggplot2::element_blank()
+    )
+
+  return(p)
+}
+
+#' Perform meta-analysis for correlations using Fisher's z transformation
+#'
+#' @description Performs meta-analysis on correlation coefficients using Fisher's z transformation
+#' @param correlations Vector of correlation coefficients
+#' @param sample_sizes Vector of sample sizes
+#' @param study_labels Vector of study labels
+#' @return Meta-analysis result from meta::metagen or NULL
+#' @keywords internal
+performCorrelationMetaAnalysis <- function(correlations, sample_sizes, study_labels) {
+
+  if (!requireNamespace("meta", quietly = TRUE)) {
+    warning("meta package is required for meta-analysis")
+    return(NULL)
+  }
+
+  # Fisher's z transformation
+  z_values <- 0.5 * log((1 + correlations) / (1 - correlations))
+
+  # Standard error of z (using n-3 for correlation)
+  se_z <- 1 / sqrt(pmax(sample_sizes - 3, 1))
+
+  # Perform meta-analysis
+  tryCatch({
+    meta_result <- meta::metagen(
+      TE = z_values,
+      seTE = se_z,
+      data = data.frame(z = z_values, se = se_z),
+      sm = "COR",
+      studlab = study_labels,
+      comb.fixed = FALSE,
+      comb.random = TRUE,
+      method.tau = "REML",
+      hakn = TRUE
+    )
+
+    return(meta_result)
+
+  }, error = function(e) {
+    warning("Meta-analysis failed: ", e$message)
+    return(NULL)
+  })
+}
+
 #' Analyze correlations in Drug A datasets
 #'
 #' @description Analyzes correlation between specific omics feature expression and A drug scores
@@ -682,15 +847,16 @@ analyzeDrugAWithSignature <- function(drug_name, connection, signature_genes,
 #' @param drug_a_scores Drug A scores calculated using B drug signature
 #' @param select_omics Name of the omics feature to analyze
 #' @param drug_a_name Name of drug A
-#' @return List containing correlation results and plots
+#' @param drug_b_name Name of drug B (for plot titles)
+#' @return List containing correlation results, forest plot, and combined scatter plot
 #' @keywords internal
-analyzeCorrelationsInDrugA <- function(drug_a_data, drug_a_scores, select_omics, drug_a_name) {
+analyzeCorrelationsInDrugA <- function(drug_a_data, drug_a_scores, select_omics, drug_a_name, drug_b_name = NULL) {
 
   # Data frame to store all correlation results for meta-analysis
   meta_data <- data.frame()
 
-  # List to store individual scatter plots
-  scatter_plots <- list()
+  # List to temporarily store scatter plots (not returned)
+  temp_scatter_plots <- list()
 
   for (patient_id in names(drug_a_data)) {
     patient_data <- drug_a_data[[patient_id]]
@@ -755,7 +921,7 @@ analyzeCorrelationsInDrugA <- function(drug_a_data, drug_a_scores, select_omics,
 
       meta_data <- rbind(meta_data, result_row)
 
-      # Create scatter plot
+      # Create scatter plot (store temporarily, not in final output)
       plot_data <- data.frame(
         expression = group_expr,
         score = group_scores
@@ -764,7 +930,7 @@ analyzeCorrelationsInDrugA <- function(drug_a_data, drug_a_scores, select_omics,
       cor_text <- paste0("rho = ", round(cor_test$estimate, 3),
                         "\np = ", format.pval(cor_test$p.value, digits = 2))
 
-      p_scatter <- ggplot2::ggplot(plot_data, ggplot2::aes(x = !!rlang::sym("expression"), y = !!rlang::sym("score"))) +
+      p_scatter <- ggplot2::ggplot(plot_data, ggplot2::aes_string(x = "expression", y = "score")) +
         ggplot2::geom_point(alpha = 0.6, size = 2.5, color = ifelse(group == "Response", "#FB8072", "#BEBADA")) +
         ggplot2::geom_smooth(method = "lm", se = TRUE, color = "blue", linewidth = 0.8) +
         ggplot2::labs(
@@ -782,56 +948,27 @@ analyzeCorrelationsInDrugA <- function(drug_a_data, drug_a_scores, select_omics,
           axis.title = ggplot2::element_text(size = 9)
         )
 
-      scatter_plots[[paste0(patient_id, "_", group)]] <- p_scatter
+      temp_scatter_plots[[paste0(patient_id, "_", group)]] <- p_scatter
     }
   }
 
-  # Create comprehensive comparison plot across all datasets
-  comprehensive_plot <- NULL
+  # Create forest plot with meta-analysis for each group
+  forest_plot <- NULL
   if (nrow(meta_data) > 0) {
-    # Prepare data for comprehensive comparison
-    plot_data <- meta_data
-    plot_data$group <- factor(plot_data$group, levels = c("Response", "Non_response"))
-
-    # Create comprehensive boxplot/violin plot
-    comprehensive_plot <- ggpubr::ggviolin(
-      plot_data,
-      x = "group",
-      y = "cor",
-      fill = "group",
-      palette = c("Response" = "#FB8072FF", "Non_response" = "#BEBADAFF"),
-      add = "boxplot",
-      add.params = list(fill = "white", width = 0.1)
-    ) +
-      ggplot2::geom_jitter(width = 0.1, alpha = 0.6, size = 2) +
-      ggpubr::stat_compare_means(
-        method = "wilcox.test",
-        label.x = 1.3,
-        label.y = max(plot_data$cor, na.rm = TRUE) * 1.05,
-        size = 4
-      ) +
-      ggplot2::labs(
-        title = paste("Correlation of", select_omics, "with", drug_a_name, "Response Signature"),
-        subtitle = paste("Across", length(unique(plot_data$patient_id)), "datasets"),
-        x = "",
-        y = "Spearman Correlation Coefficient"
-      ) +
-      ggplot2::theme_bw() +
-      ggplot2::theme(
-        plot.title = ggplot2::element_text(hjust = 0.5, size = 14, face = "bold"),
-        plot.subtitle = ggplot2::element_text(hjust = 0.5, size = 11),
-        axis.title = ggplot2::element_text(size = 12),
-        axis.text = ggplot2::element_text(size = 11),
-        legend.position = "none"
-      )
+    forest_plot <- createCorrelationForestPlot(
+      meta_data = meta_data,
+      select_omics = select_omics,
+      drug_a_name = drug_a_name,
+      drug_b_name = drug_b_name
+    )
   }
 
-  # Combine scatter plots (optional visualization)
+  # Combine scatter plots (keep combined version only)
   combined_scatter_plot <- NULL
-  if (length(scatter_plots) > 0 && requireNamespace("patchwork", quietly = TRUE)) {
+  if (length(temp_scatter_plots) > 0 && requireNamespace("patchwork", quietly = TRUE)) {
     combined_scatter_plot <- patchwork::wrap_plots(
-      scatter_plots,
-      ncol = min(4, ceiling(sqrt(length(scatter_plots))))
+      temp_scatter_plots,
+      ncol = min(4, ceiling(sqrt(length(temp_scatter_plots))))
     ) +
       patchwork::plot_annotation(
         title = paste("Individual Dataset Correlations:", select_omics, "vs Drug Response Score"),
@@ -841,95 +978,9 @@ analyzeCorrelationsInDrugA <- function(drug_a_data, drug_a_scores, select_omics,
 
   return(list(
     meta_data = meta_data,
-    scatter_plots = scatter_plots,
-    comprehensive_plot = comprehensive_plot,
+    forest_plot = forest_plot,
     combined_scatter_plot = combined_scatter_plot
   ))
-}
-
-#' Perform meta-analysis for correlation differences
-#'
-#' @description Performs meta-analysis on correlation differences between groups
-#' @param meta_data Data frame with correlation results from all studies and groups
-#' @return Meta-analysis result
-#' @keywords internal
-performMetaAnalysisForCorrelations <- function(meta_data) {
-
-  if (nrow(meta_data) == 0) {
-    warning("No data available for meta-analysis")
-    return(NULL)
-  }
-
-  # Reshape data to get Response vs Non_response for each patient
-  response_data <- meta_data[meta_data$group == "Response", ]
-  non_response_data <- meta_data[meta_data$group == "Non_response", ]
-
-  # Match by patient_id
-  common_patients <- intersect(response_data$patient_id, non_response_data$patient_id)
-
-  if (length(common_patients) < 2) {
-    warning("Insufficient studies with both Response and Non_response data for meta-analysis")
-    return(NULL)
-  }
-
-  # Create paired data frame
-  meta_df <- data.frame()
-  for (patient_id in common_patients) {
-    resp_row <- response_data[response_data$patient_id == patient_id, ]
-    non_resp_row <- non_response_data[non_response_data$patient_id == patient_id, ]
-
-    meta_df <- rbind(meta_df, data.frame(
-      study = patient_id,
-      cor_resp = resp_row$cor,
-      cor_non_resp = non_resp_row$cor,
-      diff_cor = resp_row$cor - non_resp_row$cor,
-      n_resp = resp_row$n_samples,
-      n_non_resp = non_resp_row$n_samples,
-      stringsAsFactors = FALSE
-    ))
-  }
-
-  # Calculate standard error for correlation difference
-  # Using Fisher's z-transformation approximation
-  meta_df$se_diff <- sqrt(
-    (1 - meta_df$cor_resp^2)^2 / pmax(meta_df$n_resp - 3, 1) +
-    (1 - meta_df$cor_non_resp^2)^2 / pmax(meta_df$n_non_resp - 3, 1)
-  )
-
-  # Perform meta-analysis
-  tryCatch({
-    meta_result <- meta::metagen(
-      TE = meta_df$diff_cor,
-      seTE = meta_df$se_diff,
-      data = meta_df,
-      sm = "SMD",  # Standardized Mean Difference
-      studlab = meta_df$study,
-      comb.fixed = FALSE,
-      comb.random = TRUE
-    )
-
-    # Create forest plot
-    forest_plot <- meta::forest(
-      meta_result,
-      xlab = "Difference in Correlation (Response - Non-response)",
-      slab = "study",
-      boxsize = 0.2,
-      lineheight = "auto",
-      print.pval.Q = TRUE,
-      print.I2 = TRUE,
-      print.tau2 = TRUE
-    )
-
-    return(list(
-      meta_result = meta_result,
-      forest_plot = forest_plot,
-      meta_df = meta_df
-    ))
-
-  }, error = function(e) {
-    warning("Meta-analysis failed: ", e$message)
-    return(NULL)
-  })
 }
 
 #' Get summary of stratified CTRDB analysis
@@ -992,20 +1043,6 @@ getStratifiedCTRDBSummary <- function(result_obj) {
     )
   }
 
-  # Meta-analysis summary
-  if (!is.null(result_obj$meta_analysis)) {
-    meta_result <- result_obj$meta_analysis$meta_result
-    summary$meta_summary <- list(
-      n_studies = meta_result$k,
-      overall_effect = meta_result$TE.random,
-      ci_lower = meta_result$lower.random,
-      ci_upper = meta_result$upper.random,
-      p_value = meta_result$pval.random,
-      i_squared = meta_result$I2,
-      heterogeneity_p = meta_result$pval.Q
-    )
-  }
-
   return(summary)
 }
 
@@ -1032,8 +1069,7 @@ getStratifiedCTRDBSummary <- function(result_obj) {
 #'   connection = ctrdb_con,         # Database connection
 #'   top_n_genes = 100,              # Number of top genes from each dataset
 #'   data_type = "all",              # Data type filter
-#'   tumor_type = "all",             # Tumor type filter
-#'   meta_enabled = TRUE             # Enable meta-analysis
+#'   tumor_type = "all"              # Tumor type filter
 #' )
 #'
 #' # View results
@@ -1045,22 +1081,17 @@ getStratifiedCTRDBSummary <- function(result_obj) {
 #'   print(result$drug_b_score_analysis$combined_plot)
 #' }
 #'
-#' # 3. Comprehensive correlation comparison plot across all datasets
-#' if (!is.null(result$correlation_results$comprehensive_plot)) {
-#'   print(result$correlation_results$comprehensive_plot)
+#' # 3. Forest plot showing meta-analyzed correlations for Response and Non_response groups
+#' if (!is.null(result$correlation_results$forest_plot)) {
+#'   print(result$correlation_results$forest_plot)
 #' }
 #'
-#' # 4. Individual scatter plots for each patient/group
+#' # 4. Combined scatter plots for individual datasets
 #' if (!is.null(result$correlation_results$combined_scatter_plot)) {
 #'   print(result$correlation_results$combined_scatter_plot)
 #' }
 #'
-#' # 5. Meta-analysis forest plot
-#' if (!is.null(result$meta_analysis$forest_plot)) {
-#'   print(result$meta_analysis$forest_plot)
-#' }
-#'
-#' # 6. View correlation meta data
+#' # 5. View correlation meta data
 #' print(result$correlation_results$meta_data)
 #'
 #' # Get comprehensive summary
