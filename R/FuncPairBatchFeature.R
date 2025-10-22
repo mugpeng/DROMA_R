@@ -421,7 +421,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
   } else {
     # MultiDromaSet - get features from all projects that have the data (union)
     all_feature_lists <- list()
-    
+
     for (project_name in names(dromaset_object@DromaSets)) {
       dromaset <- dromaset_object@DromaSets[[project_name]]
 
@@ -449,7 +449,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
         }
       }
     }
-    
+
     # Take union of all features across projects
     if (length(all_feature_lists) > 0) {
       feature2_list <- unique(unlist(all_feature_lists))
@@ -542,11 +542,88 @@ batchFindSignificantFeatures <- function(dromaset_object,
 
   # Apply test_top_n filter
   if(!is.null(test_top_n) && is.numeric(test_top_n) && test_top_n > 0 && length(feature2_list) > test_top_n){
-    feature2_list <- feature2_list[1:min(test_top_n, length(feature2_list))]
+    feature2_list <- feature2_list[seq_len(min(test_top_n, length(feature2_list)))]
   }
 
   if(length(feature2_list) == 0) {
     stop("No features found for the selected feature 2 type or all specified feature2_name features are invalid.")
+  }
+
+  # Pre-load all feature2 data once to avoid repeated loading
+  # This is the key optimization: load the full matrix once instead of N times
+  message("Pre-loading feature2 data matrix...")
+  preloaded_feature2_data <- NULL
+
+  if (inherits(dromaset_object, "DromaSet")) {
+    # Single DromaSet
+    if (feature2_type %in% c("drug")) {
+      preloaded_feature2_data <- list()
+      all_drug_data <- loadTreatmentResponseNormalized(dromaset_object,
+                                                       data_type = data_type,
+                                                       tumor_type = tumor_type,
+                                                       return_data = TRUE)
+      if (is.matrix(all_drug_data)) {
+        preloaded_feature2_data[[dromaset_object@name]] <- all_drug_data
+      }
+    } else {
+      # Molecular profile data
+      preloaded_feature2_data <- list()
+      all_omics_data <- loadMolecularProfilesNormalized(dromaset_object,
+                                                        molecular_type = feature2_type,
+                                                        features = feature2_list,
+                                                        data_type = data_type,
+                                                        tumor_type = tumor_type,
+                                                        return_data = TRUE)
+      if (!is.null(all_omics_data)) {
+        preloaded_feature2_data[[dromaset_object@name]] <- all_omics_data
+      }
+    }
+  } else {
+    # MultiDromaSet - load data for all projects
+    if (feature2_type %in% c("drug")) {
+      preloaded_feature2_data <- loadMultiProjectTreatmentResponseNormalized(dromaset_object,
+                                                                             overlap_only = overlap_only,
+                                                                             data_type = data_type,
+                                                                             tumor_type = tumor_type)
+    } else {
+      # Molecular profile data
+      preloaded_feature2_data <- loadMultiProjectMolecularProfilesNormalized(dromaset_object,
+                                                                             molecular_type = feature2_type,
+                                                                             overlap_only = overlap_only,
+                                                                             data_type = data_type,
+                                                                             tumor_type = tumor_type)
+    }
+  }
+
+  message("Feature2 data pre-loaded successfully. Starting batch analysis...")
+
+  # Pre-compute sample intersections for continuous data (optimization)
+  sample_intersection_cache <- NULL
+  if (is_continuous1 && is_continuous2) {
+    message("Pre-computing sample intersections...")
+    sample_intersection_cache <- list()
+
+    for (d1_name in names(selected_feas1)) {
+      for (d2_name in names(preloaded_feature2_data)) {
+        cache_key <- paste(d1_name, d2_name, sep = "||")
+
+        # Get sample names from feature1
+        samples1 <- names(selected_feas1[[d1_name]])
+
+        # Get sample names from feature2 (matrix columns)
+        if (is.matrix(preloaded_feature2_data[[d2_name]])) {
+          samples2 <- colnames(preloaded_feature2_data[[d2_name]])
+        } else {
+          samples2 <- character(0)
+        }
+
+        # Cache the intersection
+        if (length(samples1) > 0 && length(samples2) > 0) {
+          sample_intersection_cache[[cache_key]] <- intersect(samples1, samples2)
+        }
+      }
+    }
+    message("Sample intersections cached successfully.")
   }
 
   # Define the worker function
@@ -559,9 +636,40 @@ batchFindSignificantFeatures <- function(dromaset_object,
 
       feature2_name <- feature2_list[x]
 
-      # Load feature2 data using helper function
-      selected_feas2 <- loadFeatureData(dromaset_object, feature2_type, feature2_name,
-                                       data_type, tumor_type, overlap_only, is_continuous2)
+      # Extract feature2 data from preloaded matrix (key optimization)
+      selected_feas2 <- NULL
+
+      if (!is.null(preloaded_feature2_data)) {
+        if (is_continuous2) {
+          # Continuous data - extract from matrix
+          selected_feas2 <- lapply(preloaded_feature2_data, function(data_matrix) {
+            if (is.matrix(data_matrix) && feature2_name %in% rownames(data_matrix)) {
+              data_vector <- as.numeric(data_matrix[feature2_name, ])
+              names(data_vector) <- colnames(data_matrix)
+              return(data_vector[!is.na(data_vector)])
+            }
+            return(NULL)
+          })
+        } else {
+          # Discrete data - extract sample IDs
+          selected_feas2 <- lapply(preloaded_feature2_data, function(omics_df) {
+            if (is.data.frame(omics_df)) {
+              if ("cells" %in% colnames(omics_df)) {
+                sample_ids <- omics_df$cells[omics_df$genes == feature2_name]
+              } else if ("samples" %in% colnames(omics_df)) {
+                sample_ids <- omics_df$samples[omics_df$genes == feature2_name]
+              } else {
+                sample_ids <- character(0)
+              }
+              return(sample_ids)
+            }
+            return(NULL)
+          })
+        }
+
+        # Remove NULL entries
+        selected_feas2 <- selected_feas2[!sapply(selected_feas2, is.null)]
+      }
 
       if (is.null(selected_feas2) || length(selected_feas2) == 0) {
         return(NULL)
@@ -578,7 +686,9 @@ batchFindSignificantFeatures <- function(dromaset_object,
       # do statistics test based on four circumstances
       # con vs con ----
       if (is_continuous1 && is_continuous2) {
-        selected_pair <- pairContinuousFeatures(selected_feas1, selected_feas2)
+        selected_pair <- pairContinuousFeatures(selected_feas1, selected_feas2,
+                                                merged = FALSE,
+                                                intersection_cache = sample_intersection_cache)
         cal_meta_re <- metaCalcConCon(selected_pair)
         # dis vs con ----
       } else if ((is_continuous1 && !is_continuous2) || (!is_continuous1 && is_continuous2)) {
@@ -648,13 +758,14 @@ batchFindSignificantFeatures <- function(dromaset_object,
         sfLibrary(DROMA.R)
 
         # Export required data and functions
-        sfExport("dromaset_object", "selected_feas1", "feature2_list",
+        # Key change: export preloaded_feature2_data instead of dromaset_object to reduce data transfer
+        sfExport("preloaded_feature2_data", "selected_feas1", "feature2_list",
                  "is_continuous1", "is_continuous2",
                  "feature1_type", "feature2_type", "data_type", "tumor_type", "overlap_only",
-                 "start_time", "samples_search")
+                 "start_time", "samples_search", "sample_intersection_cache")
 
         # Run parallel computation
-        cal_re_list <- sfLapply(1:length(feature2_list), worker_function)
+        cal_re_list <- sfLapply(seq_along(feature2_list), worker_function)
 
         # Clean up snowfall
         sfStop()
@@ -663,14 +774,14 @@ batchFindSignificantFeatures <- function(dromaset_object,
         message("Error details: ", e$message)
         sfStop()  # Clean up any existing parallel cluster
         # Run sequential computation
-        cal_re_list <- lapply(1:length(feature2_list), worker_function)
+        cal_re_list <- lapply(seq_along(feature2_list), worker_function)
       })
     }
   }
 
   if (cores == 1) {
     # Run sequential computation
-    cal_re_list <- lapply(1:length(feature2_list), worker_function)
+    cal_re_list <- lapply(seq_along(feature2_list), worker_function)
   }
 
   # Process results

@@ -6,9 +6,10 @@
 #' @param dataset1 First dataset list with named vectors
 #' @param dataset2 Second dataset list with named vectors
 #' @param merged Logical, if TRUE, creates an additional merged dataset combining all pairs
+#' @param intersection_cache Optional pre-computed sample intersection cache (NULL for auto-compute)
 #' @return List of paired data with feature1 and feature2 values
 #' @export
-pairContinuousFeatures <- function(dataset1, dataset2, merged = FALSE) {
+pairContinuousFeatures <- function(dataset1, dataset2, merged = FALSE, intersection_cache = NULL) {
   pair_list2 <- lapply(1:length(dataset1), function(x) {
     feat1_sel <- dataset1[[x]]
     pair_list <- lapply(1:length(dataset2), function(y) {
@@ -16,17 +17,28 @@ pairContinuousFeatures <- function(dataset1, dataset2, merged = FALSE) {
       feat1_sel <- na.omit(feat1_sel)
       feat2_sel <- na.omit(feat2_sel)
 
-      if(length(na.omit(feat1_sel)) == 0 | length(na.omit(feat2_sel)) == 0) {
+      if(length(feat1_sel) == 0 | length(feat2_sel) == 0) {
         return(NULL)
       }
 
-      intersected_cells <- intersect(names(feat1_sel), names(feat2_sel))
+      # Use cached intersection if available, otherwise compute
+      if (!is.null(intersection_cache)) {
+        cache_key <- paste(names(dataset1)[x], names(dataset2)[y], sep = "||")
+        intersected_cells <- intersection_cache[[cache_key]]
+        if (is.null(intersected_cells)) {
+          intersected_cells <- intersect(names(feat1_sel), names(feat2_sel))
+        }
+      } else {
+        intersected_cells <- intersect(names(feat1_sel), names(feat2_sel))
+      }
+      
       if(length(intersected_cells) < 3) {
         return(NULL)
       }
 
-      feat1_sel <- feat1_sel[match(intersected_cells, names(feat1_sel))]
-      feat2_sel <- feat2_sel[match(intersected_cells, names(feat2_sel))]
+      # Vectorized operation: direct indexing instead of match()
+      feat1_sel <- feat1_sel[intersected_cells]
+      feat2_sel <- feat2_sel[intersected_cells]
 
       list(feature1 = feat1_sel,
            feature2 = feat2_sel)
