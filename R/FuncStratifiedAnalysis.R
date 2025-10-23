@@ -30,11 +30,12 @@ getStratificationInfo <- function(dromaset_object,
   # Load stratification drug response data
   if (inherits(dromaset_object, "DromaSet")) {
     # Single DromaSet
-    strat_data <- loadTreatmentResponseNormalized(dromaset_object,
+    strat_data <- loadTreatmentResponse(dromaset_object,
                                                  drugs = stratification_drug,
                                                  data_type = "all",
                                                  tumor_type = "all",
-                                                 return_data = TRUE)
+                                                 return_data = TRUE,
+                                                 zscore = TRUE)
 
     if (!is.matrix(strat_data) || !stratification_drug %in% rownames(strat_data)) {
       stop("Stratification drug '", stratification_drug, "' not found in dataset")
@@ -74,12 +75,13 @@ getStratificationInfo <- function(dromaset_object,
 
   } else {
     # MultiDromaSet - handle each project separately
-    strat_data_list <- loadMultiProjectTreatmentResponseNormalized(
+    strat_data_list <- loadMultiProjectTreatmentResponse(
       dromaset_object,
       drugs = stratification_drug,
       overlap_only = FALSE,
       data_type = "all",
-      tumor_type = "all"
+      tumor_type = "all",
+      zscore = TRUE
     )
 
     # Check if any projects have the stratification drug
@@ -224,11 +226,12 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
   cat("Loading drug data...\n")
   if (inherits(dromaset_object, "DromaSet")) {
     # Single DromaSet
-    drug_data <- loadTreatmentResponseNormalized(dromaset_object,
+    drug_data <- loadTreatmentResponse(dromaset_object,
                                               drugs = select_drugs,
                                               data_type = data_type,
                                               tumor_type = tumor_type,
-                                              return_data = TRUE)
+                                              return_data = TRUE,
+                                              zscore = TRUE)
 
     # Convert matrix to list format
     if (is.matrix(drug_data) && select_drugs %in% rownames(drug_data)) {
@@ -241,12 +244,13 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
     }
   } else {
     # MultiDromaSet
-    drug_data_list <- loadMultiProjectTreatmentResponseNormalized(
+    drug_data_list <- loadMultiProjectTreatmentResponse(
       dromaset_object,
       drugs = select_drugs,
       overlap_only = overlap_only,
       data_type = data_type,
-      tumor_type = tumor_type
+      tumor_type = tumor_type,
+      zscore = TRUE
     )
 
     # Extract specific drug from each project
@@ -266,11 +270,12 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
   if (select_omics_type %in% c("drug", "drug_raw")) {
     # Another drug
     if (inherits(dromaset_object, "DromaSet")) {
-      omics_data <- loadTreatmentResponseNormalized(dromaset_object,
+      omics_data <- loadTreatmentResponse(dromaset_object,
                                                    drugs = select_omics,
                                                    data_type = data_type,
                                                    tumor_type = tumor_type,
-                                                   return_data = TRUE)
+                                                   return_data = TRUE,
+                                                   zscore = TRUE)
 
       if (is.matrix(omics_data) && select_omics %in% rownames(omics_data)) {
         omics_vector <- as.numeric(omics_data[select_omics, ])
@@ -281,12 +286,13 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
         omics_data_list <- list()
       }
     } else {
-      omics_data_list <- loadMultiProjectTreatmentResponseNormalized(
+      omics_data_list <- loadMultiProjectTreatmentResponse(
         dromaset_object,
         drugs = select_omics,
         overlap_only = overlap_only,
         data_type = data_type,
-        tumor_type = tumor_type
+        tumor_type = tumor_type,
+        zscore = TRUE
       )
 
       omics_data_list <- lapply(omics_data_list, function(drug_matrix) {
@@ -302,12 +308,13 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
   } else {
     # Molecular profiles
     if (inherits(dromaset_object, "DromaSet")) {
-      omics_data <- loadMolecularProfilesNormalized(dromaset_object,
+      omics_data <- loadMolecularProfiles(dromaset_object,
                                                   molecular_type = select_omics_type,
                                                   features = select_omics,
                                                   data_type = data_type,
                                                   tumor_type = tumor_type,
-                                                  return_data = TRUE)
+                                                  return_data = TRUE,
+                                                  zscore = TRUE)
 
       if (is.matrix(omics_data) && select_omics %in% rownames(omics_data)) {
         omics_data_list <- list()
@@ -326,13 +333,14 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
         omics_data_list <- list()
       }
     } else {
-      omics_data_list <- loadMultiProjectMolecularProfilesNormalized(
+      omics_data_list <- loadMultiProjectMolecularProfiles(
         dromaset_object,
         molecular_type = select_omics_type,
         features = select_omics,
         overlap_only = overlap_only,
         data_type = data_type,
-        tumor_type = tumor_type
+        tumor_type = tumor_type,
+        zscore = TRUE
       )
 
       omics_data_list <- lapply(omics_data_list, function(omics_matrix) {
@@ -851,25 +859,25 @@ filterStratifiedData <- function(loaded_data, stratification_info, stratum) {
 #'
 #' @description Performs drug-omics analysis on pre-filtered stratified data
 #' @param omics_data Filtered omics data
-#' @param drug_data Filtered drug data  
+#' @param drug_data Filtered drug data
 #' @param select_omics_type Type of omics data
 #' @param merged_enabled Whether to create merged dataset
 #' @param meta_enabled Whether to perform meta-analysis
 #' @return Analysis results
 #' @export
-analyzeStratifiedData <- function(omics_data, drug_data, select_omics_type, 
+analyzeStratifiedData <- function(omics_data, drug_data, select_omics_type,
                                  merged_enabled = TRUE, meta_enabled = TRUE) {
-  
+
   # Check if we have data
   if (length(drug_data) == 0 || length(omics_data) == 0) {
     return(list())
   }
-  
+
   # Perform analysis based on omics type
   if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
     # Continuous omics data
     pairs <- pairContinuousFeatures(omics_data, drug_data, merged = merged_enabled)
-    
+
     if (!is.null(pairs)) {
       result <- list(
         plot = plotMultipleCorrelations(
@@ -891,7 +899,7 @@ analyzeStratifiedData <- function(omics_data, drug_data, select_omics_type,
         ),
         data = pairs
       )
-      
+
       # Perform meta-analysis if multiple studies
       if (length(pairs) > 1 && meta_enabled) {
         # Remove merged dataset for meta-analysis
@@ -900,7 +908,7 @@ analyzeStratifiedData <- function(omics_data, drug_data, select_omics_type,
         } else {
           meta_pairs <- pairs
         }
-        
+
         if (length(meta_pairs) > 0) {
           result$meta <- metaCalcConCon(meta_pairs)
         }
@@ -911,13 +919,13 @@ analyzeStratifiedData <- function(omics_data, drug_data, select_omics_type,
   } else {
     # Discrete omics data
     pairs <- pairDiscreteFeatures(omics_data, drug_data, merged = merged_enabled)
-    
+
     if (!is.null(pairs)) {
       result <- list(
         plot = plotMultipleGroupComparisons(pairs, y_label = "Drug Response"),
         data = pairs
       )
-      
+
       # Perform meta-analysis if multiple studies
       if (length(pairs) > 1 && meta_enabled) {
         # Remove merged dataset for meta-analysis
@@ -926,7 +934,7 @@ analyzeStratifiedData <- function(omics_data, drug_data, select_omics_type,
         } else {
           meta_pairs <- pairs
         }
-        
+
         if (length(meta_pairs) > 0) {
           result$meta <- metaCalcConDis(meta_pairs)
         }
@@ -935,11 +943,12 @@ analyzeStratifiedData <- function(omics_data, drug_data, select_omics_type,
       result <- list()
     }
   }
-  
+
   return(result)
 }
 
 # Print method for StratifiedComparisonPlots
+#' @method print StratifiedComparisonPlots
 print.StratifiedComparisonPlots <- function(x, ...) {
   cat("Stratified Comparison Plots\n")
   cat("========================\n")
@@ -954,6 +963,7 @@ print.StratifiedComparisonPlots <- function(x, ...) {
 }
 
 # Plot method for StratifiedComparisonPlots
+#' @method plot StratifiedComparisonPlots
 plot.StratifiedComparisonPlots <- function(x, which = "forest", ...) {
   if (which == "forest" && !is.null(x$forest_plot)) {
     return(x$forest_plot)

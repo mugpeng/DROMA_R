@@ -230,11 +230,12 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
   # Load and extract drug data
   if (inherits(dromaset_object, "DromaSet")) {
     # Single DromaSet
-    myDrugs <- loadTreatmentResponseNormalized(dromaset_object,
+    myDrugs <- loadTreatmentResponse(dromaset_object,
                                     drugs = select_drugs,
                                     data_type = data_type,
                                     tumor_type = tumor_type,
-                                    return_data = TRUE)
+                                    return_data = TRUE,
+                                    zscore = TRUE)
 
     # Convert matrix to list format for compatibility
     if (is.matrix(myDrugs) && select_drugs %in% rownames(myDrugs)) {
@@ -246,11 +247,12 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
 
   } else {
     # MultiDromaSet
-    myDrugs <- loadMultiProjectTreatmentResponseNormalized(dromaset_object,
+    myDrugs <- loadMultiProjectTreatmentResponse(dromaset_object,
                                                 drugs = select_drugs,
                                                 overlap_only = overlap_only,
                                                 data_type = data_type,
-                                                tumor_type = tumor_type)
+                                                tumor_type = tumor_type,
+                                                zscore = TRUE)
 
     # Extract specific drug from each project
     myDrugs <- lapply(myDrugs, function(drug_matrix) {
@@ -271,11 +273,12 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
     # Single DromaSet
     if (select_omics_type %in% c("drug", "drug_raw")) {
       # This is actually another drug, use treatment response
-      myOmics <- loadTreatmentResponseNormalized(dromaset_object,
+      myOmics <- loadTreatmentResponse(dromaset_object,
                                       drugs = select_omics,
                                       data_type = data_type,
                                       tumor_type = tumor_type,
-                                      return_data = TRUE)
+                                      return_data = TRUE,
+                                      zscore = TRUE)
 
       if (is.matrix(myOmics) && select_omics %in% rownames(myOmics)) {
         omics_vector <- as.numeric(myOmics[select_omics, ])
@@ -285,12 +288,13 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
       }
     } else {
       # Molecular profile data
-      myOmics <- loadMolecularProfilesNormalized(dromaset_object,
+      myOmics <- loadMolecularProfiles(dromaset_object,
                                       molecular_type = select_omics_type,
                                       features = select_omics,
                                       data_type = data_type,
                                       tumor_type = tumor_type,
-                                      return_data = TRUE)
+                                      return_data = TRUE,
+                                      zscore = TRUE)
 
       # Handle different data types
       if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
@@ -322,11 +326,12 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
     # MultiDromaSet
     if (select_omics_type %in% c("drug", "drug_raw")) {
       # This is actually another drug, use treatment response
-      myOmics <- loadMultiProjectTreatmentResponseNormalized(dromaset_object,
+      myOmics <- loadMultiProjectTreatmentResponse(dromaset_object,
                                                   drugs = select_omics,
                                                   overlap_only = overlap_only,
                                                   data_type = data_type,
-                                                  tumor_type = tumor_type)
+                                                  tumor_type = tumor_type,
+                                                  zscore = TRUE)
 
       # Extract specific drug from each project
       myOmics <- lapply(myOmics, function(drug_matrix) {
@@ -339,12 +344,13 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
       })
     } else {
       # Molecular profile data
-      myOmics <- loadMultiProjectMolecularProfilesNormalized(dromaset_object,
+      myOmics <- loadMultiProjectMolecularProfiles(dromaset_object,
                                                   molecular_type = select_omics_type,
                                                   features = select_omics,
                                                   overlap_only = overlap_only,
                                                   data_type = data_type,
-                                                  tumor_type = tumor_type)
+                                                  tumor_type = tumor_type,
+                                                  zscore = TRUE)
 
       # Handle different data types
       if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {

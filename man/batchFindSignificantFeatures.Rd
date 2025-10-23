@@ -42,7 +42,7 @@ batchFindSignificantFeatures(
 \item{test_top_n}{Integer, number of top features to test (default: NULL for all features)}
 }
 \value{
-Data frame with meta-analysis results (p_value, effect_size, name)
+Data frame with meta-analysis results (p_value, effect_size, n_datasets, name). NA values are replaced: p_value -> 1, effect_size -> 0
 }
 \description{
 Performs batch analysis to identify features significantly associated with a reference feature using DromaSet or MultiDromaSet objects

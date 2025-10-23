@@ -4,7 +4,12 @@
 \alias{pairContinuousFeatures}
 \title{Pair continuous features from two datasets}
 \usage{
-pairContinuousFeatures(dataset1, dataset2, merged = FALSE)
+pairContinuousFeatures(
+  dataset1,
+  dataset2,
+  merged = FALSE,
+  intersection_cache = NULL
+)
 }
 \arguments{
 \item{dataset1}{First dataset list with named vectors}
@@ -12,6 +17,8 @@ pairContinuousFeatures(dataset1, dataset2, merged = FALSE)
 \item{dataset2}{Second dataset list with named vectors}
 
 \item{merged}{Logical, if TRUE, creates an additional merged dataset combining all pairs}
+
+\item{intersection_cache}{Optional pre-computed sample intersection cache (NULL for auto-compute)}
 }
 \value{
 List of paired data with feature1 and feature2 values

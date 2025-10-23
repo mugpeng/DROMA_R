@@ -38,11 +38,12 @@ processDrugData <- function(dromaset_object, drug_name, data_type = "all", tumor
   # Load drug data
   if (inherits(dromaset_object, "DromaSet")) {
     # Single DromaSet - Load normalized data
-    drug_data <- loadTreatmentResponseNormalized(dromaset_object,
+    drug_data <- loadTreatmentResponse(dromaset_object,
                                       drugs = drug_name,
                                       data_type = data_type,
                                       tumor_type = tumor_type,
-                                      return_data = TRUE)
+                                      return_data = TRUE,
+                                      zscore = TRUE)
 
     # Convert matrix to list format for compatibility
     if (is.matrix(drug_data) && drug_name %in% rownames(drug_data)) {
@@ -55,7 +56,7 @@ processDrugData <- function(dromaset_object, drug_name, data_type = "all", tumor
     }
 
     # Load raw data (non-normalized)
-    raw_drug_data <- loadTreatmentResponseNormalized(dromaset_object,
+    raw_drug_data <- loadTreatmentResponse(dromaset_object,
                                           drugs = drug_name,
                                           data_type = data_type,
                                           tumor_type = tumor_type,
@@ -74,11 +75,12 @@ processDrugData <- function(dromaset_object, drug_name, data_type = "all", tumor
 
   } else {
     # MultiDromaSet - Load normalized data
-    drug_data <- loadMultiProjectTreatmentResponseNormalized(dromaset_object,
+    drug_data <- loadMultiProjectTreatmentResponse(dromaset_object,
                                                   drugs = drug_name,
                                                   overlap_only = overlap_only,
                                                   data_type = data_type,
-                                                  tumor_type = tumor_type)
+                                                  tumor_type = tumor_type,
+                                                  zscore = TRUE)
 
     # Extract specific drug from each project
     drug_data_list <- lapply(drug_data, function(drug_matrix) {
@@ -94,7 +96,7 @@ processDrugData <- function(dromaset_object, drug_name, data_type = "all", tumor
     drug_data_list <- drug_data_list[!sapply(drug_data_list, is.null)]
 
     # Load raw data (non-normalized)
-    raw_drug_data <- loadMultiProjectTreatmentResponseNormalized(dromaset_object,
+    raw_drug_data <- loadMultiProjectTreatmentResponse(dromaset_object,
                                                       drugs = drug_name,
                                                       overlap_only = overlap_only,
                                                       data_type = data_type,

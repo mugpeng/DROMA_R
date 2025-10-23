@@ -45,11 +45,12 @@ loadFeatureData <- function(dromaset_object, feature_type, feature_name,
   if (inherits(dromaset_object, "DromaSet")) {
     # Single DromaSet
     if (feature_type %in% c("drug")) {
-      feature_data <- loadTreatmentResponseNormalized(dromaset_object,
+      feature_data <- loadTreatmentResponse(dromaset_object,
                                            drugs = feature_name,
                                            data_type = data_type,
                                            tumor_type = tumor_type,
-                                           return_data = TRUE)
+                                           return_data = TRUE,
+                                           zscore = TRUE)
 
       if (is.matrix(feature_data) && feature_name %in% rownames(feature_data)) {
         feature_vector <- as.numeric(feature_data[feature_name, ])
@@ -60,11 +61,12 @@ loadFeatureData <- function(dromaset_object, feature_type, feature_name,
       }
     } else {
       # Molecular profile data
-      feature_data <- loadMolecularProfilesNormalized(dromaset_object,
+      feature_data <- loadMolecularProfiles(dromaset_object,
                                            molecular_type = feature_type,
                                            data_type = data_type,
                                            tumor_type = tumor_type,
-                                           return_data = TRUE)
+                                           return_data = TRUE,
+                                           zscore = TRUE)
 
       if (is_continuous) {
         # Continuous data
@@ -94,11 +96,12 @@ loadFeatureData <- function(dromaset_object, feature_type, feature_name,
   } else {
     # MultiDromaSet
     if (feature_type %in% c("drug")) {
-      feature_data <- loadMultiProjectTreatmentResponseNormalized(dromaset_object,
+      feature_data <- loadMultiProjectTreatmentResponse(dromaset_object,
                                                         drugs = feature_name,
                                                         overlap_only = overlap_only,
                                                         data_type = data_type,
-                                                        tumor_type = tumor_type)
+                                                        tumor_type = tumor_type,
+                                                        zscore = TRUE)
 
       result <- lapply(feature_data, function(data_matrix) {
         if (is.matrix(data_matrix) && feature_name %in% rownames(data_matrix)) {
@@ -110,10 +113,11 @@ loadFeatureData <- function(dromaset_object, feature_type, feature_name,
       })
     } else {
       # Molecular profile data
-      feature_data <- loadMultiProjectMolecularProfilesNormalized(dromaset_object,
+      feature_data <- loadMultiProjectMolecularProfiles(dromaset_object,
                                                         molecular_type = feature_type,
                                                         data_type = data_type,
-                                                        tumor_type = tumor_type)
+                                                        tumor_type = tumor_type,
+                                                        zscore = TRUE)
 
       if (is_continuous) {
         # Continuous data
@@ -198,9 +202,10 @@ getSampleMetadata <- function(dromaset_object, feature1_type, feature2_type) {
     available_profiles <- availableMolecularProfiles(dromaset_object)
     for (profile_type in available_profiles) {
       if (profile_type %in% c(feature1_type, feature2_type)) {
-        profile_data <- loadMolecularProfilesNormalized(dromaset_object,
+        profile_data <- loadMolecularProfiles(dromaset_object,
                                                molecular_type = profile_type,
-                                               return_data = TRUE)
+                                               return_data = TRUE,
+                                               zscore = TRUE)
         if (is.matrix(profile_data)) {
           all_samples <- c(all_samples, colnames(profile_data))
         } else if (is.data.frame(profile_data)) {
@@ -266,7 +271,7 @@ getSampleMetadata <- function(dromaset_object, feature1_type, feature2_type) {
 #' @param cores Number of CPU cores to use for parallel processing
 #' @param progress_callback Optional callback function for progress updates
 #' @param test_top_n Integer, number of top features to test (default: NULL for all features)
-#' @return Data frame with meta-analysis results (p_value, effect_size, name)
+#' @return Data frame with meta-analysis results (p_value, effect_size, n_datasets, name). NA values are replaced: p_value -> 1, effect_size -> 0
 #' @export
 #' @examples
 #' \dontrun{
@@ -396,7 +401,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
       available_features <- availableTreatmentResponses(dromaset_object)
       if ("drug" %in% available_features) {
         # Load all drugs to get feature names
-        all_drug_data <- loadTreatmentResponseNormalized(dromaset_object, return_data = TRUE)
+        all_drug_data <- loadTreatmentResponse(dromaset_object, return_data = TRUE, zscore = TRUE)
         if (is.matrix(all_drug_data)) {
           feature2_list <- rownames(all_drug_data)
         }
@@ -406,11 +411,12 @@ batchFindSignificantFeatures <- function(dromaset_object,
       available_profiles <- availableMolecularProfiles(dromaset_object)
       if (feature2_type %in% available_profiles) {
         # Load all features to get feature names
-        all_omics_data <- loadMolecularProfilesNormalized(dromaset_object,
+        all_omics_data <- loadMolecularProfiles(dromaset_object,
                                                molecular_type = feature2_type,
                                                data_type = data_type,
                                                tumor_type = tumor_type,
-                                               return_data = TRUE)
+                                               return_data = TRUE,
+                                               zscore = TRUE)
         if (is.matrix(all_omics_data)) {
           feature2_list <- rownames(all_omics_data)
         } else if (is.data.frame(all_omics_data) && "genes" %in% colnames(all_omics_data)) {
@@ -428,7 +434,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
       if (feature2_type %in% c("drug")) {
         available_features <- availableTreatmentResponses(dromaset)
         if ("drug" %in% available_features) {
-          all_drug_data <- loadTreatmentResponseNormalized(dromaset, return_data = TRUE)
+          all_drug_data <- loadTreatmentResponse(dromaset, return_data = TRUE, zscore = TRUE)
           if (is.matrix(all_drug_data)) {
             all_feature_lists[[project_name]] <- rownames(all_drug_data)
           }
@@ -436,11 +442,12 @@ batchFindSignificantFeatures <- function(dromaset_object,
       } else {
         available_profiles <- availableMolecularProfiles(dromaset)
         if (feature2_type %in% available_profiles) {
-          all_omics_data <- loadMolecularProfilesNormalized(dromaset,
+          all_omics_data <- loadMolecularProfiles(dromaset,
                                                  molecular_type = feature2_type,
                                                  data_type = data_type,
                                                  tumor_type = tumor_type,
-                                                 return_data = TRUE)
+                                                 return_data = TRUE,
+                                                 zscore = TRUE)
           if (is.matrix(all_omics_data)) {
             all_feature_lists[[project_name]] <- rownames(all_omics_data)
           } else if (is.data.frame(all_omics_data) && "genes" %in% colnames(all_omics_data)) {
@@ -468,7 +475,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
       if (feature2_type %in% c("drug")) {
         available_features <- availableTreatmentResponses(dromaset_object)
         if ("drug" %in% available_features) {
-          all_drug_data <- loadTreatmentResponseNormalized(dromaset_object, return_data = TRUE)
+          all_drug_data <- loadTreatmentResponse(dromaset_object, return_data = TRUE, zscore = TRUE)
           if (is.matrix(all_drug_data)) {
             all_available_features <- rownames(all_drug_data)
           }
@@ -476,11 +483,12 @@ batchFindSignificantFeatures <- function(dromaset_object,
       } else {
         available_profiles <- availableMolecularProfiles(dromaset_object)
         if (feature2_type %in% available_profiles) {
-          all_omics_data <- loadMolecularProfilesNormalized(dromaset_object,
+          all_omics_data <- loadMolecularProfiles(dromaset_object,
                                                  molecular_type = feature2_type,
                                                  data_type = data_type,
                                                  tumor_type = tumor_type,
-                                                 return_data = TRUE)
+                                                 return_data = TRUE,
+                                                 zscore = TRUE)
           if (is.matrix(all_omics_data)) {
             all_available_features <- rownames(all_omics_data)
           } else if (is.data.frame(all_omics_data) && "genes" %in% colnames(all_omics_data)) {
@@ -498,7 +506,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
         if (feature2_type %in% c("drug")) {
           available_features <- availableTreatmentResponses(dromaset)
           if ("drug" %in% available_features) {
-            all_drug_data <- loadTreatmentResponseNormalized(dromaset, return_data = TRUE)
+            all_drug_data <- loadTreatmentResponse(dromaset, return_data = TRUE, zscore = TRUE)
             if (is.matrix(all_drug_data)) {
               all_feature_lists[[project_name]] <- rownames(all_drug_data)
             }
@@ -506,11 +514,12 @@ batchFindSignificantFeatures <- function(dromaset_object,
         } else {
           available_profiles <- availableMolecularProfiles(dromaset)
           if (feature2_type %in% available_profiles) {
-            all_omics_data <- loadMolecularProfilesNormalized(dromaset,
+            all_omics_data <- loadMolecularProfiles(dromaset,
                                                    molecular_type = feature2_type,
                                                    data_type = data_type,
                                                    tumor_type = tumor_type,
-                                                   return_data = TRUE)
+                                                   return_data = TRUE,
+                                                   zscore = TRUE)
             if (is.matrix(all_omics_data)) {
               all_feature_lists[[project_name]] <- rownames(all_omics_data)
             } else if (is.data.frame(all_omics_data) && "genes" %in% colnames(all_omics_data)) {
@@ -558,22 +567,24 @@ batchFindSignificantFeatures <- function(dromaset_object,
     # Single DromaSet
     if (feature2_type %in% c("drug")) {
       preloaded_feature2_data <- list()
-      all_drug_data <- loadTreatmentResponseNormalized(dromaset_object,
+      all_drug_data <- loadTreatmentResponse(dromaset_object,
                                                        data_type = data_type,
                                                        tumor_type = tumor_type,
-                                                       return_data = TRUE)
+                                                       return_data = TRUE,
+                                                       zscore = TRUE)
       if (is.matrix(all_drug_data)) {
         preloaded_feature2_data[[dromaset_object@name]] <- all_drug_data
       }
     } else {
       # Molecular profile data
       preloaded_feature2_data <- list()
-      all_omics_data <- loadMolecularProfilesNormalized(dromaset_object,
+      all_omics_data <- loadMolecularProfiles(dromaset_object,
                                                         molecular_type = feature2_type,
                                                         features = feature2_list,
                                                         data_type = data_type,
                                                         tumor_type = tumor_type,
-                                                        return_data = TRUE)
+                                                        return_data = TRUE,
+                                                        zscore = TRUE)
       if (!is.null(all_omics_data)) {
         preloaded_feature2_data[[dromaset_object@name]] <- all_omics_data
       }
@@ -581,17 +592,19 @@ batchFindSignificantFeatures <- function(dromaset_object,
   } else {
     # MultiDromaSet - load data for all projects
     if (feature2_type %in% c("drug")) {
-      preloaded_feature2_data <- loadMultiProjectTreatmentResponseNormalized(dromaset_object,
+      preloaded_feature2_data <- loadMultiProjectTreatmentResponse(dromaset_object,
                                                                              overlap_only = overlap_only,
                                                                              data_type = data_type,
-                                                                             tumor_type = tumor_type)
+                                                                             tumor_type = tumor_type,
+                                                                             zscore = TRUE)
     } else {
       # Molecular profile data
-      preloaded_feature2_data <- loadMultiProjectMolecularProfilesNormalized(dromaset_object,
+      preloaded_feature2_data <- loadMultiProjectMolecularProfiles(dromaset_object,
                                                                              molecular_type = feature2_type,
                                                                              overlap_only = overlap_only,
                                                                              data_type = data_type,
-                                                                             tumor_type = tumor_type)
+                                                                             tumor_type = tumor_type,
+                                                                             zscore = TRUE)
     }
   }
 
@@ -717,10 +730,20 @@ batchFindSignificantFeatures <- function(dromaset_object,
       }
 
       if(is.null(cal_meta_re)) return(NULL)
+      
+      # Extract p_value and effect_size
+      p_val <- cal_meta_re[["pval.random"]]
+      eff_size <- cal_meta_re[["TE.random"]]
+      n_datasets <- length(cal_meta_re[["studlab"]])
+      
+      # Replace NA values: p_value -> 1, effect_size -> 0
+      if(is.na(p_val)) p_val <- 1
+      if(is.na(eff_size)) eff_size <- 0
+      
       results <- data.frame(
-        p_value = cal_meta_re[["pval.random"]],
-        effect_size = cal_meta_re[["TE.random"]]
-      #   N = length(cal_meta_re[["studlab"]])
+        p_value = p_val,
+        effect_size = eff_size,
+        n_datasets = n_datasets
       )
     }, error = function(e) {
       # Log detailed error but continue processing
