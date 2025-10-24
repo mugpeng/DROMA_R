@@ -13,7 +13,8 @@ analyzeDrugOmicPair(
   tumor_type = "all",
   overlap_only = FALSE,
   merged_enabled = TRUE,
-  meta_enabled = TRUE
+  meta_enabled = TRUE,
+  zscore = TRUE
 )
 }
 \arguments{
@@ -34,6 +35,8 @@ analyzeDrugOmicPair(
 \item{merged_enabled}{Logical, whether to create a merged dataset from all studies}
 
 \item{meta_enabled}{Logical, whether to perform meta-analysis}
+
+\item{zscore}{Logical, whether to apply z-score normalization to treatment response and molecular profiles (default: TRUE). If FALSE, merged_enabled should be set to FALSE to avoid combining non-normalized data from different studies.}
 }
 \value{
 A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), meta-analysis results, and data

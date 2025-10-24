@@ -1,194 +1,4 @@
 # Drug-Omic Pair Analysis Functions ----
-# These functions leverage the modular FuncMetaAnalysis, FuncDataPairing, and FuncVisualization modules
-
-#' Pair continuous omics and drug data
-#'
-#' @description Creates paired datasets of omics and drug response data from multiple sources
-#' @param myOmics List of omics data vectors
-#' @param myDrugs List of drug response data vectors
-#' @param merged Logical, if TRUE, creates an additional merged dataset combining all pairs
-#' @return A list of paired omics-drug datasets
-#' @export
-pairDrugOmic <- function(myOmics, myDrugs, merged = FALSE) {
-  # Convert to standard format for pairContinuousFeatures
-  pairs <- pairContinuousFeatures(myOmics, myDrugs, merged = merged)
-
-  # Convert feature1/feature2 to omic/drug format for backward compatibility
-  if (!is.null(pairs)) {
-    pairs <- lapply(pairs, function(pair) {
-      if (!is.null(pair$feature1) && !is.null(pair$feature2)) {
-        list(omic = pair$feature1, drug = pair$feature2)
-      } else {
-        pair
-      }
-    })
-  }
-
-  return(pairs)
-}
-
-#' Analyze continuous drug-omics pairs
-#'
-#' @description Performs meta-analysis on continuous drug-omic pairs using Spearman correlation
-#' @param myPairs List of paired omics-drug datasets from pairDrugOmic
-#' @return Meta-analysis results object or NULL if analysis couldn't be performed
-#' @export
-analyzeContinuousDrugOmic <- function(myPairs) {
-  # Convert omic/drug format to feature1/feature2 format for metaCalcConCon
-  converted_pairs <- lapply(myPairs, function(pair) {
-    if (!is.null(pair$omic) && !is.null(pair$drug)) {
-      list(feature1 = pair$omic, feature2 = pair$drug)
-    } else {
-      NULL
-    }
-  })
-
-  # Remove NULL entries
-  converted_pairs <- converted_pairs[!sapply(converted_pairs, is.null)]
-
-  if (length(converted_pairs) == 0) return(NULL)
-
-  # Use the centralized meta-analysis function
-  metaCalcConCon(converted_pairs)
-}
-
-#' Pair discrete omics and drug data
-#'
-#' @description Creates paired datasets of discrete omics and drug response data
-#' @param myOmics List of discrete omics data (samples with feature present)
-#' @param myDrugs List of drug response data vectors
-#' @param merged Logical, if TRUE, creates an additional merged dataset combining all pairs
-#' @return A list of paired drug-omics datasets with yes/no groups
-#' @export
-pairDiscreteDrugOmic <- function(myOmics, myDrugs, merged = FALSE) {
-  # Use the centralized pairing function
-  pairDiscreteFeatures(myOmics, myDrugs, merged = merged)
-}
-
-#' Analyze discrete drug-omics pairs
-#'
-#' @description Performs meta-analysis on discrete drug-omic pairs using Wilcoxon test and Cliff's Delta
-#' @param myPairs List of paired drug-omics datasets from pairDiscreteDrugOmic
-#' @return Meta-analysis results object or NULL if analysis couldn't be performed
-#' @export
-analyzeDiscreteDrugOmic <- function(myPairs) {
-  # Use the centralized meta-analysis function
-  metaCalcConDis(myPairs)
-}
-
-#' Plot correlation between continuous drug and omic data
-#'
-#' @description Creates a scatter plot with correlation statistics for a single drug-omic pair
-#' @param omic_values Vector of omic feature values
-#' @param drug_values Vector of drug response values
-#' @param study_name Name of the study for plot title
-#' @return A ggplot2 object with scatter plot and correlation statistics
-#' @export
-plotContinuousDrugOmic <- function(omic_values, drug_values, study_name) {
-  # Use the centralized plotting function
-  plotCorrelation(omic_values, drug_values,
-                  x_label = "Omic Feature",
-                  y_label = "Drug Response",
-                  title = study_name,
-                  method = "spearman")
-}
-
-#' Plot all continuous drug-omic pairs
-#'
-#' @description Creates and combines plots for all continuous drug-omic pairs
-#' @param pairs_list List of paired drug-omic datasets
-#' @return A combined plot with all drug-omic correlations or NULL if no valid pairs
-#' @export
-plotAllContinuousDrugOmic <- function(pairs_list) {
-  # Convert omic/drug format to feature1/feature2 format for plotting
-  converted_pairs <- lapply(pairs_list, function(pair) {
-    if (!is.null(pair$omic) && !is.null(pair$drug)) {
-      list(feature1 = pair$omic, feature2 = pair$drug)
-    } else {
-      NULL
-    }
-  })
-
-  # Remove NULL entries
-  converted_pairs <- converted_pairs[!sapply(converted_pairs, is.null)]
-
-  if (length(converted_pairs) == 0) return(NULL)
-
-  # Skip merged dataset for individual plots
-  if ("merged_dataset" %in% names(converted_pairs)) {
-    converted_pairs <- converted_pairs[names(converted_pairs) != "merged_dataset"]
-  }
-
-  # Use the centralized plotting function
-  plotMultipleCorrelations(converted_pairs,
-                            x_label = "Omic Feature",
-                            y_label = "Drug Response")
-}
-
-#' Plot drug response by discrete omic feature
-#'
-#' @description Creates a boxplot comparing drug response between samples with and without a discrete omic feature
-#' @param yes_values Drug response values for samples with the feature
-#' @param no_values Drug response values for samples without the feature
-#' @param study_name Name of the study for plot title
-#' @return A ggplot2 object with boxplot and statistical test
-#' @export
-plotDiscreteDrugOmic <- function(yes_values, no_values, study_name) {
-  # Use the centralized plotting function
-  plotGroupComparison(yes_values, no_values,
-                       group_labels = c("Without Feature", "With Feature"),
-                       title = study_name,
-                       y_label = "Drug Response")
-}
-
-#' Plot all discrete drug-omic pairs
-#'
-#' @description Creates and combines plots for all discrete drug-omic pairs
-#' @param pairs_list List of paired drug-omic datasets with yes/no groups
-#' @return A combined plot with all discrete drug-omic comparisons or NULL if no valid pairs
-#' @export
-plotAllDiscreteDrugOmic <- function(pairs_list) {
-  # Skip merged dataset for individual plots
-  if ("merged_dataset" %in% names(pairs_list)) {
-    plot_list <- pairs_list[names(pairs_list) != "merged_dataset"]
-  } else {
-    plot_list <- pairs_list
-  }
-
-  # Use the centralized plotting function
-  plotMultipleGroupComparisons(plot_list,
-                               y_label = "Drug Response")
-}
-
-#' Create a forest plot for meta-analysis results
-#'
-#' @description Creates a standardized forest plot for visualizing meta-analysis results
-#' @param meta_obj Meta-analysis object from metagen() function
-#' @param xlab Label for x-axis
-#' @param show_common Logical, whether to show common effect model
-#' @return A forest plot visualization
-#' @export
-createForestPlot <- function(meta_obj,
-                             xlab = "Effect Size (95% CI)",
-                             show_common = FALSE) {
-  # Use the centralized function from FuncMetaAnalysis
-  createForestPlot(meta_obj, xlab, show_common)
-}
-
-#' Create plot with common axis labels
-#'
-#' @description Creates a plot with common axis labels for multiple subplots
-#' @param p A patchwork object containing multiple plots
-#' @param x_title Common x-axis title
-#' @param y_title Common y-axis title
-#' @return A function that generates the plot when called
-#' @export
-createPlotWithCommonAxes <- function(p, x_title = "Common X-Axis Title",
-                                     y_title = "Common Y-Axis Title") {
-  # Use the centralized function from FuncVisualization
-  FuncVisualization::createPlotWithCommonAxes(p, x_title, y_title)
-}
-
 # Main Analysis Function ----
 
 #' Analyze drug-omic pair associations using DromaSet objects
@@ -203,6 +13,7 @@ createPlotWithCommonAxes <- function(p, x_title = "Common X-Axis Title",
 #' @param overlap_only For MultiDromaSet, whether to use only overlapping samples (default: FALSE)
 #' @param merged_enabled Logical, whether to create a merged dataset from all studies
 #' @param meta_enabled Logical, whether to perform meta-analysis
+#' @param zscore Logical, whether to apply z-score normalization to treatment response and molecular profiles (default: TRUE). If FALSE, merged_enabled should be set to FALSE to avoid combining non-normalized data from different studies.
 #' @return A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), meta-analysis results, and data
 #' @export
 #' @examples
@@ -220,11 +31,17 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
                                 data_type = "all", tumor_type = "all",
                                 overlap_only = FALSE,
                                 merged_enabled = TRUE,
-                                meta_enabled = TRUE){
+                                meta_enabled = TRUE,
+                                zscore = TRUE){
 
   # Validate input object
   if (!inherits(dromaset_object, c("DromaSet", "MultiDromaSet"))) {
     stop("Input must be a DromaSet or MultiDromaSet object from DROMA.Set package")
+  }
+  
+  # Warning if zscore is FALSE but merged_enabled is TRUE
+  if (!zscore && merged_enabled) {
+    warning("Without z-score normalization (zscore=FALSE), merging data from different studies may not be appropriate. Consider setting merged_enabled=FALSE.")
   }
 
   # Load and extract drug data
@@ -235,7 +52,7 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
                                     data_type = data_type,
                                     tumor_type = tumor_type,
                                     return_data = TRUE,
-                                    zscore = TRUE)
+                                    zscore = zscore)
 
     # Convert matrix to list format for compatibility
     if (is.matrix(myDrugs) && select_drugs %in% rownames(myDrugs)) {
@@ -252,7 +69,7 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
                                                 overlap_only = overlap_only,
                                                 data_type = data_type,
                                                 tumor_type = tumor_type,
-                                                zscore = TRUE)
+                                                zscore = zscore)
 
     # Extract specific drug from each project
     myDrugs <- lapply(myDrugs, function(drug_matrix) {
@@ -278,7 +95,7 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
                                       data_type = data_type,
                                       tumor_type = tumor_type,
                                       return_data = TRUE,
-                                      zscore = TRUE)
+                                      zscore = zscore)
 
       if (is.matrix(myOmics) && select_omics %in% rownames(myOmics)) {
         omics_vector <- as.numeric(myOmics[select_omics, ])
@@ -294,7 +111,7 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
                                       data_type = data_type,
                                       tumor_type = tumor_type,
                                       return_data = TRUE,
-                                      zscore = TRUE)
+                                      zscore = zscore)
 
       # Handle different data types
       if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
@@ -331,7 +148,7 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
                                                   overlap_only = overlap_only,
                                                   data_type = data_type,
                                                   tumor_type = tumor_type,
-                                                  zscore = TRUE)
+                                                  zscore = zscore)
 
       # Extract specific drug from each project
       myOmics <- lapply(myOmics, function(drug_matrix) {
@@ -350,7 +167,7 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
                                                   overlap_only = overlap_only,
                                                   data_type = data_type,
                                                   tumor_type = tumor_type,
-                                                  zscore = TRUE)
+                                                  zscore = zscore)
 
       # Handle different data types
       if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
@@ -393,8 +210,8 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
 
   # Handle continuous omics data
   if(select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")){
-    # Pair data
-    myPairs <- pairDrugOmic(myOmics, myDrugs, merged = merged_enabled)
+    # Pair data using pairContinuousFeatures
+    myPairs <- pairContinuousFeatures(myOmics, myDrugs, merged = merged_enabled)
 
     # Separate individual pairs from merged pairs for analysis
     individual_pairs <- myPairs
@@ -407,19 +224,26 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
       individual_pairs <- myPairs[names(myPairs) != "merged_dataset"]
     }
 
-    # Create plots for individual studies
-    result$plot <- plotAllContinuousDrugOmic(individual_pairs)
+    # Create plots for individual studies using plotMultipleCorrelations
+    if (length(individual_pairs) > 0) {
+      result$plot <- plotMultipleCorrelations(individual_pairs,
+                                              x_label = "Omic Feature",
+                                              y_label = "Drug Response")
+    }
 
     # Create plot for merged dataset if available
     if (!is.null(merged_pair) && merged_enabled) {
-      result$merged_plot <- plotContinuousDrugOmic(merged_pair$omic,
-                                                   merged_pair$drug,
-                                                   "Merged Dataset")
+      result$merged_plot <- plotCorrelation(merged_pair$feature1,
+                                           merged_pair$feature2,
+                                           x_label = "Omic Feature",
+                                           y_label = "Drug Response",
+                                           title = "Merged Dataset",
+                                           method = "spearman")
     }
 
     # Perform meta-analysis on individual pairs only (exclude merged data)
     if(meta_enabled && length(individual_pairs) > 0){
-      meta_result <- analyzeContinuousDrugOmic(individual_pairs)
+      meta_result <- metaCalcConCon(individual_pairs)
       if (!is.null(meta_result)) {
         result$meta <- meta_result
       }
@@ -428,8 +252,8 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
     # Store data
     result$data <- myPairs
   } else {
-    # Pair data
-    myPairs <- pairDiscreteDrugOmic(myOmics, myDrugs, merged = merged_enabled)
+    # Pair data using pairDiscreteFeatures
+    myPairs <- pairDiscreteFeatures(myOmics, myDrugs, merged = merged_enabled)
 
     # Separate individual pairs from merged pairs for analysis
     individual_pairs <- myPairs
@@ -442,17 +266,23 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
       individual_pairs <- myPairs[names(myPairs) != "merged_dataset"]
     }
 
-    # Create plots for individual studies
-    result$plot <- plotAllDiscreteDrugOmic(individual_pairs)
+    # Create plots for individual studies using plotMultipleGroupComparisons
+    if (length(individual_pairs) > 0) {
+      result$plot <- plotMultipleGroupComparisons(individual_pairs,
+                                                  y_label = "Drug Response")
+    }
 
     # Create plot for merged dataset if available
     if (!is.null(merged_pair) && merged_enabled) {
-      result$merged_plot <- plotDiscreteDrugOmic(merged_pair$yes, merged_pair$no, "Merged Dataset")
+      result$merged_plot <- plotGroupComparison(merged_pair$yes, merged_pair$no,
+                                                group_labels = c("Without Feature", "With Feature"),
+                                                title = "Merged Dataset",
+                                                y_label = "Drug Response")
     }
 
     # Perform meta-analysis on individual pairs only (exclude merged data)
     if(meta_enabled && length(individual_pairs) > 0){
-      meta_result <- analyzeDiscreteDrugOmic(individual_pairs)
+      meta_result <- metaCalcConDis(individual_pairs)
       if (!is.null(meta_result)) {
         result$meta <- meta_result
       }
