@@ -1,17 +1,3 @@
-# Meta-analysis Functions ----
-# Note: Meta-analysis functions are now centralized in FuncMetaAnalysis module
-
-# Utility Functions ----
-# Note: Utility functions are now centralized in FuncDataPairing module
-
-# Pairing Functions ----
-# Note: Pairing functions are now centralized in FuncDataPairing module
-
-
-
-# Plot Functions ----
-# Note: Plot functions are now centralized in FuncMetaAnalysis module
-
 # Helper Functions for Data Loading ----
 
 #' Load feature data from DromaSet or MultiDromaSet
