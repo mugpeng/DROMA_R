@@ -64,13 +64,9 @@ loadFeatureData <- function(dromaset_object, feature_type, feature_name,
           return(result)
         }
       } else {
-        # Discrete data
-        if (is.data.frame(feature_data)) {
-          if ("samples" %in% colnames(feature_data)) {
-            sample_ids <- feature_data$samples[feature_data$features == feature_name]
-          } else {
-            sample_ids <- character(0)
-          }
+        # Discrete data - long dataframe format with samples and features columns
+        if (is.data.frame(feature_data) && "samples" %in% colnames(feature_data) && "features" %in% colnames(feature_data)) {
+          sample_ids <- feature_data$samples[feature_data$features == feature_name]
           result <- list()
           result[[dromaset_object@name]] <- sample_ids
           return(result)
@@ -114,14 +110,10 @@ loadFeatureData <- function(dromaset_object, feature_type, feature_name,
           return(NULL)
         })
       } else {
-        # Discrete data
+        # Discrete data - long dataframe format with samples and features columns
         result <- lapply(feature_data, function(omics_df) {
-          if (is.data.frame(omics_df)) {
-            if ("samples" %in% colnames(omics_df)) {
-              sample_ids <- omics_df$samples[omics_df$features == feature_name]
-            } else {
-              sample_ids <- character(0)
-            }
+          if (is.data.frame(omics_df) && "samples" %in% colnames(omics_df) && "features" %in% colnames(omics_df)) {
+            sample_ids <- omics_df$samples[omics_df$features == feature_name]
             return(sample_ids)
           }
           return(NULL)
@@ -430,8 +422,8 @@ batchFindSignificantFeatures <- function(dromaset_object,
                                                  zscore = TRUE)
           if (is.matrix(all_omics_data)) {
             all_feature_lists[[project_name]] <- rownames(all_omics_data)
-          } else if (is.data.frame(all_omics_data) && "genes" %in% colnames(all_omics_data)) {
-            all_feature_lists[[project_name]] <- unique(all_omics_data$genes)
+          } else if (is.data.frame(all_omics_data) && "features" %in% colnames(all_omics_data)) {
+            all_feature_lists[[project_name]] <- unique(all_omics_data$features)
           }
         }
       }
@@ -644,14 +636,10 @@ batchFindSignificantFeatures <- function(dromaset_object,
             return(NULL)
           })
         } else {
-          # Discrete data - extract sample IDs
+          # Discrete data - extract sample IDs from long dataframe format
           selected_feas2 <- lapply(preloaded_feature2_data, function(omics_df) {
-            if (is.data.frame(omics_df)) {
-              if ("samples" %in% colnames(omics_df)) {
-                sample_ids <- omics_df$samples[omics_df$features == feature2_name]
-              } else {
-                sample_ids <- character(0)
-              }
+            if (is.data.frame(omics_df) && "samples" %in% colnames(omics_df) && "features" %in% colnames(omics_df)) {
+              sample_ids <- omics_df$samples[omics_df$features == feature2_name]
               return(sample_ids)
             }
             return(NULL)

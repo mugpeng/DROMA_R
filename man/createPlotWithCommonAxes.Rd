@@ -4,22 +4,18 @@
 \alias{createPlotWithCommonAxes}
 \title{Create plot with common axis labels}
 \usage{
-createPlotWithCommonAxes(
-  p,
-  x_title = "Common X-Axis Title",
-  y_title = "Common Y-Axis Title"
-)
+createPlotWithCommonAxes(p, x_title = NULL, y_title = NULL)
 }
 \arguments{
-\item{p}{A patchwork object containing multiple plots}
+\item{p}{A patchwork object from plotMultipleCorrelations or plotMultipleGroupComparisons}
 
-\item{x_title}{Common x-axis title}
+\item{x_title}{Common x-axis title (optional, only for correlation plots)}
 
 \item{y_title}{Common y-axis title}
 }
 \value{
-A function that generates the plot when called
+A patchwork/ggplot object with common axis labels
 }
 \description{
-Creates a plot with common axis labels for multiple subplots
+Creates a plot with common axis labels for multiple subplots from plotMultipleCorrelations or plotMultipleGroupComparisons
 }

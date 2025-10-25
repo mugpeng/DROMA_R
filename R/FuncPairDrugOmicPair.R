@@ -1,5 +1,4 @@
 # Drug-Omic Pair Analysis Functions ----
-# Main Analysis Function ----
 
 #' Analyze drug-omic pair associations using DromaSet objects
 #'
@@ -123,13 +122,10 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
           myOmics[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
         }
       } else {
-        # Discrete data (mutations, fusions) - now in matrix format like continuous data
-        if (is.matrix(myOmics) && select_omics %in% rownames(myOmics)) {
-          # Get the row for the selected gene
-          gene_row <- myOmics[select_omics, ]
-          # Get sample IDs where the feature is present (value != 0)
-          # When extracting a row from matrix, it becomes a named vector
-          present_samples <- names(gene_row)[gene_row != 0]
+        # Discrete data (mutations, fusions) - long dataframe format with samples and features columns
+        if (is.data.frame(myOmics) && "samples" %in% colnames(myOmics) && "features" %in% colnames(myOmics)) {
+          # Extract samples where the feature matches select_omics
+          present_samples <- myOmics$samples[myOmics$features == select_omics]
           myOmics <- list()
           myOmics[[dromaset_object@name]] <- present_samples
         } else {
@@ -181,14 +177,11 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
           return(NULL)
         })
       } else {
-        # Discrete data (mutations, fusions) - now in matrix format like continuous data
-        myOmics <- lapply(myOmics, function(omics_matrix) {
-          if (is.matrix(omics_matrix) && select_omics %in% rownames(omics_matrix)) {
-            # Get the row for the selected gene
-            gene_row <- omics_matrix[select_omics, ]
-            # Get sample IDs where the feature is present (value != 0)
-            # When extracting a row from matrix, it becomes a named vector
-            present_samples <- names(gene_row)[gene_row != 0]
+        # Discrete data (mutations, fusions) - long dataframe format with samples and features columns
+        myOmics <- lapply(myOmics, function(omics_df) {
+          if (is.data.frame(omics_df) && "samples" %in% colnames(omics_df) && "features" %in% colnames(omics_df)) {
+            # Extract samples where the feature matches select_omics
+            present_samples <- omics_df$samples[omics_df$features == select_omics]
             return(present_samples)
           }
           return(NULL)
@@ -226,18 +219,22 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
 
     # Create plots for individual studies using plotMultipleCorrelations
     if (length(individual_pairs) > 0) {
-      result$plot <- plotMultipleCorrelations(individual_pairs,
-                                              x_label = "Omic Feature",
+      multi_plot <- plotMultipleCorrelations(individual_pairs,
+                                              x_label = paste0(select_omics, " (", select_omics_type, ")"),
                                               y_label = "Drug Response")
+      # Add common axis labels
+      result$plot <- createPlotWithCommonAxes(multi_plot,
+                                              x_title = paste(select_omics_type, "expression"),
+                                              y_title = "drug sensitivity")
     }
 
     # Create plot for merged dataset if available
     if (!is.null(merged_pair) && merged_enabled) {
       result$merged_plot <- plotCorrelation(merged_pair$feature1,
                                            merged_pair$feature2,
-                                           x_label = "Omic Feature",
-                                           y_label = "Drug Response",
-                                           title = "Merged Dataset",
+                                           x_label = paste(select_omics_type, "expression"),
+                                           y_label = "drug sensitivity",
+                                           title = paste(select_omics_type, ":", select_omics, "vs", select_drugs),
                                            method = "spearman")
     }
 
@@ -268,16 +265,19 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
 
     # Create plots for individual studies using plotMultipleGroupComparisons
     if (length(individual_pairs) > 0) {
-      result$plot <- plotMultipleGroupComparisons(individual_pairs,
-                                                  y_label = "Drug Response")
+      multi_plot <- plotMultipleGroupComparisons(individual_pairs,
+                                                  y_label = paste(select_drugs, "-", select_omics_type))
+      # Add common axis label
+      result$plot <- createPlotWithCommonAxes(multi_plot,
+                                              y_title = "drug sensitivity")
     }
 
     # Create plot for merged dataset if available
     if (!is.null(merged_pair) && merged_enabled) {
       result$merged_plot <- plotGroupComparison(merged_pair$yes, merged_pair$no,
-                                                group_labels = c("Without Feature", "With Feature"),
-                                                title = "Merged Dataset",
-                                                y_label = "Drug Response")
+                                                group_labels = c(paste("Without", select_omics), paste("With", select_omics)),
+                                                title = paste(select_omics_type, ":", select_omics, "vs", select_drugs),
+                                                y_label = "drug sensitivity")
     }
 
     # Perform meta-analysis on individual pairs only (exclude merged data)

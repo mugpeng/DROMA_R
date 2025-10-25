@@ -28,9 +28,9 @@ plotCorrelation <- function(x_values, y_values,
     stat_smooth(formula = y ~ x, method = "lm") +
     theme_bw() +
     theme(
-      axis.title = element_blank(),
       title = element_text(size = 15, face = "bold"),
-      axis.text = element_text(size = 12)
+      axis.text = element_text(size = 12),
+      axis.title = element_text(size = 12)
     ) +
     ggtitle(title) +
     xlab(x_label) +
@@ -52,7 +52,8 @@ plotCorrelation <- function(x_values, y_values,
 plotGroupComparison <- function(yes_values, no_values,
                                 group_labels = c("Yes", "No"),
                                 title = "Group Comparison",
-                                y_label = "Value") {
+                                y_label = "Value",
+                                x_label = "") {
   # Combine data into dataframe
   box_df <- data.frame(
     values = c(no_values, yes_values),
@@ -68,9 +69,9 @@ plotGroupComparison <- function(yes_values, no_values,
                        label = "p.format") +
     theme_bw() +
     theme(
-      axis.title = element_blank(),
       title = element_text(size = 15, face = "bold"),
       axis.text = element_text(size = 12),
+      axis.title = element_text(size = 12),
       legend.position = "none"
     ) +
     coord_cartesian(ylim = c(NA, max(box_df$values) + max(box_df$values)/20)) +
@@ -108,11 +109,11 @@ plotMultipleCorrelations <- function(pairs_list,
       # Ensure adequate data for plotting
       if (length(feat1_vals) < 3 || length(feat2_vals) < 3) next
 
-      # Create plot and add to list
+      # Create plot and add to list (without axis labels to avoid redundancy)
       p_list[[i]] <- plotCorrelation(feat1_vals, feat2_vals,
                                      title = names(pairs_list)[i],
-                                     x_label = x_label,
-                                     y_label = y_label)
+                                     x_label = "",
+                                     y_label = "")
     }, error = function(e) {
       warning("Error creating plot for pair ", names(pairs_list)[i], ": ", e$message)
     })
@@ -175,10 +176,12 @@ plotMultipleGroupComparisons <- function(pairs_list,
       # Ensure adequate data for plotting
       if (length(yes_vals) < 3 || length(no_vals) < 3) next
 
-      # Create plot and add to list
+      # Create plot and add to list (without axis labels to avoid redundancy)
       p_list[[i]] <- plotGroupComparison(yes_vals, no_vals,
+                                         group_labels = c("No", "Yes"),
                                          title = names(pairs_list)[i],
-                                         y_label = y_label)
+                                         y_label = "",
+                                         x_label = "")
     }, error = function(e) {
       warning("Error creating plot for pair ", names(pairs_list)[i], ": ", e$message)
     })
@@ -211,37 +214,37 @@ plotMultipleGroupComparisons <- function(pairs_list,
 
 #' Create plot with common axis labels
 #'
-#' @description Creates a plot with common axis labels for multiple subplots
-#' @param p A patchwork object containing multiple plots
-#' @param x_title Common x-axis title
+#' @description Creates a plot with common axis labels for multiple subplots from plotMultipleCorrelations or plotMultipleGroupComparisons
+#' @param p A patchwork object from plotMultipleCorrelations or plotMultipleGroupComparisons
+#' @param x_title Common x-axis title (optional, only for correlation plots)
 #' @param y_title Common y-axis title
-#' @return A function that generates the plot when called
+#' @return A patchwork/ggplot object with common axis labels
 #' @export
-createPlotWithCommonAxes <- function(p, x_title = "Common X-Axis Title",
-                                     y_title = "Common Y-Axis Title") {
-  # Create a function that will generate the plot when called
-  function() {
-    # Convert patchwork to a grob
-    p_grob <- patchworkGrob(p)
-
-    # Create a new plotting area
-    grid.newpage()
-
-    # Draw the patchwork
-    grid.draw(p_grob)
-
-    # Add common x-axis title
-    grid.text(x_title,
-              x = 0.5, y = 0.02,
-              gp = gpar(fontsize = 18, fontface = "bold"))
-
-    # Add common y-axis title (rotated)
-    grid.text(y_title,
-              x = 0.01, y = 0.5,
-              rot = 90,
-              gp = gpar(fontsize = 18, fontface = "bold"))
-
-    # Return the grob for potential further use
-    invisible(p_grob)
+createPlotWithCommonAxes <- function(p, x_title = NULL, y_title = NULL) {
+  if (!requireNamespace("patchwork", quietly = TRUE)) {
+    warning("patchwork package not available. Returning original plot.")
+    return(p)
   }
+  
+  # Build caption text for axis labels
+  caption_text <- ""
+  if (!is.null(x_title) && !is.null(y_title)) {
+    caption_text <- paste0("X-axis: ", x_title, "   Y-axis: ", y_title)
+  } else if (!is.null(y_title)) {
+    caption_text <- paste0("Y-axis: ", y_title)
+  } else if (!is.null(x_title)) {
+    caption_text <- paste0("X-axis: ", x_title)
+  }
+  
+  # Add caption as axis labels using plot_annotation
+  if (caption_text != "") {
+    p <- p + patchwork::plot_annotation(
+      caption = caption_text,
+      theme = theme(
+        plot.caption = element_text(size = 14, hjust = 0.5, face = "bold")
+      )
+    )
+  }
+  
+  return(p)
 }

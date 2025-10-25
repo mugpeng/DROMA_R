@@ -9,7 +9,8 @@ plotGroupComparison(
   no_values,
   group_labels = c("Yes", "No"),
   title = "Group Comparison",
-  y_label = "Value"
+  y_label = "Value",
+  x_label = ""
 )
 }
 \arguments{
