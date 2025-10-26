@@ -8,6 +8,7 @@ plotMultipleGroupComparisons(
   pairs_list,
   x_label = "Feature",
   y_label = "Value",
+  group_labels = c("Without", "With"),
   ncol = 3
 )
 }
@@ -17,6 +18,8 @@ plotMultipleGroupComparisons(
 \item{x_label}{Label for the grouping variable (discrete feature)}
 
 \item{y_label}{Common y-axis label}
+
+\item{group_labels}{Labels for the two groups}
 
 \item{ncol}{Number of columns in the grid}
 }

@@ -5,17 +5,17 @@
 \title{Plot continuous values by discrete groups}
 \usage{
 plotGroupComparison(
-  yes_values,
   no_values,
-  group_labels = c("Yes", "No"),
+  yes_values,
+  group_labels = c("Without", "With"),
   title = "Group Comparison",
   y_label = "Value"
 )
 }
 \arguments{
-\item{yes_values}{Values for group with feature present}
-
 \item{no_values}{Values for group without feature present}
+
+\item{yes_values}{Values for group with feature present}
 
 \item{group_labels}{Labels for the two groups}
 

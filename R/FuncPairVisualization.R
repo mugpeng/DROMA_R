@@ -42,15 +42,15 @@ plotCorrelation <- function(x_values, y_values,
 #' Plot continuous values by discrete groups
 #'
 #' @description Creates a boxplot comparing continuous values between discrete groups
-#' @param yes_values Values for group with feature present
 #' @param no_values Values for group without feature present
+#' @param yes_values Values for group with feature present
 #' @param group_labels Labels for the two groups
 #' @param title Plot title
 #' @param y_label Label for y-axis
 #' @return A ggplot2 object with boxplot and statistical test
 #' @export
-plotGroupComparison <- function(yes_values, no_values,
-                                group_labels = c("Yes", "No"),
+plotGroupComparison <- function(no_values, yes_values,
+                                group_labels = c("Without", "With"),
                                 title = "Group Comparison",
                                 y_label = "Value") {
   # Combine data into dataframe
@@ -156,12 +156,14 @@ plotMultipleCorrelations <- function(pairs_list,
 #' @param pairs_list List of paired datasets with yes/no groups
 #' @param x_label Label for the grouping variable (discrete feature)
 #' @param y_label Common y-axis label
+#' @param group_labels Labels for the two groups
 #' @param ncol Number of columns in the grid
 #' @return A combined plot with all comparisons or NULL if no valid pairs
 #' @export
 plotMultipleGroupComparisons <- function(pairs_list,
                                         x_label = "Feature",
                                         y_label = "Value",
+                                        group_labels = c("Without", "With"),
                                         ncol = 3) {
   # Initialize list to store plots
   p_list <- list()
@@ -179,8 +181,8 @@ plotMultipleGroupComparisons <- function(pairs_list,
       if (length(yes_vals) < 3 || length(no_vals) < 3) next
 
       # Create plot and add to list (without axis labels to avoid redundancy)
-      p_list[[i]] <- plotGroupComparison(yes_vals, no_vals,
-                                         group_labels = c("Without", "With"),
+      p_list[[i]] <- plotGroupComparison(no_vals, yes_vals,
+                                         group_labels = group_labels,
                                          title = names(pairs_list)[i],
                                          y_label = "")
     }, error = function(e) {

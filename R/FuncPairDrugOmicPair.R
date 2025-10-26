@@ -50,142 +50,37 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
   if (!zscore && merged_enabled) {
     warning("Without z-score normalization (zscore=FALSE), merging data from different studies may not be appropriate. Consider setting merged_enabled=FALSE.")
   }
+  
+  # Determine if omics feature is continuous
+  is_continuous_omics <- feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")
 
-  # Load and extract drug data
-  if (inherits(dromaset_object, "DromaSet")) {
-    # Single DromaSet
-    myDrugs <- loadTreatmentResponse(dromaset_object,
-                                    select_drugs = select_drugs,
-                                    data_type = data_type,
-                                    tumor_type = tumor_type,
-                                    return_data = TRUE,
-                                    zscore = zscore)
+  # Load drug data using helper function
+  myDrugs <- loadFeatureData(dromaset_object, "drug", select_drugs,
+                            data_type = data_type, tumor_type = tumor_type,
+                            overlap_only = overlap_only, is_continuous = TRUE,
+                            zscore = zscore)
 
-    # Convert matrix to list format for compatibility
-    if (is.matrix(myDrugs) && select_drugs %in% rownames(myDrugs)) {
-      drug_vector <- as.numeric(myDrugs[select_drugs, ])
-      names(drug_vector) <- colnames(myDrugs)
-      myDrugs <- list()
-      myDrugs[[dromaset_object@name]] <- drug_vector[!is.na(drug_vector)]
-    }
+  # Load omics data using helper function
+  # For discrete features (mutations, fusions), we need the full format with present/all samples
+  myOmics <- loadFeatureData(dromaset_object, feature_type, select_features,
+                            data_type = data_type, tumor_type = tumor_type,
+                            overlap_only = overlap_only, is_continuous = is_continuous_omics,
+                            return_all_samples = !is_continuous_omics, zscore = zscore)
 
-  } else {
-    # MultiDromaSet
-    myDrugs <- loadMultiProjectTreatmentResponse(dromaset_object,
-                                                select_drugs = select_drugs,
-                                                overlap_only = overlap_only,
-                                                data_type = data_type,
-                                                tumor_type = tumor_type,
-                                                zscore = zscore)
+  # Filter data to ensure minimum sample size
+  myDrugs <- filterFeatureData(myDrugs, min_samples = 3, is_discrete_with_all = FALSE)
+  myOmics <- filterFeatureData(myOmics, min_samples = 3, is_discrete_with_all = !is_continuous_omics)
 
-    # Extract specific drug from each project
-    myDrugs <- lapply(myDrugs, function(drug_matrix) {
-      if (is.matrix(drug_matrix) && select_drugs %in% rownames(drug_matrix)) {
-        drug_vector <- as.numeric(drug_matrix[select_drugs, ])
-        names(drug_vector) <- colnames(drug_matrix)
-        return(drug_vector[!is.na(drug_vector)])
-      }
-      return(NULL)
-    })
-
-    # Remove NULL entries
-    myDrugs <- myDrugs[!sapply(myDrugs, is.null)]
-  }
-
-  # Load and extract omics data
-  if (inherits(dromaset_object, "DromaSet")) {
-    # Single DromaSet - Molecular profile data
-    myOmics <- loadMolecularProfiles(dromaset_object,
-                                    feature_type = feature_type,
-                                    select_features = select_features,
-                                    data_type = data_type,
-                                    tumor_type = tumor_type,
-                                    return_data = TRUE,
-                                    zscore = zscore)
-
-    # Handle different data types
-    if (feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
-      # Continuous data
-      if (is.matrix(myOmics) && select_features %in% rownames(myOmics)) {
-        omics_vector <- as.numeric(myOmics[select_features, ])
-        names(omics_vector) <- colnames(myOmics)
-        myOmics <- list()
-        myOmics[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
-      }
-    } else {
-      # Discrete data (mutations, fusions) - long dataframe format with samples and features columns
-      if (is.data.frame(myOmics) && "samples" %in% colnames(myOmics) && "features" %in% colnames(myOmics)) {
-        # Extract samples where the feature matches select_features
-        present_samples <- myOmics$samples[myOmics$features == select_features]
-        # Get all profiled samples for this omics type
-        all_profiled_samples <- listDROMASamples(dromaset_object@name,
-                                                 feature_type = feature_type,
-                                                 data_type = data_type,
-                                                 tumor_type = tumor_type)
-        myOmics <- list()
-        myOmics[[dromaset_object@name]] <- list(present = present_samples, all = all_profiled_samples)
-      } else {
-        myOmics <- list()
-        myOmics[[dromaset_object@name]] <- list(present = character(0), all = character(0))
-      }
-    }
-
-  } else {
-    # MultiDromaSet - Molecular profile data
-    myOmics <- loadMultiProjectMolecularProfiles(dromaset_object,
-                                                feature_type = feature_type,
-                                                select_features = select_features,
-                                                overlap_only = overlap_only,
-                                                data_type = data_type,
-                                                tumor_type = tumor_type,
-                                                zscore = zscore)
-
-    # Handle different data types
-    if (feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
-      # Continuous data
-      myOmics <- lapply(myOmics, function(omics_matrix) {
-        if (is.matrix(omics_matrix) && select_features %in% rownames(omics_matrix)) {
-          omics_vector <- as.numeric(omics_matrix[select_features, ])
-          names(omics_vector) <- colnames(omics_matrix)
-          return(omics_vector[!is.na(omics_vector)])
-        }
-        return(NULL)
-      })
-    } else {
-      # Discrete data (mutations, fusions) - long dataframe format with samples and features columns
-      project_names <- names(myOmics)
-      myOmics <- lapply(seq_along(myOmics), function(i) {
-        omics_df <- myOmics[[i]]
-        projects <- project_names[i]
-        if (is.data.frame(omics_df) && "samples" %in% colnames(omics_df) && "features" %in% colnames(omics_df)) {
-          # Extract samples where the feature matches select_features
-          present_samples <- omics_df$samples[omics_df$features == select_features]
-          # Get all profiled samples for this omics type from the specific project
-          all_profiled_samples <- listDROMASamples(dromaset_object@DromaSets[[projects]]@name,
-                                                   feature_type = feature_type,
-                                                   data_type = data_type,
-                                                   tumor_type = tumor_type)
-          return(list(present = present_samples, all = all_profiled_samples))
-        }
-        return(NULL)
-      })
-      names(myOmics) <- project_names
-    }
-
-    # Remove NULL entries
-    myOmics <- myOmics[!sapply(myOmics, is.null)]
-  }
-
-  # Check if we have data
-  if (length(myDrugs) == 0 || length(myOmics) == 0) {
-    stop("No data found for the specified drug-omics pair")
+  # Check if we have sufficient data after filtering
+  if (is.null(myDrugs) || length(myDrugs) == 0 || is.null(myOmics) || length(myOmics) == 0) {
+    stop("No sufficient data found for the specified drug-omics pair. Each dataset needs at least 3 samples.")
   }
 
   # Initialize result list
   result <- list()
 
   # Handle continuous omics data
-  if(feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")){
+  if(is_continuous_omics){
     # Pair data using pairContinuousFeatures
     myPairs <- pairContinuousFeatures(myOmics, myDrugs, merged = merged_enabled)
 
@@ -249,6 +144,7 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
     # Create plots for individual studies using plotMultipleGroupComparisons
     if (length(individual_pairs) > 0) {
       multi_plot <- plotMultipleGroupComparisons(individual_pairs,
+                                                group_labels = c(paste("Without", select_features), paste("With", select_features)),
                                                 x_label = paste0(select_features, " (", feature_type, ")"),
                                                 y_label = "Drug Response")
       # Add common axis label
@@ -258,7 +154,7 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
 
     # Create plot for merged dataset if available
     if (!is.null(merged_pair) && merged_enabled) {
-      result$merged_plot <- plotGroupComparison(merged_pair$yes, merged_pair$no,
+      result$merged_plot <- plotGroupComparison(merged_pair$no, merged_pair$yes,
                                                 group_labels = c(paste("Without", select_features), paste("With", select_features)),
                                                 title = paste(feature_type, ":", select_features, "vs", select_drugs),
                                                 y_label = "drug sensitivity(Area Above Curve)")
