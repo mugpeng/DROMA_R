@@ -31,7 +31,7 @@ getStratificationInfo <- function(dromaset_object,
   if (inherits(dromaset_object, "DromaSet")) {
     # Single DromaSet
     strat_data <- loadTreatmentResponse(dromaset_object,
-                                                 drugs = stratification_drug,
+                                                 select_drugs = stratification_drug,
                                                  data_type = "all",
                                                  tumor_type = "all",
                                                  return_data = TRUE,
@@ -77,7 +77,7 @@ getStratificationInfo <- function(dromaset_object,
     # MultiDromaSet - handle each project separately
     strat_data_list <- loadMultiProjectTreatmentResponse(
       dromaset_object,
-      drugs = stratification_drug,
+      select_drugs = stratification_drug,
       overlap_only = FALSE,
       data_type = "all",
       tumor_type = "all",
@@ -103,8 +103,8 @@ getStratificationInfo <- function(dromaset_object,
 
     stratification_info <- list()
 
-    for (project_name in names(strat_data_list)) {
-      strat_data <- strat_data_list[[project_name]]
+    for (projects in names(strat_data_list)) {
+      strat_data <- strat_data_list[[projects]]
 
       if (!is.matrix(strat_data) || !stratification_drug %in% rownames(strat_data)) {
         # Skip projects without the drug
@@ -117,7 +117,7 @@ getStratificationInfo <- function(dromaset_object,
       drug_response <- drug_response[!is.na(drug_response)]
 
       if (length(drug_response) < (2 * min_samples)) {
-        warning("Project ", project_name, ": Insufficient samples (", length(drug_response),
+        warning("Project ", projects, ": Insufficient samples (", length(drug_response),
                 ") for stratification. Minimum required: ", 2 * min_samples)
         next
       }
@@ -132,13 +132,13 @@ getStratificationInfo <- function(dromaset_object,
 
       # Skip if insufficient samples
       if (length(sensitive_samples) < min_samples || length(resistant_samples) < min_samples) {
-        warning("Project ", project_name, ": Insufficient samples in strata. Sensitive: ",
+        warning("Project ", projects, ": Insufficient samples in strata. Sensitive: ",
                 length(sensitive_samples), ", Resistant: ", length(resistant_samples),
                 ". Minimum required: ", min_samples)
         next
       }
 
-      stratification_info[[project_name]] <- list(
+      stratification_info[[projects]] <- list(
         sensitive = sensitive_samples,
         resistant = resistant_samples,
         thresholds = c(lower = lower_quantile, upper = upper_quantile)
@@ -165,8 +165,8 @@ getStratificationInfo <- function(dromaset_object,
 #' @param dromaset_object A DromaSet or MultiDromaSet object
 #' @param stratification_drug Drug used to define strata (e.g., "cisplatin")
 #' @param strata_quantile Quantile threshold for stratification (default: 0.33)
-#' @param select_omics_type Type of omics data to analyze
-#' @param select_omics Name of the specific omics feature
+#' @param feature_type Type of omics data to analyze
+#' @param select_features Name of the specific omics feature
 #' @param select_drugs Name of the target drug for association analysis
 #' @param min_samples Minimum samples per stratum (default: 5)
 #' @param ... Additional parameters passed to the analysis functions
@@ -180,8 +180,8 @@ getStratificationInfo <- function(dromaset_object,
 #'   dromaset_object = multi_set,
 #'   stratification_drug = "cisplatin",
 #'   strata_quantile = 0.33,
-#'   select_omics_type = "mRNA",
-#'   select_omics = "ERCC1",
+#'   feature_type = "mRNA",
+#'   select_features = "ERCC1",
 #'   select_drugs = "bortezomib",
 #'   data_type = "CellLine",
 #'   tumor_type = "all"
@@ -190,8 +190,8 @@ getStratificationInfo <- function(dromaset_object,
 analyzeStratifiedDrugOmic <- function(dromaset_object,
                                     stratification_drug,
                                     strata_quantile = 0.33,
-                                    select_omics_type,
-                                    select_omics,
+                                    feature_type,
+                                    select_features,
                                     select_drugs,
                                     min_samples = 5,
                                     ...) {
@@ -201,8 +201,8 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
     stop("Input must be a DromaSet or MultiDromaSet object")
   }
 
-  if (missing(select_omics_type) || missing(select_omics) || missing(select_drugs)) {
-    stop("select_omics_type, select_omics, and select_drugs are required")
+  if (missing(feature_type) || missing(select_features) || missing(select_drugs)) {
+    stop("feature_type, select_features, and select_drugs are required")
   }
 
   # Extract additional parameters
@@ -227,7 +227,7 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
   if (inherits(dromaset_object, "DromaSet")) {
     # Single DromaSet
     drug_data <- loadTreatmentResponse(dromaset_object,
-                                              drugs = select_drugs,
+                                              select_drugs = select_drugs,
                                               data_type = data_type,
                                               tumor_type = tumor_type,
                                               return_data = TRUE,
@@ -246,7 +246,7 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
     # MultiDromaSet
     drug_data_list <- loadMultiProjectTreatmentResponse(
       dromaset_object,
-      drugs = select_drugs,
+      select_drugs = select_drugs,
       overlap_only = overlap_only,
       data_type = data_type,
       tumor_type = tumor_type,
@@ -267,18 +267,18 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
 
   # Load omics data
   cat("Loading omics data...\n")
-  if (select_omics_type %in% c("drug", "drug_raw")) {
+  if (feature_type %in% c("drug", "drug_raw")) {
     # Another drug
     if (inherits(dromaset_object, "DromaSet")) {
       omics_data <- loadTreatmentResponse(dromaset_object,
-                                                   drugs = select_omics,
+                                                   select_drugs = select_features,
                                                    data_type = data_type,
                                                    tumor_type = tumor_type,
                                                    return_data = TRUE,
                                                    zscore = TRUE)
 
-      if (is.matrix(omics_data) && select_omics %in% rownames(omics_data)) {
-        omics_vector <- as.numeric(omics_data[select_omics, ])
+      if (is.matrix(omics_data) && select_features %in% rownames(omics_data)) {
+        omics_vector <- as.numeric(omics_data[select_features, ])
         names(omics_vector) <- colnames(omics_data)
         omics_data_list <- list()
         omics_data_list[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
@@ -288,7 +288,7 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
     } else {
       omics_data_list <- loadMultiProjectTreatmentResponse(
         dromaset_object,
-        drugs = select_omics,
+        select_drugs = select_features,
         overlap_only = overlap_only,
         data_type = data_type,
         tumor_type = tumor_type,
@@ -296,8 +296,8 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
       )
 
       omics_data_list <- lapply(omics_data_list, function(drug_matrix) {
-        if (is.matrix(drug_matrix) && select_omics %in% rownames(drug_matrix)) {
-          drug_vector <- as.numeric(drug_matrix[select_omics, ])
+        if (is.matrix(drug_matrix) && select_features %in% rownames(drug_matrix)) {
+          drug_vector <- as.numeric(drug_matrix[select_features, ])
           names(drug_vector) <- colnames(drug_matrix)
           return(drug_vector[!is.na(drug_vector)])
         }
@@ -309,23 +309,23 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
     # Molecular profiles
     if (inherits(dromaset_object, "DromaSet")) {
       omics_data <- loadMolecularProfiles(dromaset_object,
-                                                  molecular_type = select_omics_type,
-                                                  features = select_omics,
+                                                  feature_type = feature_type,
+                                                  select_features = select_features,
                                                   data_type = data_type,
                                                   tumor_type = tumor_type,
                                                   return_data = TRUE,
                                                   zscore = TRUE)
 
-      if (is.matrix(omics_data) && select_omics %in% rownames(omics_data)) {
+      if (is.matrix(omics_data) && select_features %in% rownames(omics_data)) {
         omics_data_list <- list()
-        if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
+        if (feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
           # Continuous
-          omics_vector <- as.numeric(omics_data[select_omics, ])
+          omics_vector <- as.numeric(omics_data[select_features, ])
           names(omics_vector) <- colnames(omics_data)
           omics_data_list[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
         } else {
           # Discrete
-          gene_row <- omics_data[select_omics, ]
+          gene_row <- omics_data[select_features, ]
           present_samples <- names(gene_row)[gene_row != 0]
           omics_data_list[[dromaset_object@name]] <- present_samples
         }
@@ -335,8 +335,8 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
     } else {
       omics_data_list <- loadMultiProjectMolecularProfiles(
         dromaset_object,
-        molecular_type = select_omics_type,
-        features = select_omics,
+        feature_type = feature_type,
+        select_features = select_features,
         overlap_only = overlap_only,
         data_type = data_type,
         tumor_type = tumor_type,
@@ -344,15 +344,15 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
       )
 
       omics_data_list <- lapply(omics_data_list, function(omics_matrix) {
-        if (is.matrix(omics_matrix) && select_omics %in% rownames(omics_matrix)) {
-          if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
+        if (is.matrix(omics_matrix) && select_features %in% rownames(omics_matrix)) {
+          if (feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
             # Continuous
-            omics_vector <- as.numeric(omics_matrix[select_omics, ])
+            omics_vector <- as.numeric(omics_matrix[select_features, ])
             names(omics_vector) <- colnames(omics_matrix)
             return(omics_vector[!is.na(omics_vector)])
           } else {
             # Discrete
-            gene_row <- omics_matrix[select_omics, ]
+            gene_row <- omics_matrix[select_features, ]
             present_samples <- names(gene_row)[gene_row != 0]
             return(present_samples)
           }
@@ -375,7 +375,7 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
   sensitive_result <- analyzeStratifiedData(
     omics_data = sensitive_data$omics,
     drug_data = sensitive_data$drugs,
-    select_omics_type = select_omics_type,
+    feature_type = feature_type,
     merged_enabled = merged_enabled,
     meta_enabled = meta_enabled
   )
@@ -386,7 +386,7 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
   resistant_result <- analyzeStratifiedData(
     omics_data = resistant_data$omics,
     drug_data = resistant_data$drugs,
-    select_omics_type = select_omics_type,
+    feature_type = feature_type,
     merged_enabled = merged_enabled,
     meta_enabled = meta_enabled
   )
@@ -396,8 +396,8 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
     sensitive_result = sensitive_result,
     resistant_result = resistant_result,
     stratification_info = stratification_info,
-    select_omics_type = select_omics_type,
-    select_omics = select_omics,
+    feature_type = feature_type,
+    select_features = select_features,
     select_drugs = select_drugs
   )
 
@@ -406,8 +406,8 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
   expression_plot <- createStratifiedOmicExpressionPlot(
     sensitive_result = sensitive_result,
     resistant_result = resistant_result,
-    select_omics_type = select_omics_type,
-    select_omics = select_omics,
+    feature_type = feature_type,
+    select_features = select_features,
     stratification_drug = stratification_drug
   )
 
@@ -423,8 +423,8 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
     analysis_parameters = list(
       stratification_drug = stratification_drug,
       strata_quantile = strata_quantile,
-      select_omics_type = select_omics_type,
-      select_omics = select_omics,
+      feature_type = feature_type,
+      select_features = select_features,
       select_drugs = select_drugs,
       min_samples = min_samples,
       extra_params = extra_params
@@ -443,18 +443,18 @@ analyzeStratifiedDrugOmic <- function(dromaset_object,
 #' @param sensitive_result Analysis result from sensitive group
 #' @param resistant_result Analysis result from resistant group
 #' @param stratification_info Information about stratification
-#' @param select_omics_type Type of omics data analyzed
-#' @param select_omics Name of the omics feature
+#' @param feature_type Type of omics data analyzed
+#' @param select_features Name of the omics feature
 #' @param select_drugs Name of the drug analyzed
 #' @return Comparison results with statistical tests
 compareStratifiedResults <- function(sensitive_result, resistant_result, stratification_info,
-                                   select_omics_type, select_omics, select_drugs) {
+                                   feature_type, select_features, select_drugs) {
 
   comparison <- list()
 
   # Extract correlation coefficients if available
   if (!is.null(sensitive_result$meta) && !is.null(resistant_result$meta)) {
-    if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
+    if (feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
       # Continuous-continuous analysis
       sens_cor <- sensitive_result$meta$TE.random
       sens_se <- sensitive_result$meta$seTE.random
@@ -495,9 +495,9 @@ compareStratifiedResults <- function(sensitive_result, resistant_result, stratif
   comparison$comparison_plot <- createStratifiedComparisonPlot(
     sensitive_result = sensitive_result,
     resistant_result = resistant_result,
-    select_omics = select_omics,
+    select_features = select_features,
     select_drugs = select_drugs,
-    select_omics_type = select_omics_type
+    feature_type = feature_type
   )
 
   return(comparison)
@@ -508,15 +508,15 @@ compareStratifiedResults <- function(sensitive_result, resistant_result, stratif
 #' @description Creates a visualization comparing results between strata
 #' @param sensitive_result Results from sensitive group
 #' @param resistant_result Results from resistant group
-#' @param select_omics Name of omics feature
+#' @param select_features Name of omics feature
 #' @param select_drugs Name of drug
-#' @param select_omics_type Type of omics data
+#' @param feature_type Type of omics data
 #' @param p_value_digits Number of decimal places for p-values (default: 3)
 #' @param add_difference_row Whether to add a row showing difference between groups (default: TRUE)
 #' @return ggplot object
 createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
-                                          select_omics, select_drugs,
-                                          select_omics_type,
+                                          select_features, select_drugs,
+                                          feature_type,
                                           p_value_digits = 3,
                                           add_difference_row = TRUE) {
 
@@ -547,7 +547,7 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
   }
 
   # Create plot based on omics type
-  if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
+  if (feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
     # Continuous-continuous analysis - create forest plot
     plot_list <- list()
 
@@ -617,7 +617,7 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
           ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
           ggplot2::coord_flip(ylim = range(plot_data$Correlation, plot_data$CI_lower, plot_data$CI_upper, na.rm = TRUE) * c(1.1, 1.1)) +
           ggplot2::labs(
-            title = paste("Stratified Analysis:", select_omics, "vs", select_drugs),
+            title = paste("Stratified Analysis:", select_features, "vs", select_drugs),
             subtitle = "Correlation with 95% Confidence Intervals",
             y = "Correlation Coefficient",
             x = ""
@@ -663,7 +663,7 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
           ncol = 2
         ) +
           patchwork::plot_annotation(
-            title = paste("Stratified Analysis:", select_omics, "vs", select_drugs),
+            title = paste("Stratified Analysis:", select_features, "vs", select_drugs),
             subtitle = "Individual stratum scatter plots"
           )
 
@@ -759,7 +759,7 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
         ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
         ggplot2::coord_flip(ylim = range(plot_data$Effect_Size, plot_data$CI_lower, plot_data$CI_upper, na.rm = TRUE) * c(1.1, 1.1)) +
         ggplot2::labs(
-          title = paste("Stratified Analysis:", select_omics, "vs", select_drugs),
+          title = paste("Stratified Analysis:", select_features, "vs", select_drugs),
           subtitle = "Effect Sizes with 95% Confidence Intervals",
           y = "Effect Size (Mean Difference)",
           x = ""
@@ -803,7 +803,7 @@ createStratifiedComparisonPlot <- function(sensitive_result, resistant_result,
           ncol = 2
         ) +
           patchwork::plot_annotation(
-            title = paste("Stratified Analysis:", select_omics, "vs", select_drugs)
+            title = paste("Stratified Analysis:", select_features, "vs", select_drugs)
           ))
       } else {
         return(list(
@@ -835,17 +835,17 @@ filterStratifiedData <- function(loaded_data, stratification_info, stratum) {
   filtered_drugs <- list()
 
   # Filter only for projects that have stratification info
-  for (project_name in names(stratification_info)) {
-    if (project_name %in% names(loaded_data$drugs)) {
+  for (projects in names(stratification_info)) {
+    if (projects %in% names(loaded_data$drugs)) {
       # Get stratum samples for this project
-      stratum_samples <- stratification_info[[project_name]][[stratum]]
+      stratum_samples <- stratification_info[[projects]][[stratum]]
 
       # Filter drug data
-      drug_data <- loaded_data$drugs[[project_name]]
+      drug_data <- loaded_data$drugs[[projects]]
       if (!is.null(drug_data)) {
         filtered_drug_data <- drug_data[names(drug_data) %in% stratum_samples]
         if (length(filtered_drug_data) >= 3) {
-          filtered_drugs[[project_name]] <- filtered_drug_data
+          filtered_drugs[[projects]] <- filtered_drug_data
         }
       }
     }
@@ -860,12 +860,12 @@ filterStratifiedData <- function(loaded_data, stratification_info, stratum) {
 #' @description Performs drug-omics analysis on pre-filtered stratified data
 #' @param omics_data Filtered omics data
 #' @param drug_data Filtered drug data
-#' @param select_omics_type Type of omics data
+#' @param feature_type Type of omics data
 #' @param merged_enabled Whether to create merged dataset
 #' @param meta_enabled Whether to perform meta-analysis
 #' @return Analysis results
 #' @export
-analyzeStratifiedData <- function(omics_data, drug_data, select_omics_type,
+analyzeStratifiedData <- function(omics_data, drug_data, feature_type,
                                  merged_enabled = TRUE, meta_enabled = TRUE) {
 
   # Check if we have data
@@ -874,7 +874,7 @@ analyzeStratifiedData <- function(omics_data, drug_data, select_omics_type,
   }
 
   # Perform analysis based on omics type
-  if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
+  if (feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
     # Continuous omics data
     pairs <- pairContinuousFeatures(omics_data, drug_data, merged = merged_enabled)
 
@@ -988,14 +988,14 @@ plot.StratifiedComparisonPlots <- function(x, which = "forest", ...) {
 #' Mimics the style from FuncPairVisualization.
 #' @param sensitive_result Analysis result from sensitive group
 #' @param resistant_result Analysis result from resistant group
-#' @param select_omics_type Type of omics data to visualize
-#' @param select_omics Name of the specific omics feature
+#' @param feature_type Type of omics data to visualize
+#' @param select_features Name of the specific omics feature
 #' @param stratification_drug Name of the drug used for stratification
 #' @return A ggplot2 object with boxplot comparing omics expression between strata
 createStratifiedOmicExpressionPlot <- function(sensitive_result,
                                                resistant_result,
-                                               select_omics_type,
-                                               select_omics,
+                                               feature_type,
+                                               select_features,
                                                stratification_drug) {
 
   # Check if required packages are available
@@ -1013,7 +1013,7 @@ createStratifiedOmicExpressionPlot <- function(sensitive_result,
   sensitive_omics <- NULL
   if (!is.null(sensitive_result$data)) {
     # Get omics data from the paired data
-    if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
+    if (feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
       # Continuous data
       if ("merged_dataset" %in% names(sensitive_result$data)) {
         sensitive_omics <- sensitive_result$data$merged_dataset$feature1
@@ -1026,11 +1026,11 @@ createStratifiedOmicExpressionPlot <- function(sensitive_result,
       # Discrete data - convert to presence/absence
       # For discrete data, we need to reconstruct which samples have the feature
       all_sensitive_samples <- c()
-      for (project_name in names(sensitive_result$data)) {
-        if (project_name != "merged_dataset") {
-          yes_samples <- sensitive_result$data[[project_name]]$yes
+      for (projects in names(sensitive_result$data)) {
+        if (projects != "merged_dataset") {
+          yes_samples <- sensitive_result$data[[projects]]$yes
           all_sensitive_samples <- c(all_sensitive_samples,
-                                    paste0(project_name, "_", yes_samples))
+                                    paste0(projects, "_", yes_samples))
         }
       }
       # Create binary vector (1 = present, 0 = absent)
@@ -1044,7 +1044,7 @@ createStratifiedOmicExpressionPlot <- function(sensitive_result,
   resistant_omics <- NULL
   if (!is.null(resistant_result$data)) {
     # Get omics data from the paired data
-    if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
+    if (feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")) {
       # Continuous data
       if ("merged_dataset" %in% names(resistant_result$data)) {
         resistant_omics <- resistant_result$data$merged_dataset$feature1
@@ -1056,11 +1056,11 @@ createStratifiedOmicExpressionPlot <- function(sensitive_result,
     } else {
       # Discrete data - convert to presence/absence
       all_resistant_samples <- c()
-      for (project_name in names(resistant_result$data)) {
-        if (project_name != "merged_dataset") {
-          yes_samples <- resistant_result$data[[project_name]]$yes
+      for (projects in names(resistant_result$data)) {
+        if (projects != "merged_dataset") {
+          yes_samples <- resistant_result$data[[projects]]$yes
           all_resistant_samples <- c(all_resistant_samples,
-                                   paste0(project_name, "_", yes_samples))
+                                   paste0(projects, "_", yes_samples))
         }
       }
       # Create binary vector (1 = present, 0 = absent)
@@ -1086,10 +1086,10 @@ createStratifiedOmicExpressionPlot <- function(sensitive_result,
   )
 
   # Create plot title
-  plot_title <- paste0(select_omics, " Expression by ", stratification_drug, " Response")
+  plot_title <- paste0(select_features, " Expression by ", stratification_drug, " Response")
 
   # Create y-axis label based on omics type
-  if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
+  if (feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
     y_label <- "Expression Level"
   } else {
     y_label <- "Presence"

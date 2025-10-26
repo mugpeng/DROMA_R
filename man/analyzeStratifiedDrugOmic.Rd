@@ -8,8 +8,8 @@ analyzeStratifiedDrugOmic(
   dromaset_object,
   stratification_drug,
   strata_quantile = 0.33,
-  select_omics_type,
-  select_omics,
+  feature_type,
+  select_features,
   select_drugs,
   min_samples = 5,
   ...
@@ -22,9 +22,9 @@ analyzeStratifiedDrugOmic(
 
 \item{strata_quantile}{Quantile threshold for stratification (default: 0.33)}
 
-\item{select_omics_type}{Type of omics data to analyze}
+\item{feature_type}{Type of omics data to analyze}
 
-\item{select_omics}{Name of the specific omics feature}
+\item{select_features}{Name of the specific omics feature}
 
 \item{select_drugs}{Name of the target drug for association analysis}
 
@@ -49,8 +49,8 @@ result <- analyzeStratifiedDrugOmic(
   dromaset_object = multi_set,
   stratification_drug = "cisplatin",
   strata_quantile = 0.33,
-  select_omics_type = "mRNA",
-  select_omics = "ERCC1",
+  feature_type = "mRNA",
+  select_features = "ERCC1",
   select_drugs = "bortezomib",
   data_type = "CellLine",
   tumor_type = "all"

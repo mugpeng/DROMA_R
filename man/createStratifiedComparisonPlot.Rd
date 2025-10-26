@@ -7,9 +7,9 @@
 createStratifiedComparisonPlot(
   sensitive_result,
   resistant_result,
-  select_omics,
+  select_features,
   select_drugs,
-  select_omics_type,
+  feature_type,
   p_value_digits = 3,
   add_difference_row = TRUE
 )
@@ -19,11 +19,11 @@ createStratifiedComparisonPlot(
 
 \item{resistant_result}{Results from resistant group}
 
-\item{select_omics}{Name of omics feature}
+\item{select_features}{Name of omics feature}
 
 \item{select_drugs}{Name of drug}
 
-\item{select_omics_type}{Type of omics data}
+\item{feature_type}{Type of omics data}
 
 \item{p_value_digits}{Number of decimal places for p-values (default: 3)}
 

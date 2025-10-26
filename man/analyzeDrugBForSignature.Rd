@@ -5,7 +5,7 @@
 \title{Analyze Drug B to identify response signature}
 \usage{
 analyzeDrugBForSignature(
-  drug_name,
+  select_drugs,
   connection,
   top_n_genes,
   data_type,
@@ -15,7 +15,7 @@ analyzeDrugBForSignature(
 )
 }
 \arguments{
-\item{drug_name}{Name of the drug}
+\item{select_drugs}{Name of the drug}
 
 \item{connection}{Database connection}
 

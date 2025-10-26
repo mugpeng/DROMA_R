@@ -4,8 +4,8 @@
 #'
 #' @description Main function for analyzing associations between a drug and an omic feature using DromaSet or MultiDromaSet objects
 #' @param dromaset_object Either a DromaSet or MultiDromaSet object
-#' @param select_omics_type Type of omics data to analyze (e.g., "mRNA", "mutation_gene")
-#' @param select_omics Name of the specific omics feature
+#' @param feature_type Type of omics data to analyze (e.g., "mRNA", "mutation_gene")
+#' @param select_features Name of the specific omics feature
 #' @param select_drugs Name of the drug to analyze
 #' @param data_type Filter by data type ("all", "CellLine", "PDO", "PDC", "PDX")
 #' @param tumor_type Filter by tumor type ("all" or specific tumor types)
@@ -25,7 +25,7 @@
 #' multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"), "path/to/droma.sqlite")
 #' result <- analyzeDrugOmicPair(multi_set, "mRNA", "ABCB1", "Paclitaxel")
 #' }
-analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics,
+analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
                                 select_drugs,
                                 data_type = "all", tumor_type = "all",
                                 overlap_only = FALSE,
@@ -38,6 +38,14 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
     stop("Input must be a DromaSet or MultiDromaSet object from DROMA.Set package")
   }
   
+  # Validate omics type
+  supported_omics_types <- c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", 
+                             "mutation_gene", "mutation_site", "fusion")
+  if (!feature_type %in% supported_omics_types) {
+    warning(sprintf("'%s' is not a supported omics type. Supported types are: %s", 
+                    feature_type, paste(supported_omics_types, collapse = ", ")))
+  }
+  
   # Warning if zscore is FALSE but merged_enabled is TRUE
   if (!zscore && merged_enabled) {
     warning("Without z-score normalization (zscore=FALSE), merging data from different studies may not be appropriate. Consider setting merged_enabled=FALSE.")
@@ -47,7 +55,7 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
   if (inherits(dromaset_object, "DromaSet")) {
     # Single DromaSet
     myDrugs <- loadTreatmentResponse(dromaset_object,
-                                    drugs = select_drugs,
+                                    select_drugs = select_drugs,
                                     data_type = data_type,
                                     tumor_type = tumor_type,
                                     return_data = TRUE,
@@ -64,7 +72,7 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
   } else {
     # MultiDromaSet
     myDrugs <- loadMultiProjectTreatmentResponse(dromaset_object,
-                                                drugs = select_drugs,
+                                                select_drugs = select_drugs,
                                                 overlap_only = overlap_only,
                                                 data_type = data_type,
                                                 tumor_type = tumor_type,
@@ -86,107 +94,82 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
 
   # Load and extract omics data
   if (inherits(dromaset_object, "DromaSet")) {
-    # Single DromaSet
-    if (select_omics_type %in% c("drug", "drug_raw")) {
-      # This is actually another drug, use treatment response
-      myOmics <- loadTreatmentResponse(dromaset_object,
-                                      drugs = select_omics,
-                                      data_type = data_type,
-                                      tumor_type = tumor_type,
-                                      return_data = TRUE,
-                                      zscore = zscore)
+    # Single DromaSet - Molecular profile data
+    myOmics <- loadMolecularProfiles(dromaset_object,
+                                    feature_type = feature_type,
+                                    select_features = select_features,
+                                    data_type = data_type,
+                                    tumor_type = tumor_type,
+                                    return_data = TRUE,
+                                    zscore = zscore)
 
-      if (is.matrix(myOmics) && select_omics %in% rownames(myOmics)) {
-        omics_vector <- as.numeric(myOmics[select_omics, ])
+    # Handle different data types
+    if (feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
+      # Continuous data
+      if (is.matrix(myOmics) && select_features %in% rownames(myOmics)) {
+        omics_vector <- as.numeric(myOmics[select_features, ])
         names(omics_vector) <- colnames(myOmics)
         myOmics <- list()
         myOmics[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
       }
     } else {
-      # Molecular profile data
-      myOmics <- loadMolecularProfiles(dromaset_object,
-                                      molecular_type = select_omics_type,
-                                      features = select_omics,
-                                      data_type = data_type,
-                                      tumor_type = tumor_type,
-                                      return_data = TRUE,
-                                      zscore = zscore)
-
-      # Handle different data types
-      if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
-        # Continuous data
-        if (is.matrix(myOmics) && select_omics %in% rownames(myOmics)) {
-          omics_vector <- as.numeric(myOmics[select_omics, ])
-          names(omics_vector) <- colnames(myOmics)
-          myOmics <- list()
-          myOmics[[dromaset_object@name]] <- omics_vector[!is.na(omics_vector)]
-        }
+      # Discrete data (mutations, fusions) - long dataframe format with samples and features columns
+      if (is.data.frame(myOmics) && "samples" %in% colnames(myOmics) && "features" %in% colnames(myOmics)) {
+        # Extract samples where the feature matches select_features
+        present_samples <- myOmics$samples[myOmics$features == select_features]
+        # Get all profiled samples for this omics type
+        all_profiled_samples <- listDROMASamples(dromaset_object@name,
+                                                 feature_type = feature_type,
+                                                 data_type = data_type,
+                                                 tumor_type = tumor_type)
+        myOmics <- list()
+        myOmics[[dromaset_object@name]] <- list(present = present_samples, all = all_profiled_samples)
       } else {
-        # Discrete data (mutations, fusions) - long dataframe format with samples and features columns
-        if (is.data.frame(myOmics) && "samples" %in% colnames(myOmics) && "features" %in% colnames(myOmics)) {
-          # Extract samples where the feature matches select_omics
-          present_samples <- myOmics$samples[myOmics$features == select_omics]
-          myOmics <- list()
-          myOmics[[dromaset_object@name]] <- present_samples
-        } else {
-          myOmics <- list()
-          myOmics[[dromaset_object@name]] <- character(0)
-        }
+        myOmics <- list()
+        myOmics[[dromaset_object@name]] <- list(present = character(0), all = character(0))
       }
     }
 
   } else {
-    # MultiDromaSet
-    if (select_omics_type %in% c("drug", "drug_raw")) {
-      # This is actually another drug, use treatment response
-      myOmics <- loadMultiProjectTreatmentResponse(dromaset_object,
-                                                  drugs = select_omics,
-                                                  overlap_only = overlap_only,
-                                                  data_type = data_type,
-                                                  tumor_type = tumor_type,
-                                                  zscore = zscore)
+    # MultiDromaSet - Molecular profile data
+    myOmics <- loadMultiProjectMolecularProfiles(dromaset_object,
+                                                feature_type = feature_type,
+                                                select_features = select_features,
+                                                overlap_only = overlap_only,
+                                                data_type = data_type,
+                                                tumor_type = tumor_type,
+                                                zscore = zscore)
 
-      # Extract specific drug from each project
-      myOmics <- lapply(myOmics, function(drug_matrix) {
-        if (is.matrix(drug_matrix) && select_omics %in% rownames(drug_matrix)) {
-          drug_vector <- as.numeric(drug_matrix[select_omics, ])
-          names(drug_vector) <- colnames(drug_matrix)
-          return(drug_vector[!is.na(drug_vector)])
+    # Handle different data types
+    if (feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
+      # Continuous data
+      myOmics <- lapply(myOmics, function(omics_matrix) {
+        if (is.matrix(omics_matrix) && select_features %in% rownames(omics_matrix)) {
+          omics_vector <- as.numeric(omics_matrix[select_features, ])
+          names(omics_vector) <- colnames(omics_matrix)
+          return(omics_vector[!is.na(omics_vector)])
         }
         return(NULL)
       })
     } else {
-      # Molecular profile data
-      myOmics <- loadMultiProjectMolecularProfiles(dromaset_object,
-                                                  molecular_type = select_omics_type,
-                                                  features = select_omics,
-                                                  overlap_only = overlap_only,
-                                                  data_type = data_type,
-                                                  tumor_type = tumor_type,
-                                                  zscore = zscore)
-
-      # Handle different data types
-      if (select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")) {
-        # Continuous data
-        myOmics <- lapply(myOmics, function(omics_matrix) {
-          if (is.matrix(omics_matrix) && select_omics %in% rownames(omics_matrix)) {
-            omics_vector <- as.numeric(omics_matrix[select_omics, ])
-            names(omics_vector) <- colnames(omics_matrix)
-            return(omics_vector[!is.na(omics_vector)])
-          }
-          return(NULL)
-        })
-      } else {
-        # Discrete data (mutations, fusions) - long dataframe format with samples and features columns
-        myOmics <- lapply(myOmics, function(omics_df) {
-          if (is.data.frame(omics_df) && "samples" %in% colnames(omics_df) && "features" %in% colnames(omics_df)) {
-            # Extract samples where the feature matches select_omics
-            present_samples <- omics_df$samples[omics_df$features == select_omics]
-            return(present_samples)
-          }
-          return(NULL)
-        })
-      }
+      # Discrete data (mutations, fusions) - long dataframe format with samples and features columns
+      project_names <- names(myOmics)
+      myOmics <- lapply(seq_along(myOmics), function(i) {
+        omics_df <- myOmics[[i]]
+        projects <- project_names[i]
+        if (is.data.frame(omics_df) && "samples" %in% colnames(omics_df) && "features" %in% colnames(omics_df)) {
+          # Extract samples where the feature matches select_features
+          present_samples <- omics_df$samples[omics_df$features == select_features]
+          # Get all profiled samples for this omics type from the specific project
+          all_profiled_samples <- listDROMASamples(dromaset_object@DromaSets[[projects]]@name,
+                                                   feature_type = feature_type,
+                                                   data_type = data_type,
+                                                   tumor_type = tumor_type)
+          return(list(present = present_samples, all = all_profiled_samples))
+        }
+        return(NULL)
+      })
+      names(myOmics) <- project_names
     }
 
     # Remove NULL entries
@@ -202,7 +185,7 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
   result <- list()
 
   # Handle continuous omics data
-  if(select_omics_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms", "drug")){
+  if(feature_type %in% c("mRNA", "meth", "proteinrppa", "cnv", "proteinms")){
     # Pair data using pairContinuousFeatures
     myPairs <- pairContinuousFeatures(myOmics, myDrugs, merged = merged_enabled)
 
@@ -220,21 +203,21 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
     # Create plots for individual studies using plotMultipleCorrelations
     if (length(individual_pairs) > 0) {
       multi_plot <- plotMultipleCorrelations(individual_pairs,
-                                              x_label = paste0(select_omics, " (", select_omics_type, ")"),
+                                              x_label = paste0(select_features, " (", feature_type, ")"),
                                               y_label = "Drug Response")
       # Add common axis labels
       result$plot <- createPlotWithCommonAxes(multi_plot,
-                                              x_title = paste(select_omics_type, "expression"),
-                                              y_title = "drug sensitivity")
+                                              x_title = paste(feature_type, "expression"),
+                                              y_title = "drug sensitivity(Area Above Curve)")
     }
 
     # Create plot for merged dataset if available
     if (!is.null(merged_pair) && merged_enabled) {
       result$merged_plot <- plotCorrelation(merged_pair$feature1,
                                            merged_pair$feature2,
-                                           x_label = paste(select_omics_type, "expression"),
-                                           y_label = "drug sensitivity",
-                                           title = paste(select_omics_type, ":", select_omics, "vs", select_drugs),
+                                           x_label = paste(feature_type, "expression"),
+                                           y_label = "drug sensitivity(Area Above Curve)",
+                                           title = paste(feature_type, ":", select_features, "vs", select_drugs),
                                            method = "spearman")
     }
 
@@ -266,18 +249,19 @@ analyzeDrugOmicPair <- function(dromaset_object, select_omics_type, select_omics
     # Create plots for individual studies using plotMultipleGroupComparisons
     if (length(individual_pairs) > 0) {
       multi_plot <- plotMultipleGroupComparisons(individual_pairs,
-                                                  y_label = paste(select_drugs, "-", select_omics_type))
+                                                x_label = paste0(select_features, " (", feature_type, ")"),
+                                                y_label = "Drug Response")
       # Add common axis label
       result$plot <- createPlotWithCommonAxes(multi_plot,
-                                              y_title = "drug sensitivity")
+                                              y_title = "drug sensitivity(Area Above Curve)")
     }
 
     # Create plot for merged dataset if available
     if (!is.null(merged_pair) && merged_enabled) {
       result$merged_plot <- plotGroupComparison(merged_pair$yes, merged_pair$no,
-                                                group_labels = c(paste("Without", select_omics), paste("With", select_omics)),
-                                                title = paste(select_omics_type, ":", select_omics, "vs", select_drugs),
-                                                y_label = "drug sensitivity")
+                                                group_labels = c(paste("Without", select_features), paste("With", select_features)),
+                                                title = paste(feature_type, ":", select_features, "vs", select_drugs),
+                                                y_label = "drug sensitivity(Area Above Curve)")
     }
 
     # Perform meta-analysis on individual pairs only (exclude merged data)

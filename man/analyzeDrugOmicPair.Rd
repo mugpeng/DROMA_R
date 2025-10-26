@@ -6,8 +6,8 @@
 \usage{
 analyzeDrugOmicPair(
   dromaset_object,
-  select_omics_type,
-  select_omics,
+  feature_type,
+  select_features,
   select_drugs,
   data_type = "all",
   tumor_type = "all",
@@ -20,9 +20,9 @@ analyzeDrugOmicPair(
 \arguments{
 \item{dromaset_object}{Either a DromaSet or MultiDromaSet object}
 
-\item{select_omics_type}{Type of omics data to analyze (e.g., "mRNA", "mutation_gene")}
+\item{feature_type}{Type of omics data to analyze (e.g., "mRNA", "mutation_gene")}
 
-\item{select_omics}{Name of the specific omics feature}
+\item{select_features}{Name of the specific omics feature}
 
 \item{select_drugs}{Name of the drug to analyze}
 

@@ -52,8 +52,7 @@ plotCorrelation <- function(x_values, y_values,
 plotGroupComparison <- function(yes_values, no_values,
                                 group_labels = c("Yes", "No"),
                                 title = "Group Comparison",
-                                y_label = "Value",
-                                x_label = "") {
+                                y_label = "Value") {
   # Combine data into dataframe
   box_df <- data.frame(
     values = c(no_values, yes_values),
@@ -76,7 +75,8 @@ plotGroupComparison <- function(yes_values, no_values,
     ) +
     coord_cartesian(ylim = c(NA, max(box_df$values) + max(box_df$values)/20)) +
     ggtitle(title) +
-    ylab(y_label)
+    ylab(y_label) + 
+    xlab("")
 
   return(p)
 }
@@ -154,11 +154,13 @@ plotMultipleCorrelations <- function(pairs_list,
 #'
 #' @description Creates and combines multiple group comparison plots
 #' @param pairs_list List of paired datasets with yes/no groups
+#' @param x_label Label for the grouping variable (discrete feature)
 #' @param y_label Common y-axis label
 #' @param ncol Number of columns in the grid
 #' @return A combined plot with all comparisons or NULL if no valid pairs
 #' @export
 plotMultipleGroupComparisons <- function(pairs_list,
+                                        x_label = "Feature",
                                         y_label = "Value",
                                         ncol = 3) {
   # Initialize list to store plots
@@ -178,10 +180,9 @@ plotMultipleGroupComparisons <- function(pairs_list,
 
       # Create plot and add to list (without axis labels to avoid redundancy)
       p_list[[i]] <- plotGroupComparison(yes_vals, no_vals,
-                                         group_labels = c("No", "Yes"),
+                                         group_labels = c("Without", "With"),
                                          title = names(pairs_list)[i],
-                                         y_label = "",
-                                         x_label = "")
+                                         y_label = "")
     }, error = function(e) {
       warning("Error creating plot for pair ", names(pairs_list)[i], ": ", e$message)
     })
@@ -190,17 +191,23 @@ plotMultipleGroupComparisons <- function(pairs_list,
   # Remove NULL entries from list
   p_list <- p_list[!sapply(p_list, is.null)]
 
-  # Combine plots using patchwork if plots exist
+    # Combine plots using patchwork if plots exist
   if (length(p_list) > 0) {
     if (requireNamespace("patchwork", quietly = TRUE)) {
-      combined_plot <- patchwork::wrap_plots(p_list, ncol = ncol)
+      if (length(p_list) <= 3) {
+        combined_plot <- patchwork::wrap_plots(p_list, ncol = length(p_list))
+      } else {
+        combined_plot <- patchwork::wrap_plots(p_list, ncol = ncol)
+      }
 
-      # Add overall title
-      combined_plot <- combined_plot +
-        patchwork::plot_annotation(
-          title = "Multiple Group Comparisons",
-          theme = theme(plot.title = element_text(size = 16, hjust = 0.5, face = "bold"))
-        )
+      # Add overall title if we have multiple plots
+      if (length(p_list) > 1) {
+        combined_plot <- combined_plot +
+          patchwork::plot_annotation(
+            title = paste("Multiple Group Comparisons:", x_label, "vs", y_label),
+            theme = theme(plot.title = element_text(size = 16, hjust = 0.5, face = "bold"))
+          )
+      }
 
       return(combined_plot)
     } else {
@@ -221,6 +228,18 @@ plotMultipleGroupComparisons <- function(pairs_list,
 #' @return A patchwork/ggplot object with common axis labels
 #' @export
 createPlotWithCommonAxes <- function(p, x_title = NULL, y_title = NULL) {
+  # Check if plot object is valid
+  if (is.null(p)) {
+    warning("Input plot is NULL. Returning NULL.")
+    return(NULL)
+  }
+  
+  # If p is a list (when patchwork is not available), return it as is
+  if (is.list(p) && !inherits(p, "ggplot") && !inherits(p, "patchwork")) {
+    warning("Input is a list of plots, not a combined plot. Returning original list.")
+    return(p)
+  }
+  
   if (!requireNamespace("patchwork", quietly = TRUE)) {
     warning("patchwork package not available. Returning original plot.")
     return(p)

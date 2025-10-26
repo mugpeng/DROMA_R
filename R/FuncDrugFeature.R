@@ -4,7 +4,7 @@
 #'
 #' @description Creates a combined dataframe with raw and normalized drug sensitivity values from DromaSet or MultiDromaSet objects
 #' @param dromaset_object Either a DromaSet or MultiDromaSet object
-#' @param drug_name Character string specifying the drug name
+#' @param select_drugs Character string specifying the drug name
 #' @param data_type Filter by data type ("all", "CellLine", "PDC", "PDO", "PDX")
 #' @param tumor_type Filter by tumor type (use "all" for all tumor types)
 #' @param overlap_only For MultiDromaSet, whether to use only overlapping samples (default: FALSE).
@@ -25,8 +25,8 @@
 #' # Using MultiDromaSet with all samples (maximum sample size)
 #' drug_data_all <- processDrugData(multi_set, "Paclitaxel", overlap_only = FALSE)
 #' }
-processDrugData <- function(dromaset_object, drug_name, data_type = "all", tumor_type = "all", overlap_only = FALSE) {
-  if (drug_name == "") {
+processDrugData <- function(dromaset_object, select_drugs, data_type = "all", tumor_type = "all", overlap_only = FALSE) {
+  if (select_drugs == "") {
     stop("Please select a drug.")
   }
 
@@ -39,15 +39,15 @@ processDrugData <- function(dromaset_object, drug_name, data_type = "all", tumor
   if (inherits(dromaset_object, "DromaSet")) {
     # Single DromaSet - Load normalized data
     drug_data <- loadTreatmentResponse(dromaset_object,
-                                      drugs = drug_name,
+                                      select_drugs = select_drugs,
                                       data_type = data_type,
                                       tumor_type = tumor_type,
                                       return_data = TRUE,
                                       zscore = TRUE)
 
     # Convert matrix to list format for compatibility
-    if (is.matrix(drug_data) && drug_name %in% rownames(drug_data)) {
-      drug_vector <- as.numeric(drug_data[drug_name, ])
+    if (is.matrix(drug_data) && select_drugs %in% rownames(drug_data)) {
+      drug_vector <- as.numeric(drug_data[select_drugs, ])
       names(drug_vector) <- colnames(drug_data)
       drug_data_list <- list()
       drug_data_list[[dromaset_object@name]] <- drug_vector[!is.na(drug_vector)]
@@ -57,15 +57,15 @@ processDrugData <- function(dromaset_object, drug_name, data_type = "all", tumor
 
     # Load raw data (non-normalized)
     raw_drug_data <- loadTreatmentResponse(dromaset_object,
-                                          drugs = drug_name,
+                                          select_drugs = select_drugs,
                                           data_type = data_type,
                                           tumor_type = tumor_type,
                                           zscore = FALSE,
                                           return_data = TRUE)
 
     # Convert raw matrix to list format for compatibility
-    if (is.matrix(raw_drug_data) && drug_name %in% rownames(raw_drug_data)) {
-      raw_drug_vector <- as.numeric(raw_drug_data[drug_name, ])
+    if (is.matrix(raw_drug_data) && select_drugs %in% rownames(raw_drug_data)) {
+      raw_drug_vector <- as.numeric(raw_drug_data[select_drugs, ])
       names(raw_drug_vector) <- colnames(raw_drug_data)
       raw_data_list <- list()
       raw_data_list[[dromaset_object@name]] <- raw_drug_vector[!is.na(raw_drug_vector)]
@@ -76,7 +76,7 @@ processDrugData <- function(dromaset_object, drug_name, data_type = "all", tumor
   } else {
     # MultiDromaSet - Load normalized data
     drug_data <- loadMultiProjectTreatmentResponse(dromaset_object,
-                                                  drugs = drug_name,
+                                                  select_drugs = select_drugs,
                                                   overlap_only = overlap_only,
                                                   data_type = data_type,
                                                   tumor_type = tumor_type,
@@ -84,8 +84,8 @@ processDrugData <- function(dromaset_object, drug_name, data_type = "all", tumor
 
     # Extract specific drug from each project
     drug_data_list <- lapply(drug_data, function(drug_matrix) {
-      if (is.matrix(drug_matrix) && drug_name %in% rownames(drug_matrix)) {
-        drug_vector <- as.numeric(drug_matrix[drug_name, ])
+      if (is.matrix(drug_matrix) && select_drugs %in% rownames(drug_matrix)) {
+        drug_vector <- as.numeric(drug_matrix[select_drugs, ])
         names(drug_vector) <- colnames(drug_matrix)
         return(drug_vector[!is.na(drug_vector)])
       }
@@ -97,7 +97,7 @@ processDrugData <- function(dromaset_object, drug_name, data_type = "all", tumor
 
     # Load raw data (non-normalized)
     raw_drug_data <- loadMultiProjectTreatmentResponse(dromaset_object,
-                                                      drugs = drug_name,
+                                                      select_drugs = select_drugs,
                                                       overlap_only = overlap_only,
                                                       data_type = data_type,
                                                       tumor_type = tumor_type,
@@ -105,8 +105,8 @@ processDrugData <- function(dromaset_object, drug_name, data_type = "all", tumor
 
     # Extract specific drug from each project for raw data
     raw_data_list <- lapply(raw_drug_data, function(drug_matrix) {
-      if (is.matrix(drug_matrix) && drug_name %in% rownames(drug_matrix)) {
-        drug_vector <- as.numeric(drug_matrix[drug_name, ])
+      if (is.matrix(drug_matrix) && select_drugs %in% rownames(drug_matrix)) {
+        drug_vector <- as.numeric(drug_matrix[select_drugs, ])
         names(drug_vector) <- colnames(drug_matrix)
         return(drug_vector[!is.na(drug_vector)])
       }
@@ -244,7 +244,7 @@ annotateDrugData <- function(drug_data, sample_annotations = NULL, db_path = NUL
 #'   or loaded from the global `sample_anno` variable, or retrieved from the SQLite
 #'   database specified by `db_path`.
 #' @param dromaset_object Either a DromaSet or MultiDromaSet object
-#' @param drug_name Character string specifying the drug name
+#' @param select_drugs Character string specifying the drug name
 #' @param data_type Filter by data type ("all", "CellLine", "PDC", "PDO", "PDX")
 #' @param tumor_type Filter by tumor type (use "all" for all tumor types)
 #' @param overlap_only For MultiDromaSet, whether to use only overlapping samples (default: FALSE).
@@ -284,7 +284,7 @@ annotateDrugData <- function(drug_data, sample_annotations = NULL, db_path = NUL
 #'                                    sample_annotations = my_annotations)
 #' }
 getDrugSensitivityData <- function(dromaset_object,
-                                   drug_name,
+                                   select_drugs,
                                    data_type = "all",
                                    tumor_type = "all",
                                    overlap_only = FALSE,
@@ -292,7 +292,7 @@ getDrugSensitivityData <- function(dromaset_object,
                                    sample_annotations = NULL,
                                    db_path = NULL) {
   # Process drug data
-  drug_data <- processDrugData(dromaset_object, drug_name, data_type, tumor_type, overlap_only)
+  drug_data <- processDrugData(dromaset_object, select_drugs, data_type, tumor_type, overlap_only)
 
   # Add annotations if requested
   if (include_annotations) {
@@ -539,7 +539,7 @@ createDrugComparisonPlot <- function(data, comparison_var, value_column = "value
 #'   For MultiDromaSet objects with zscore=TRUE and merge=TRUE, it can combine data from multiple projects
 #'   when the drug appears in at least two projects. When merge=FALSE, separate plots are returned for each project.
 #' @param dromaset_object Either a DromaSet or MultiDromaSet object
-#' @param drug_name Character string specifying the drug name
+#' @param select_drugs Character string specifying the drug name
 #' @param data_type Filter by data type: "all" (default), "CellLine", "PDC", "PDO", "PDX"
 #' @param tumor_type Filter by tumor type: "all" (default) or specific tumor type
 #' @param highlight Character vector specifying samples to highlight. Can be:
@@ -588,7 +588,7 @@ createDrugComparisonPlot <- function(data, comparison_var, value_column = "value
 #' )
 #' }
 plotDrugSensitivityRank <- function(dromaset_object,
-                                   drug_name,
+                                   select_drugs,
                                    data_type = "all",
                                    tumor_type = "all",
                                    overlap_only = FALSE,
@@ -602,8 +602,8 @@ plotDrugSensitivityRank <- function(dromaset_object,
                                    db_path = NULL) {
 
   # Validate inputs
-  if (missing(drug_name) || is.null(drug_name) || drug_name == "") {
-    stop("drug_name must be specified")
+  if (missing(select_drugs) || is.null(select_drugs) || select_drugs == "") {
+    stop("select_drugs must be specified")
   }
 
   if (!inherits(dromaset_object, c("DromaSet", "MultiDromaSet"))) {
@@ -619,7 +619,7 @@ plotDrugSensitivityRank <- function(dromaset_object,
   # Get drug sensitivity data
   drug_data <- getDrugSensitivityData(
     dromaset_object = dromaset_object,
-    drug_name = drug_name,
+    select_drugs = select_drugs,
     data_type = data_type,
     tumor_type = tumor_type,
     overlap_only = overlap_only,
@@ -651,13 +651,13 @@ plotDrugSensitivityRank <- function(dromaset_object,
       # Check if drug appears in multiple studies
       study_counts <- table(drug_data$ProjectID)
       if (length(study_counts) < 2) {
-        warning("Drug '", drug_name, "' found in only ", length(study_counts),
+        warning("Drug '", select_drugs, "' found in only ", length(study_counts),
                 " project(s). merge=TRUE requires at least 2 projects. Using individual project data.")
         merge <- FALSE
       } else {
         # Create a combined dataset indicator for merged analysis
         # drug_data$ProjectID <- "Combined"
-        return(createSingleRankPlot(drug_data, drug_name, highlight, color, zscore,
+        return(createSingleRankPlot(drug_data, select_drugs, highlight, color, zscore,
                                   value_column, point_size, highlight_alpha, merge))
       }
     }
@@ -671,7 +671,7 @@ plotDrugSensitivityRank <- function(dromaset_object,
         project_data <- drug_data[drug_data$ProjectID == project, ]
         if (nrow(project_data) > 0) {
           plot_list[[project]] <- createSingleRankPlot(
-            project_data, drug_name, highlight, color, zscore,
+            project_data, select_drugs, highlight, color, zscore,
             value_column, point_size, highlight_alpha, merge, project
           )
         }
@@ -682,13 +682,13 @@ plotDrugSensitivityRank <- function(dromaset_object,
   }
 
   # For DromaSet or single project analysis
-  return(createSingleRankPlot(drug_data, drug_name, highlight, color, zscore,
+  return(createSingleRankPlot(drug_data, select_drugs, highlight, color, zscore,
                             value_column, point_size, highlight_alpha, merge))
 }
 
 #' Create a single rank plot (internal function)
 #' @param drug_data Data frame with drug sensitivity data
-#' @param drug_name Name of the drug
+#' @param select_drugs Name of the drug
 #' @param highlight Highlighting specification
 #' @param color Coloring specification
 #' @param zscore Whether using zscore values
@@ -696,11 +696,11 @@ plotDrugSensitivityRank <- function(dromaset_object,
 #' @param point_size Size of points
 #' @param highlight_alpha Alpha for non-highlighted points
 #' @param merge Whether this is a merged plot
-#' @param project_name Optional project name for title
+#' @param projects Optional project name for title
 #' @return ggplot2 object
-createSingleRankPlot <- function(drug_data, drug_name, highlight, color, zscore,
+createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zscore,
                                value_column, point_size, highlight_alpha, merge,
-                               project_name = NULL) {
+                               projects = NULL) {
 
   # Rank samples by drug sensitivity (lowest values = most sensitive = rank 1)
   drug_data <- drug_data[order(drug_data[[value_column]]), ]
@@ -815,9 +815,9 @@ createSingleRankPlot <- function(drug_data, drug_name, highlight, color, zscore,
 
   # Customize plot appearance
   value_label <- if (zscore) "Z-score Drug Sensitivity" else "Raw Drug Sensitivity"
-  plot_title <- paste("Drug Sensitivity Rank Plot:", drug_name)
-  if (!is.null(project_name)) {
-    plot_title <- paste(plot_title, "-", project_name)
+  plot_title <- paste("Drug Sensitivity Rank Plot:", select_drugs)
+  if (!is.null(projects)) {
+    plot_title <- paste(plot_title, "-", projects)
   } else if (merge) {
     plot_title <- paste(plot_title, "(Merged)")
   }

@@ -7,7 +7,7 @@
 library(meta)
 library(metafor)
 library(effsize)
-library(ggplot2)
+library(ggpubr)
 library(dplyr)
 library(DROMA.Set)  # For data management
 library(DROMA.R)    # For analysis functions
@@ -15,7 +15,7 @@ library(DROMA.R)    # For analysis functions
 # Setup: Create DromaSet Objects----
 
 # Note: Replace with your actual database path
-db_path <- "sql_db/droma.sqlite"
+db_path <- "../Data/droma.sqlite"
 
 # Connect to DROMA database
 connectDROMADatabase(db_path)
@@ -35,8 +35,8 @@ cat("DromaSet objects created successfully!\n\n")
 # Example 1: Find genes associated with Paclitaxel response using single project ----
 
 cat("Example 1: Finding genes associated with Paclitaxel response using single DromaSet...\n")
-# Note: Setting test_top_100=TRUE to limit analysis time for the example
-# In real usage, you might want to use test_top_100=FALSE to test all features
+# Note: Setting test_top_n=100 to limit analysis time for the example
+# In real usage, you might want to use test_top_n=NULL to test all features
 batch_results_single <- batchFindSignificantFeatures(
   gCSI,
   feature1_type = "drug",
@@ -44,7 +44,7 @@ batch_results_single <- batchFindSignificantFeatures(
   feature2_type = "cnv",
   data_type = "all",
   tumor_type = "all",
-  test_top_100 = TRUE  # Use only top 100 features for this example
+  test_top_n = 900  # Use only top 100 features for this example
 )
 
 # Display top features
@@ -73,7 +73,7 @@ batch_results_multi <- batchFindSignificantFeatures(
   data_type = "all",
   tumor_type = "all",
   overlap_only = FALSE,
-  test_top_100 = TRUE  # Use only top 100 features for this example
+  test_top_n = 100  # Use only top 100 features for this example
 )
 
 # Display top features
@@ -105,7 +105,7 @@ mutation_results <- batchFindSignificantFeatures(
   data_type = "all",
   tumor_type = "all",
   overlap_only = FALSE,
-  test_top_100 = TRUE  # Use only top 100 features for this example
+  test_top_n = 100  # Use only top 100 features for this example
 )
 
 # Display top mutations
@@ -163,10 +163,40 @@ if (!is.null(batch_results_single) && !is.null(batch_results_multi) &&
 }
 
 ######################################
-# Example 5: Parallel processing example
+# Example 5: Test specific features using feature2_name parameter
 ######################################
 
-cat("\nExample 5: Using parallel processing for faster analysis...\n")
+cat("\nExample 5: Testing specific genes instead of all features...\n")
+cat("Using feature2_name parameter to test only specific genes of interest\n")
+
+# Define specific genes to test
+genes_of_interest <- c("TP53", "EGFR", "KRAS", "BRCA1", "BRCA2")
+
+specific_gene_results <- batchFindSignificantFeatures(
+  multi_set,
+  feature1_type = "drug",
+  feature1_name = "Paclitaxel",
+  feature2_type = "mRNA",
+  # feature2_name = genes_of_interest,  # Test only these specific genes
+  data_type = "all",
+  tumor_type = "all",
+  overlap_only = FALSE
+)
+
+# Display results for specific genes
+if (!is.null(specific_gene_results) && nrow(specific_gene_results) > 0) {
+  cat("Results for specific genes of interest:\n")
+  sorted_specific <- specific_gene_results[order(specific_gene_results$p_value),]
+  print(sorted_specific)
+} else {
+  cat("No results found for the specified genes\n")
+}
+
+######################################
+# Example 6: Parallel processing example
+######################################
+
+cat("\nExample 6: Using parallel processing for faster analysis...\n")
 cat("Note: This example shows how to use multiple cores for batch analysis\n")
 
 # Example with parallel processing (uncomment to use)
@@ -179,7 +209,7 @@ cat("Note: This example shows how to use multiple cores for batch analysis\n")
 #   tumor_type = "all",
 #   overlap_only = FALSE,
 #   cores = 4,  # Use 4 CPU cores
-#   test_top_100 = TRUE
+#   test_top_n = 100
 # )
 
 cat("To use parallel processing, set cores > 1 in batchFindSignificantFeatures()\n")
@@ -189,6 +219,7 @@ cat("Key takeaways:\n")
 cat("1. Use batchFindSignificantFeatures() with DromaSet objects for batch analysis\n")
 cat("2. MultiDromaSet enables meta-analysis across multiple projects\n")
 cat("3. Use plotMetaVolcano() to visualize batch analysis results\n")
-cat("4. Set test_top_100=TRUE for faster testing, FALSE for comprehensive analysis\n")
+cat("4. Set test_top_n to limit features for faster testing, or NULL for comprehensive analysis\n")
 cat("5. Use parallel processing (cores > 1) for large-scale analyses\n")
 cat("6. Compare single vs multi-project results to assess consistency\n")
+cat("7. Use feature2_name parameter to test specific features instead of all features\n")

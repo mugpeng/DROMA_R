@@ -20,7 +20,7 @@ if (!requireNamespace("dplyr", quietly = TRUE)) {
 #'
 #' @description Creates statistical overview plots showing drug/sample counts, overlaps,
 #' molecular characteristics, and tumor type distributions from projects in the DROMA database
-#' @param project_names Character vector of project names to include. Use "all" to include all projects from database
+#' @param projects Character vector of project names to include. Use "all" to include all projects from database
 #' @param plot_types Character vector of plot types to generate: "counts", "overlaps",
 #' "molecular", "drug_moa", "tumor_types", or "all"
 #' @param data_type Character, filter by data type: "all" (default), "CellLine", "PDO", "PDC", or "PDX"
@@ -42,7 +42,7 @@ if (!requireNamespace("dplyr", quietly = TRUE)) {
 #' # Generate plots for cell line projects only
 #' stat_plots <- generateStatisticalPlots("all", data_type = "CellLine")
 #' }
-generateStatisticalPlots <- function(project_names = "all",
+generateStatisticalPlots <- function(projects = "all",
                                    plot_types = "all",
                                    data_type = "all",
                                    connection = NULL,
@@ -76,22 +76,22 @@ generateStatisticalPlots <- function(project_names = "all",
   }
 
   # Determine which projects to use
-  if ("all" %in% project_names) {
-    selected_projects <- all_projects$project_name
+  if ("all" %in% projects) {
+    selected_projects <- all_projects$projects
   } else {
     # Validate provided project names
-    invalid_projects <- setdiff(project_names, all_projects$project_name)
+    invalid_projects <- setdiff(projects, all_projects$projects)
     if (length(invalid_projects) > 0) {
       warning("Invalid project names: ", paste(invalid_projects, collapse = ", "))
     }
-    selected_projects <- intersect(project_names, all_projects$project_name)
+    selected_projects <- intersect(projects, all_projects$projects)
     if (length(selected_projects) == 0) {
       stop("No valid projects found")
     }
   }
 
   # Filter project info to selected projects
-  project_info <- all_projects[all_projects$project_name %in% selected_projects, ]
+  project_info <- all_projects[all_projects$projects %in% selected_projects, ]
 
   # Get annotations from database
   sample_annotations <- NULL
@@ -157,7 +157,7 @@ generateCountPlots <- function(project_info, use_gap_plots = TRUE) {
 
   for (i in 1:nrow(project_info)) {
     project_row <- project_info[i, ]
-    project_name <- project_row$project_name
+    projects <- project_row$projects
     dataset_type <- if(is.na(project_row$dataset_type)) "Other" else project_row$dataset_type
     sample_count <- if(is.na(project_row$sample_count)) 0 else project_row$sample_count
     drug_count <- if(is.na(project_row$drug_count)) 0 else project_row$drug_count
@@ -165,7 +165,7 @@ generateCountPlots <- function(project_info, use_gap_plots = TRUE) {
     # Add dimensions to data frame
     all_stat <- rbind(all_stat, data.frame(
       counts = c(drug_count, sample_count),
-      source = rep(project_name, 2),
+      source = rep(projects, 2),
       type = c("Drugs", "Samples"),
       group = rep(dataset_type, 2),
       stringsAsFactors = FALSE
@@ -327,25 +327,25 @@ generateOverlapPlots <- function(selected_projects, connection) {
   drug_list <- list()
   sample_list <- list()
 
-  for (project_name in selected_projects) {
+  for (projects in selected_projects) {
     # Get drugs for this project
     tryCatch({
-      drugs <- DROMA.Set::listDROMAFeatures(project_name, "drug", connection = connection)
+      drugs <- DROMA.Set::listDROMAFeatures(projects, "drug", connection = connection)
       if (length(drugs) > 0) {
-        drug_list[[project_name]] <- drugs
+        drug_list[[projects]] <- drugs
       }
     }, error = function(e) {
-      warning("Could not get drugs for project ", project_name, ": ", e$message)
+      warning("Could not get drugs for project ", projects, ": ", e$message)
     })
 
     # Get samples for this project
     tryCatch({
-      samples <- DROMA.Set::listDROMASamples(project_name, connection = connection)
+      samples <- DROMA.Set::listDROMASamples(projects, connection = connection)
       if (length(samples) > 0) {
-        sample_list[[project_name]] <- samples
+        sample_list[[projects]] <- samples
       }
     }, error = function(e) {
-      warning("Could not get samples for project ", project_name, ": ", e$message)
+      warning("Could not get samples for project ", projects, ": ", e$message)
     })
   }
 
@@ -410,7 +410,7 @@ generateCharacteristicsPlot <- function(project_info) {
                    "fusion", "proteinrppa", "proteinms", "meth")
 
   for (i in 1:nrow(project_info)) {
-    project_name <- project_info$project_name[i]
+    projects <- project_info$projects[i]
     data_types_str <- project_info$data_types[i]
     dataset_type <- if(is.na(project_info$dataset_type[i])) "Other" else project_info$dataset_type[i]
 
@@ -423,7 +423,7 @@ generateCharacteristicsPlot <- function(project_info) {
 
     for (feature in all_features) {
       plot_data <- rbind(plot_data, data.frame(
-        Project = project_name,
+        Project = projects,
         Feature = feature,
         Available = feature %in% project_data_types,
         Dataset_Type = dataset_type,

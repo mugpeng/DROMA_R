@@ -5,7 +5,7 @@
 \title{Generate comprehensive statistical plots from DROMA database projects}
 \usage{
 generateStatisticalPlots(
-  project_names = "all",
+  projects = "all",
   plot_types = "all",
   data_type = "all",
   connection = NULL,
@@ -13,7 +13,7 @@ generateStatisticalPlots(
 )
 }
 \arguments{
-\item{project_names}{Character vector of project names to include. Use "all" to include all projects from database}
+\item{projects}{Character vector of project names to include. Use "all" to include all projects from database}
 
 \item{plot_types}{Character vector of plot types to generate: "counts", "overlaps",
 "molecular", "drug_moa", "tumor_types", or "all"}

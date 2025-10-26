@@ -7,7 +7,7 @@
 loadFeatureData(
   dromaset_object,
   feature_type,
-  feature_name,
+  select_features,
   data_type = "all",
   tumor_type = "all",
   overlap_only = FALSE,
@@ -19,7 +19,7 @@ loadFeatureData(
 
 \item{feature_type}{Type of feature to load}
 
-\item{feature_name}{Name of feature to load}
+\item{select_features}{Name of feature to load}
 
 \item{data_type}{Filter by data type}
 

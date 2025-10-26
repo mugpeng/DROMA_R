@@ -76,7 +76,7 @@ analyzeStratifiedCTRDB <- function(drug_b_name,
   # Step 1: Get patient data for Drug B and identify upregulated genes
   cat("Step 1: Analyzing Drug B (", drug_b_name, ") for signature generation...\n", sep = "")
   drug_b_result <- analyzeDrugBForSignature(
-    drug_name = drug_b_name,
+    select_drugs = drug_b_name,
     connection = connection,
     top_n_genes = top_n_genes,
     data_type = data_type,
@@ -111,7 +111,7 @@ analyzeStratifiedCTRDB <- function(drug_b_name,
   # Step 5: Apply B drug signature to Drug A datasets
   cat("Step 5: Applying B drug signature to Drug A (", drug_a_name, ") datasets...\n", sep = "")
   drug_a_result <- analyzeDrugAWithSignature(
-    drug_name = drug_a_name,
+    select_drugs = drug_a_name,
     connection = connection,
     signature_genes = final_signature_genes,
     data_type = data_type,
@@ -152,7 +152,7 @@ analyzeStratifiedCTRDB <- function(drug_b_name,
 #' Analyze Drug B to identify response signature
 #'
 #' @description Analyzes Drug B response data to identify upregulated genes in responders
-#' @param drug_name Name of the drug
+#' @param select_drugs Name of the drug
 #' @param connection Database connection
 #' @param top_n_genes Number of top genes to select
 #' @param data_type Filter by data type
@@ -161,7 +161,7 @@ analyzeStratifiedCTRDB <- function(drug_b_name,
 #' @param min_non_response_size Minimum non-response samples
 #' @return List containing patient data and top genes per patient
 #' @keywords internal
-analyzeDrugBForSignature <- function(drug_name, connection, top_n_genes,
+analyzeDrugBForSignature <- function(select_drugs, connection, top_n_genes,
                                    data_type, tumor_type, min_response_size,
                                    min_non_response_size) {
 
@@ -174,7 +174,7 @@ analyzeDrugBForSignature <- function(drug_name, connection, top_n_genes,
 
   # Find samples with the selected drug
   drug_samples <- sample_anno[!is.na(sample_anno$CliUsedDrug) &
-                             grepl(drug_name, sample_anno$CliUsedDrug, ignore.case = TRUE), ]
+                             grepl(select_drugs, sample_anno$CliUsedDrug, ignore.case = TRUE), ]
 
   # Filter for CTRDB project
   if ("ProjectID" %in% colnames(drug_samples)) {
@@ -487,10 +487,10 @@ calculateDrugAScores <- function(patient_data_list, signature_genes) {
 #'
 #' @description Compares B drug response scores between non-responders and responders
 #' @param drug_b_scores List of B drug scores
-#' @param drug_name Name of drug B
+#' @param select_drugs Name of drug B
 #' @return List containing analysis results and plots
 #' @keywords internal
-analyzeDrugBScores <- function(drug_b_scores, drug_name) {
+analyzeDrugBScores <- function(drug_b_scores, select_drugs) {
 
   results <- list()
   plots <- list()
@@ -545,7 +545,7 @@ analyzeDrugBScores <- function(drug_b_scores, drug_name) {
     combined_plot <- patchwork::wrap_plots(plots, ncol = min(3, length(plots)))
     combined_plot <- combined_plot +
       patchwork::plot_annotation(
-        title = paste("B Drug (", drug_name, ") Response Scores Analysis", sep = ""),
+        title = paste("B Drug (", select_drugs, ") Response Scores Analysis", sep = ""),
         theme = ggplot2::theme(plot.title = ggplot2::element_text(size = 16, hjust = 0.5, face = "bold"))
       )
     results$combined_plot <- combined_plot
@@ -560,14 +560,14 @@ analyzeDrugBScores <- function(drug_b_scores, drug_name) {
 #' Analyze Drug A with B drug signature
 #'
 #' @description Loads and processes Drug A data for correlation analysis
-#' @param drug_name Name of drug A
+#' @param select_drugs Name of drug A
 #' @param connection Database connection
 #' @param signature_genes B drug signature genes
 #' @param data_type Filter by data type
 #' @param tumor_type Filter by tumor type
 #' @return List containing patient data for Drug A
 #' @keywords internal
-analyzeDrugAWithSignature <- function(drug_name, connection, signature_genes,
+analyzeDrugAWithSignature <- function(select_drugs, connection, signature_genes,
                                    data_type, tumor_type) {
 
   # Get sample annotations
@@ -579,7 +579,7 @@ analyzeDrugAWithSignature <- function(drug_name, connection, signature_genes,
 
   # Find samples with drug A
   drug_samples <- sample_anno[!is.na(sample_anno$CliUsedDrug) &
-                             grepl(drug_name, sample_anno$CliUsedDrug, ignore.case = TRUE), ]
+                             grepl(select_drugs, sample_anno$CliUsedDrug, ignore.case = TRUE), ]
 
   # Filter for CTRDB project
   if ("ProjectID" %in% colnames(drug_samples)) {

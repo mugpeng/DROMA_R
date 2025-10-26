@@ -7,7 +7,7 @@
 analyzeStratifiedData(
   omics_data,
   drug_data,
-  select_omics_type,
+  feature_type,
   merged_enabled = TRUE,
   meta_enabled = TRUE
 )
@@ -17,7 +17,7 @@ analyzeStratifiedData(
 
 \item{drug_data}{Filtered drug data}
 
-\item{select_omics_type}{Type of omics data}
+\item{feature_type}{Type of omics data}
 
 \item{merged_enabled}{Whether to create merged dataset}
 

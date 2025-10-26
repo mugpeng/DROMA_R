@@ -7,8 +7,8 @@
 createStratifiedOmicExpressionPlot(
   sensitive_result,
   resistant_result,
-  select_omics_type,
-  select_omics,
+  feature_type,
+  select_features,
   stratification_drug
 )
 }
@@ -17,9 +17,9 @@ createStratifiedOmicExpressionPlot(
 
 \item{resistant_result}{Analysis result from resistant group}
 
-\item{select_omics_type}{Type of omics data to visualize}
+\item{feature_type}{Type of omics data to visualize}
 
-\item{select_omics}{Name of the specific omics feature}
+\item{select_features}{Name of the specific omics feature}
 
 \item{stratification_drug}{Name of the drug used for stratification}
 }

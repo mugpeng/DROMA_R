@@ -86,11 +86,23 @@ pairContinuousFeatures <- function(dataset1, dataset2, merged = FALSE, intersect
 pairDiscreteFeatures <- function(discrete_dataset, continuous_dataset, merged = FALSE) {
   pair_list2 <- lapply(1:length(discrete_dataset), function(x) {
     discrete_sel <- discrete_dataset[[x]]
+    present_samples <- discrete_sel$present
+    all_profiled_samples <- discrete_sel$all
+    
     pair_list <- lapply(1:length(continuous_dataset), function(y) {
       continuous_sel <- continuous_dataset[[y]]
-
-      yes_values <- na.omit(continuous_sel[names(continuous_sel) %in% discrete_sel])
-      no_values <- na.omit(continuous_sel[!names(continuous_sel) %in% discrete_sel])
+      
+      # Get intersection of continuous data and all profiled samples
+      valid_samples <- intersect(names(continuous_sel), all_profiled_samples)
+      valid_samples <- valid_samples[!is.na(continuous_sel[valid_samples])]
+      
+      # yes_values: samples in present_samples
+      yes_values <- continuous_sel[names(continuous_sel) %in% present_samples & names(continuous_sel) %in% valid_samples]
+      yes_values <- na.omit(yes_values)
+      
+      # no_values: samples in valid_samples but NOT in present_samples
+      no_values <- continuous_sel[names(continuous_sel) %in% valid_samples & !names(continuous_sel) %in% present_samples]
+      no_values <- na.omit(no_values)
 
       if(length(yes_values) < 3 | length(no_values) < 3) {
         return(NULL)

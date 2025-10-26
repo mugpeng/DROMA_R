@@ -4,10 +4,17 @@
 \alias{plotMultipleGroupComparisons}
 \title{Plot multiple group comparisons in a grid}
 \usage{
-plotMultipleGroupComparisons(pairs_list, y_label = "Value", ncol = 3)
+plotMultipleGroupComparisons(
+  pairs_list,
+  x_label = "Feature",
+  y_label = "Value",
+  ncol = 3
+)
 }
 \arguments{
 \item{pairs_list}{List of paired datasets with yes/no groups}
+
+\item{x_label}{Label for the grouping variable (discrete feature)}
 
 \item{y_label}{Common y-axis label}
 

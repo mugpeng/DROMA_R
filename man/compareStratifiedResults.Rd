@@ -8,8 +8,8 @@ compareStratifiedResults(
   sensitive_result,
   resistant_result,
   stratification_info,
-  select_omics_type,
-  select_omics,
+  feature_type,
+  select_features,
   select_drugs
 )
 }
@@ -20,9 +20,9 @@ compareStratifiedResults(
 
 \item{stratification_info}{Information about stratification}
 
-\item{select_omics_type}{Type of omics data analyzed}
+\item{feature_type}{Type of omics data analyzed}
 
-\item{select_omics}{Name of the omics feature}
+\item{select_features}{Name of the omics feature}
 
 \item{select_drugs}{Name of the drug analyzed}
 }

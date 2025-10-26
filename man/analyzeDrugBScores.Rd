@@ -4,12 +4,12 @@
 \alias{analyzeDrugBScores}
 \title{Analyze B drug scores in NR vs Response groups}
 \usage{
-analyzeDrugBScores(drug_b_scores, drug_name)
+analyzeDrugBScores(drug_b_scores, select_drugs)
 }
 \arguments{
 \item{drug_b_scores}{List of B drug scores}
 
-\item{drug_name}{Name of drug B}
+\item{select_drugs}{Name of drug B}
 }
 \value{
 List containing analysis results and plots

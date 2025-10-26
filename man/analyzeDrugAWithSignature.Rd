@@ -5,7 +5,7 @@
 \title{Analyze Drug A with B drug signature}
 \usage{
 analyzeDrugAWithSignature(
-  drug_name,
+  select_drugs,
   connection,
   signature_genes,
   data_type,
@@ -13,7 +13,7 @@ analyzeDrugAWithSignature(
 )
 }
 \arguments{
-\item{drug_name}{Name of drug A}
+\item{select_drugs}{Name of drug A}
 
 \item{connection}{Database connection}
 

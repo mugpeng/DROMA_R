@@ -6,7 +6,7 @@
 \usage{
 createSingleRankPlot(
   drug_data,
-  drug_name,
+  select_drugs,
   highlight,
   color,
   zscore,
@@ -14,13 +14,13 @@ createSingleRankPlot(
   point_size,
   highlight_alpha,
   merge,
-  project_name = NULL
+  projects = NULL
 )
 }
 \arguments{
 \item{drug_data}{Data frame with drug sensitivity data}
 
-\item{drug_name}{Name of the drug}
+\item{select_drugs}{Name of the drug}
 
 \item{highlight}{Highlighting specification}
 
@@ -36,7 +36,7 @@ createSingleRankPlot(
 
 \item{merge}{Whether this is a merged plot}
 
-\item{project_name}{Optional project name for title}
+\item{projects}{Optional project name for title}
 }
 \value{
 ggplot2 object

@@ -11,7 +11,7 @@ library(dplyr)
 # Setup: Create DromaSet Objects ----
 
 # Note: Replace with your actual database path
-db_path <- "sql_db/droma.sqlite"
+db_path <- "../Data/droma.sqlite"
 
 # Connect to DROMA database
 connectDROMADatabase(db_path)
@@ -26,6 +26,8 @@ multi_set <- createMultiDromaSetFromDatabase(
   project_names = c("gCSI", "CCLE", "GDSC"),
   db_path = db_path
 )
+
+all_sets <- createMultiDromaSetFromAllProjects(db_path = db_path)
 
 cat("DromaSet objects created successfully!\n")
 
@@ -48,7 +50,7 @@ if (is.matrix(paclitaxel_data) && "Paclitaxel" %in% rownames(paclitaxel_data)) {
 
 # Example 2: Load mRNA data (ABCB1) from a single project
 cat("\nExample 2: Loading mRNA data for ABCB1 from gCSI\n")
-abcb1_data <- loadMolecularProfilesNormalized(CCLE,
+abcb1_data <- loadMolecularProfiles(CCLE,
                                     molecular_type = "mRNA",
                                     features = "ABCB1",
                                     return_data = TRUE)
@@ -64,13 +66,13 @@ if (is.matrix(abcb1_data) && "ABCB1" %in% rownames(abcb1_data)) {
 
 # Example 3: Load mutation data (TP53) from a single project
 cat("\nExample 3: Loading mutation data for TP53 from gCSI\n")
-tp53_data <- loadMolecularProfilesNormalized(gCSI,
+tp53_data <- loadMolecularProfiles(gCSI,
                                    molecular_type = "mutation_gene",
                                    features = "TP53",
                                    return_data = TRUE)
 
-if (is.data.frame(tp53_data) && "genes" %in% colnames(tp53_data)) {
-  tp53_samples <- tp53_data$cells[tp53_data$genes == "TP53"]
+if (is.data.frame(tp53_data) && "features" %in% colnames(tp53_data)) {
+  tp53_samples <- tp53_data$samples[tp53_data$features == "TP53"]
   cat(sprintf("Retrieved TP53 mutation data: %d samples with mutations\n", length(tp53_samples)))
 } else {
   cat("TP53 mutation data not found\n")
@@ -126,7 +128,7 @@ if (is.matrix(paclitaxel_cellline) && "Paclitaxel" %in% rownames(paclitaxel_cell
 
 # Example 7: Get ABCB1 data for a specific tumor type
 cat("\nExample 7: Loading ABCB1 data for breast cancer\n")
-abcb1_breast <- loadMolecularProfilesNormalized(gCSI,
+abcb1_breast <- loadMolecularProfiles(gCSI,
                                      molecular_type = "mRNA",
                                      features = "ABCB1",
                                      tumor_type = "breast cancer",
@@ -197,7 +199,7 @@ tryCatch({
 # Example 11: Handle invalid molecular types
 cat("\nExample 11: Handling invalid molecular types\n")
 tryCatch({
-  invalid_data <- loadMolecularProfilesNormalized(gCSI,
+  invalid_data <- loadMolecularProfiles(gCSI,
                                         molecular_type = "invalid_type",
                                         features = "ABCB1",
                                         return_data = TRUE)
@@ -210,5 +212,5 @@ cat("Key takeaways:\n")
 cat("1. Use createDromaSetFromDatabase() to create single project objects\n")
 cat("2. Use createMultiDromaSetFromDatabase() for multi-project analysis\n")
 cat("3. Use loadTreatmentResponseNormalized() for drug data\n")
-cat("4. Use loadMolecularProfilesNormalized() for omics data\n")
+cat("4. Use loadMolecularProfiles() for omics data\n")
 cat("5. Use DROMA.R functions like processDrugData() with DromaSet objects\n")

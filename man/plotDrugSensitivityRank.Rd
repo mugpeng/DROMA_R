@@ -6,7 +6,7 @@
 \usage{
 plotDrugSensitivityRank(
   dromaset_object,
-  drug_name,
+  select_drugs,
   data_type = "all",
   tumor_type = "all",
   overlap_only = FALSE,
@@ -23,7 +23,7 @@ plotDrugSensitivityRank(
 \arguments{
 \item{dromaset_object}{Either a DromaSet or MultiDromaSet object}
 
-\item{drug_name}{Character string specifying the drug name}
+\item{select_drugs}{Character string specifying the drug name}
 
 \item{data_type}{Filter by data type: "all" (default), "CellLine", "PDC", "PDO", "PDX"}
 

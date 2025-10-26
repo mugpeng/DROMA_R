@@ -6,7 +6,7 @@
 \usage{
 processDrugData(
   dromaset_object,
-  drug_name,
+  select_drugs,
   data_type = "all",
   tumor_type = "all",
   overlap_only = FALSE
@@ -15,7 +15,7 @@ processDrugData(
 \arguments{
 \item{dromaset_object}{Either a DromaSet or MultiDromaSet object}
 
-\item{drug_name}{Character string specifying the drug name}
+\item{select_drugs}{Character string specifying the drug name}
 
 \item{data_type}{Filter by data type ("all", "CellLine", "PDC", "PDO", "PDX")}
 
