@@ -15,7 +15,8 @@ batchFindSignificantFeatures(
   overlap_only = FALSE,
   cores = 1,
   progress_callback = NULL,
-  test_top_n = NULL
+  test_top_n = NULL,
+  verbose = FALSE
 )
 }
 \arguments{
@@ -40,9 +41,11 @@ batchFindSignificantFeatures(
 \item{progress_callback}{Optional callback function for progress updates}
 
 \item{test_top_n}{Integer, number of top features to test (default: NULL for all features)}
+
+\item{verbose}{Logical, whether to display detailed messages from internal functions (default: FALSE)}
 }
 \value{
-Data frame with meta-analysis results (p_value, effect_size, n_datasets, name). NA values are replaced: p_value -> 1, effect_size -> 0
+Data frame with meta-analysis results (p_value, effect_size, n_datasets, name, q_value). NA values are replaced: p_value -> 1, effect_size -> 0. q_value is calculated using Benjamini-Hochberg method
 }
 \description{
 Performs batch analysis to identify features significantly associated with a reference feature using DromaSet or MultiDromaSet objects
