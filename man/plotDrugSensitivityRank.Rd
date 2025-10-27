@@ -12,7 +12,7 @@ plotDrugSensitivityRank(
   overlap_only = FALSE,
   highlight = NULL,
   color = NULL,
-  zscore = TRUE,
+  zscore = FALSE,
   merge = FALSE,
   point_size = 2,
   highlight_alpha = 0.6,
@@ -33,12 +33,12 @@ plotDrugSensitivityRank(
 - A value from data_type (e.g., "CellLine") to highlight all samples of that type
 - A value from tumor_type (e.g., "breast cancer") to highlight all samples of that tumor type
 - A vector of specific sample IDs to highlight
-Note: If more than 20 samples are highlighted, only the top 20 most sensitive will be labeled}
+Note: If more than 20 samples are highlighted, only the top 20 will be labeled}
 
 \item{color}{Character string specifying the variable to use for coloring points.
 Options: NULL (default, no coloring), "data_type", "tumor_type", or any column name in sample annotations}
 
-\item{zscore}{Logical, whether to use z-score normalized values (default: TRUE)}
+\item{zscore}{Logical, whether to use z-score normalized values (default: FALSE)}
 
 \item{merge}{Logical, only applicable when zscore=TRUE and using MultiDromaSet.
 If TRUE, merges data from multiple projects when drug appears in at least 2 projects (default: FALSE)
@@ -57,11 +57,11 @@ For DromaSet: A ggplot2 object. For MultiDromaSet with merge=FALSE: A list of gg
   For MultiDromaSet with merge=TRUE: A single ggplot2 object with combined data.
 }
 \description{
-Creates a rank plot showing drug sensitivity values ordered from most sensitive (lowest values) to least sensitive
+Creates a rank plot showing drug sensitivity values ordered from most sensitive (highest values) to least sensitive
 }
 \details{
 This function creates a rank plot where samples are ordered by drug sensitivity values.
-  For AUC data, lower values indicate higher sensitivity, so samples are ranked with lowest values on the left.
+  For AUC data, higher values indicate lower sensitivity, so samples are ranked with highest values on the left.
   The function supports highlighting specific samples and coloring by categorical variables.
   For MultiDromaSet objects with zscore=TRUE and merge=TRUE, it can combine data from multiple projects
   when the drug appears in at least two projects. When merge=FALSE, separate plots are returned for each project.

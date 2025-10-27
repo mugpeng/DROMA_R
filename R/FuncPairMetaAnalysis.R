@@ -5,7 +5,6 @@
 #' @description Performs meta-analysis on correlation between two continuous features
 #' @param selected_pair List of paired data with two continuous variables
 #' @return Meta-analysis result object or NULL if insufficient data
-#' @export
 metaCalcConCon <- function(selected_pair) {
   if (length(selected_pair) < 1) return(NULL)
 
@@ -26,6 +25,7 @@ metaCalcConCon <- function(selected_pair) {
     if (is.null(cor_re)) return(NULL)
 
     data.frame(
+      study = names(selected_pair)[y],  # Study name
       p = cor_re$p.value,
       effect = cor_re$estimate,  # Correlation coefficient: positive means positive association
       N = length(fea2_sel)
@@ -36,6 +36,7 @@ metaCalcConCon <- function(selected_pair) {
   if (length(cal_list) < 1) return(NULL)
 
   cal_re <- do.call(rbind, cal_list)
+  rownames(cal_re) <- cal_re$study
   
   # Handle extreme correlation values to prevent infinite z-scores
   # Clamp correlation coefficients to avoid numerical issues in Fisher's z transform
@@ -47,7 +48,7 @@ metaCalcConCon <- function(selected_pair) {
 
   cal_meta_re <- tryCatch(
     suppressWarnings({
-      metagen(TE = z, seTE = se_z, data = cal_re, sm = "Z",
+      metagen(TE = z, seTE = se_z, studlab = study, data = cal_re, sm = "Z",
               control = list(maxiter = 2000,
                              stepadj = 0.1,
                              threshold = 0.000001)
@@ -62,7 +63,6 @@ metaCalcConCon <- function(selected_pair) {
 #' @description Performs meta-analysis comparing continuous values between discrete groups
 #' @param selected_pair List of paired data with continuous and discrete variables
 #' @return Meta-analysis result object or NULL if insufficient data
-#' @export
 metaCalcConDis <- function(selected_pair) {
   if (length(selected_pair) < 1) return(NULL)
 
@@ -90,6 +90,7 @@ metaCalcConDis <- function(selected_pair) {
     if (is.null(cliff_delta)) return(NULL)
 
     data.frame(
+      study = names(selected_pair)[y],  # Study name
       p = wilcox_re$p.value,
       effect = cliff_delta$estimate,
       N = length(yes_drugs) + length(no_drugs),
@@ -102,19 +103,21 @@ metaCalcConDis <- function(selected_pair) {
   if (length(cal_list) < 1) return(NULL)
 
   cal_re <- do.call(rbind, cal_list)
+  rownames(cal_re) <- cal_re$study
   # Calculate standard error for Cliff's Delta
   cal_re$se <- sqrt((1 - cal_re$effect^2) * (cal_re$n1 + cal_re$n2 + 1) /
                       (12 * cal_re$n1 * cal_re$n2))
 
   cal_meta_re <- tryCatch(
     suppressWarnings({
-      meta_result <- metagen(TE = effect,
-                            seTE = se,
-                            data = cal_re,
-                            control = list(maxiter = 2000,
-                                           stepadj = 0.1,
-                                           threshold = 0.000001),
-                            sm = "CMD",  # Custom Mean Difference (using Cliff's Delta)
+      metagen(TE = effect,
+              seTE = se,
+              studlab = study,
+              data = cal_re,
+              control = list(maxiter = 2000,
+                             stepadj = 0.1,
+                             threshold = 0.000001),
+              sm = "CMD"  # Custom Mean Difference (using Cliff's Delta)
       )
     }),
     error = function(x) { return(NULL) }
@@ -127,7 +130,6 @@ metaCalcConDis <- function(selected_pair) {
 #' @description Performs meta-analysis on two discrete features using odds ratio
 #' @param selected_pair List of paired data with contingency tables
 #' @return Meta-analysis result object or NULL if insufficient data
-#' @export
 metaCalcDisDis <- function(selected_pair) {
   # Check if we have enough pairs for meta-analysis
   if (length(selected_pair) < 1) return(NULL)
@@ -161,6 +163,7 @@ metaCalcDisDis <- function(selected_pair) {
       fisher_test <- fisher.test(cont_table)
 
       data.frame(
+        study = names(selected_pair)[y],  # Study name
         log_or = log_or,  # Positive value means positive association between features
         se = se_log_or,
         p = fisher_test$p.value,
@@ -174,12 +177,14 @@ metaCalcDisDis <- function(selected_pair) {
   if (length(cal_list) < 1) return(NULL)
 
   cal_re <- do.call(rbind, cal_list)
+  rownames(cal_re) <- cal_re$study
 
   # Perform meta-analysis using random effects model
   cal_meta_re <- tryCatch(
     suppressWarnings({
       metagen(TE = log_or,
               seTE = se,
+              studlab = study,
               data = cal_re,
               sm = "OR", # Specify odds ratio as summary measure
               control = list(maxiter = 2000,
@@ -191,43 +196,4 @@ metaCalcDisDis <- function(selected_pair) {
   )
 
   cal_meta_re
-}
-
-#' Create a forest plot for meta-analysis results
-#'
-#' @description Creates a standardized forest plot for visualizing meta-analysis results
-#' @param meta_obj Meta-analysis object from metagen() function
-#' @param xlab Label for x-axis
-#' @param show_common Logical, whether to show common effect model
-#' @return A forest plot visualization
-#' @export
-createForestPlot <- function(meta_obj,
-                             xlab = "Effect Size (95% CI)",
-                             show_common = FALSE) {
-  # Validate input
-  if (!inherits(meta_obj, "meta") && !inherits(meta_obj, "metagen")) {
-    stop("Input must be a meta-analysis object from the 'meta' package")
-  }
-
-  # Format p-value text for random effects model
-  p_val <- meta_obj$pval.random
-  p_text <- if(p_val < 0.001) {
-    paste("Random-Effects Model (p =", format(p_val, scientific = TRUE, digits = 3), ")")
-  } else {
-    paste("Random-Effects Model (p =", round(p_val, 3), ")")
-  }
-
-  # Create forest plot
-  meta::forest(meta_obj,
-               xlab = xlab,
-               slab = "study",
-               print.pval.common = show_common,
-               boxsize = 0.2,
-               lineheight = "auto",
-               print.pval.Q = FALSE,
-               print.I2 = FALSE,
-               print.tau2 = FALSE,
-               common = show_common,
-               text.random = p_text
-  )
 }

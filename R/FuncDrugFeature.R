@@ -235,74 +235,6 @@ annotateDrugData <- function(drug_data, sample_annotations = NULL, db_path = NUL
   return(merged_df)
 }
 
-#' Get Drug Sensitivity Data using DromaSet objects
-#'
-#' @description Wrapper function that processes and returns drug sensitivity data from DromaSet or MultiDromaSet objects
-#' @details This function combines the functionality of `processDrugData()` and `annotateDrugData()`.
-#'   When `include_annotations = TRUE`, it will add sample annotations to the drug data.
-#'   Sample annotations can be provided directly via the `sample_annotations` parameter,
-#'   or loaded from the global `sample_anno` variable, or retrieved from the SQLite
-#'   database specified by `db_path`.
-#' @param dromaset_object Either a DromaSet or MultiDromaSet object
-#' @param select_drugs Character string specifying the drug name
-#' @param data_type Filter by data type ("all", "CellLine", "PDC", "PDO", "PDX")
-#' @param tumor_type Filter by tumor type (use "all" for all tumor types)
-#' @param overlap_only For MultiDromaSet, whether to use only overlapping samples (default: FALSE).
-#'   TRUE: Use only sample types present in all projects (recommended for meta-analysis)
-#'   FALSE: Use all available samples from each project (may increase power but introduce bias)
-#' @param include_annotations Logical indicating whether to include sample annotations
-#' @param sample_annotations Optional dataframe containing sample annotations
-#' @param db_path Optional path to SQLite database for loading sample annotations if not provided and not in global environment
-#' @return A dataframe with drug sensitivity data
-#' @export
-#' @examples
-#' \dontrun{
-#' # Using DromaSet
-#' gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
-#' drug_data <- getDrugSensitivityData(gCSI, "Paclitaxel")
-#'
-#' # Using MultiDromaSet with overlapping samples (recommended)
-#' multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"))
-#' drug_data <- getDrugSensitivityData(multi_set, "Paclitaxel",
-#'                                    include_annotations = TRUE)
-#'
-#' # Using MultiDromaSet with all available samples
-#' drug_data_all <- getDrugSensitivityData(multi_set, "Paclitaxel",
-#'                                        overlap_only = FALSE,
-#'                                        include_annotations = TRUE)
-#'
-#' # Using database path to load sample annotations
-#' drug_data <- getDrugSensitivityData(gCSI, "Paclitaxel",
-#'                                    include_annotations = TRUE,
-#'                                    db_path = "path/to/droma.sqlite")
-#'
-#' # Using custom sample annotations
-#' my_annotations <- data.frame(SampleID = c("sample1", "sample2"),
-#'                             TumorType = c("BRCA", "LUAD"))
-#' drug_data <- getDrugSensitivityData(gCSI, "Paclitaxel",
-#'                                    include_annotations = TRUE,
-#'                                    sample_annotations = my_annotations)
-#' }
-getDrugSensitivityData <- function(dromaset_object,
-                                   select_drugs,
-                                   data_type = "all",
-                                   tumor_type = "all",
-                                   overlap_only = FALSE,
-                                   include_annotations = TRUE,
-                                   sample_annotations = NULL,
-                                   db_path = NULL) {
-  # Process drug data
-  drug_data <- processDrugData(dromaset_object, select_drugs, data_type, tumor_type, overlap_only)
-
-  # Add annotations if requested
-  if (include_annotations) {
-    drug_data <- annotateDrugData(drug_data, sample_annotations, db_path)
-  }
-
-  return(drug_data)
-}
-
-
 #' Format Drug Data Table
 #'
 #' @description Creates a formatted datatable for drug sensitivity data
@@ -373,6 +305,9 @@ plotContinuousComparison <- function(data, cont_column, value_column = "value", 
 #' @return A ggplot2 object with the grouped boxplot
 #' @export
 plotContinuousGroups <- function(data, cont_column, value_column = "value", value_label = "Drug Sensitivity", num_bins = 4) {
+  # Remove rows with NA in either column
+  data <- data[!is.na(data[[cont_column]]) & !is.na(data[[value_column]]), ]
+  
   # Create bins for the continuous variable
   cont_values <- data[[cont_column]]
 
@@ -396,11 +331,11 @@ plotContinuousGroups <- function(data, cont_column, value_column = "value", valu
   label_column <- paste0(cont_column, "_group_label")
 
   data[[group_column]] <- cont_bins
-  data[[label_column]] <- group_labels[data[[group_column]]]
+  data[[label_column]] <- factor(group_labels[data[[group_column]]], levels = group_labels)
 
   # Create boxplot with statistical test
   p <- ggboxplot(data, x = label_column, y = value_column,
-                 fill = label_column, palette = "jco",
+                 fill = label_column, palette = soft_palette_26,
                  add = "jitter", add.params = list(alpha = 0.15)) +
     stat_compare_means(size = 6, label.x = 0.8,
                        label.y = (max(data[[value_column]]) - max(data[[value_column]])/8),
@@ -429,6 +364,9 @@ plotContinuousGroups <- function(data, cont_column, value_column = "value", valu
 #' @return A ggplot2 object with the category comparison plot
 #' @export
 plotCategoryComparison <- function(data, category_column, value_column = "value", value_label = "Drug Sensitivity") {
+  # Remove rows with NA in either column
+  data <- data[!is.na(data[[category_column]]) & !is.na(data[[value_column]]), ]
+  
   # Count observations per category and filter out categories with too few samples
   category_counts <- table(data[[category_column]])
   valid_categories <- names(category_counts)[category_counts >= 3]
@@ -445,7 +383,7 @@ plotCategoryComparison <- function(data, category_column, value_column = "value"
   # Create improved boxplot with consistent styling
   p <- ggboxplot(data_filtered, x = category_column, y = value_column,
                  fill = category_column,
-                 palette = bright_palette_26,
+                 palette = soft_palette_26,
                  add = "jitter",
                  add.params = list(alpha = 0.15)) +
     theme_bw() +
@@ -532,9 +470,9 @@ createDrugComparisonPlot <- function(data, comparison_var, value_column = "value
 
 #' Create Drug Sensitivity Rank Plot
 #'
-#' @description Creates a rank plot showing drug sensitivity values ordered from most sensitive (lowest values) to least sensitive
+#' @description Creates a rank plot showing drug sensitivity values ordered from most sensitive (highest values) to least sensitive
 #' @details This function creates a rank plot where samples are ordered by drug sensitivity values.
-#'   For AUC data, lower values indicate higher sensitivity, so samples are ranked with lowest values on the left.
+#'   For AUC data, higher values indicate lower sensitivity, so samples are ranked with highest values on the left.
 #'   The function supports highlighting specific samples and coloring by categorical variables.
 #'   For MultiDromaSet objects with zscore=TRUE and merge=TRUE, it can combine data from multiple projects
 #'   when the drug appears in at least two projects. When merge=FALSE, separate plots are returned for each project.
@@ -546,10 +484,10 @@ createDrugComparisonPlot <- function(data, comparison_var, value_column = "value
 #'   - A value from data_type (e.g., "CellLine") to highlight all samples of that type
 #'   - A value from tumor_type (e.g., "breast cancer") to highlight all samples of that tumor type
 #'   - A vector of specific sample IDs to highlight
-#'   Note: If more than 20 samples are highlighted, only the top 20 most sensitive will be labeled
+#'   Note: If more than 20 samples are highlighted, only the top 20 will be labeled
 #' @param color Character string specifying the variable to use for coloring points.
 #'   Options: NULL (default, no coloring), "data_type", "tumor_type", or any column name in sample annotations
-#' @param zscore Logical, whether to use z-score normalized values (default: TRUE)
+#' @param zscore Logical, whether to use z-score normalized values (default: FALSE)
 #' @param merge Logical, only applicable when zscore=TRUE and using MultiDromaSet.
 #'   If TRUE, merges data from multiple projects when drug appears in at least 2 projects (default: FALSE)
 #'   If FALSE, returns separate plots for each project
@@ -594,7 +532,7 @@ plotDrugSensitivityRank <- function(dromaset_object,
                                    overlap_only = FALSE,
                                    highlight = NULL,
                                    color = NULL,
-                                   zscore = TRUE,
+                                   zscore = FALSE,
                                    merge = FALSE,
                                    point_size = 2,
                                    highlight_alpha = 0.6,
@@ -612,7 +550,7 @@ plotDrugSensitivityRank <- function(dromaset_object,
 
   # For MultiDromaSet, check if merge is appropriate
   if (inherits(dromaset_object, "MultiDromaSet") && merge && !zscore) {
-    warning("merge=TRUE is only applicable when zscore=TRUE. Setting merge=FALSE.")
+    warning("Without z-score normalization (zscore=FALSE), merging data from different studies may not be appropriate. Consider setting zscore=TRUE. Setting merge=FALSE.")
     merge <- FALSE
   }
 
@@ -702,8 +640,8 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
                                value_column, point_size, highlight_alpha, merge,
                                projects = NULL) {
 
-  # Rank samples by drug sensitivity (lowest values = most sensitive = rank 1)
-  drug_data <- drug_data[order(drug_data[[value_column]]), ]
+  # Rank samples by drug sensitivity (highest values = most sensitive = rank 1)
+  drug_data <- drug_data[order(drug_data[[value_column]], decreasing = TRUE), ]
   drug_data$rank <- 1:nrow(drug_data)
 
   # Determine highlighting
@@ -776,14 +714,14 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
   if (length(highlight_samples) > 0) {
     highlighted_data <- drug_data[drug_data$highlighted, ]
 
-    # Limit labeling to top 20 most sensitive if too many highlighted samples
+    # Limit labeling to top 20 if too many highlighted samples
     if (nrow(highlighted_data) > 20) {
       # Sort by rank and take top 20
       highlighted_data <- highlighted_data[order(highlighted_data$rank), ]
       highlighted_data_to_label <- highlighted_data[1:20, ]
 
       # Warn user about limitation
-      message("Note: ", nrow(highlighted_data), " samples were highlighted, but only the top 20 most sensitive samples will be labeled to avoid overcrowding.")
+      message("Note: ", nrow(highlighted_data), " samples were highlighted, but only the top 20 will be labeled to avoid overcrowding.")
     } else {
       highlighted_data_to_label <- highlighted_data
     }
@@ -814,7 +752,7 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
   }
 
   # Customize plot appearance
-  value_label <- if (zscore) "Z-score Drug Sensitivity" else "Raw Drug Sensitivity"
+  value_label <- if (zscore) "Z-score Drug Sensitivity(Area Above Curve)" else "Drug Sensitivity(Area Above Curve)"
   plot_title <- paste("Drug Sensitivity Rank Plot:", select_drugs)
   if (!is.null(projects)) {
     plot_title <- paste(plot_title, "-", projects)
@@ -822,13 +760,19 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
     plot_title <- paste(plot_title, "(Merged)")
   }
 
+  # Create labs - only include color if it's used
+  lab_list <- list(
+    title = plot_title,
+    x = "Rank (1 = Most Sensitive)",
+    y = value_label
+  )
+  
+  if (!is.null(color_data) && color_title != "") {
+    lab_list$color <- color_title
+  }
+  
   p <- p +
-    labs(
-      title = plot_title,
-      x = "Rank (1 = Most Sensitive)",
-      y = value_label,
-      color = color_title
-    ) +
+    do.call(labs, lab_list) +
     theme_bw() +
     theme(
       title = element_text(size = 14, face = "bold"),
@@ -842,18 +786,18 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
   # Add color scale if coloring is used - using colors from theme_utils.R
   if (!is.null(color_data)) {
     if (is.factor(color_data) || is.character(color_data)) {
-      # For categorical variables - use bright_palette_26 from theme_utils.R
+      # For categorical variables - use soft_palette_26 from theme_utils.R
       n_colors <- length(unique(color_data))
-      if (n_colors <= length(bright_palette_26)) {
-        p <- p + scale_color_manual(values = bright_palette_26[1:n_colors])
+      if (n_colors <= length(soft_palette_26)) {
+        p <- p + scale_color_manual(values = soft_palette_26[1:n_colors])
       } else {
         # Use colorRampPalette to extend the palette if needed
-        extended_colors <- colorRampPalette(bright_palette_26)(n_colors)
+        extended_colors <- colorRampPalette(soft_palette_26)(n_colors)
         p <- p + scale_color_manual(values = extended_colors)
       }
     } else {
-      # For continuous variables
-      p <- p + scale_color_gradient(low = "#33C4FF", high = "#FF5733")  # Use colors from bright_palette_26
+      # For continuous variables - use soft colors from soft_palette_26
+      p <- p + scale_color_gradient(low = "#80B1D3", high = "#FB8072")  # Soft blue to soft coral
     }
   }
 

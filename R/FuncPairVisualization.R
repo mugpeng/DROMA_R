@@ -10,7 +10,6 @@
 #' @param title Plot title
 #' @param method Correlation method ("spearman", "pearson")
 #' @return A ggplot2 object with scatter plot and correlation statistics
-#' @export
 plotCorrelation <- function(x_values, y_values,
                            x_label = "Feature 1",
                            y_label = "Feature 2",
@@ -48,7 +47,6 @@ plotCorrelation <- function(x_values, y_values,
 #' @param title Plot title
 #' @param y_label Label for y-axis
 #' @return A ggplot2 object with boxplot and statistical test
-#' @export
 plotGroupComparison <- function(no_values, yes_values,
                                 group_labels = c("Without", "With"),
                                 title = "Group Comparison",
@@ -89,7 +87,6 @@ plotGroupComparison <- function(no_values, yes_values,
 #' @param y_label Common y-axis label
 #' @param ncol Number of columns in the grid
 #' @return A combined plot with all correlations or NULL if no valid pairs
-#' @export
 plotMultipleCorrelations <- function(pairs_list,
                                     x_label = "Feature 1",
                                     y_label = "Feature 2",
@@ -159,7 +156,6 @@ plotMultipleCorrelations <- function(pairs_list,
 #' @param group_labels Labels for the two groups
 #' @param ncol Number of columns in the grid
 #' @return A combined plot with all comparisons or NULL if no valid pairs
-#' @export
 plotMultipleGroupComparisons <- function(pairs_list,
                                         x_label = "Feature",
                                         y_label = "Value",
@@ -219,55 +215,6 @@ plotMultipleGroupComparisons <- function(pairs_list,
   } else {
     return(NULL)
   }
-}
-
-#' Create plot with common axis labels
-#'
-#' @description Creates a plot with common axis labels for multiple subplots from plotMultipleCorrelations or plotMultipleGroupComparisons
-#' @param p A patchwork object from plotMultipleCorrelations or plotMultipleGroupComparisons
-#' @param x_title Common x-axis title (optional, only for correlation plots)
-#' @param y_title Common y-axis title
-#' @return A patchwork/ggplot object with common axis labels
-#' @export
-createPlotWithCommonAxes <- function(p, x_title = NULL, y_title = NULL) {
-  # Check if plot object is valid
-  if (is.null(p)) {
-    warning("Input plot is NULL. Returning NULL.")
-    return(NULL)
-  }
-  
-  # If p is a list (when patchwork is not available), return it as is
-  if (is.list(p) && !inherits(p, "ggplot") && !inherits(p, "patchwork")) {
-    warning("Input is a list of plots, not a combined plot. Returning original list.")
-    return(p)
-  }
-  
-  if (!requireNamespace("patchwork", quietly = TRUE)) {
-    warning("patchwork package not available. Returning original plot.")
-    return(p)
-  }
-  
-  # Build caption text for axis labels
-  caption_text <- ""
-  if (!is.null(x_title) && !is.null(y_title)) {
-    caption_text <- paste0("X-axis: ", x_title, "   Y-axis: ", y_title)
-  } else if (!is.null(y_title)) {
-    caption_text <- paste0("Y-axis: ", y_title)
-  } else if (!is.null(x_title)) {
-    caption_text <- paste0("X-axis: ", x_title)
-  }
-  
-  # Add caption as axis labels using plot_annotation
-  if (caption_text != "") {
-    p <- p + patchwork::plot_annotation(
-      caption = caption_text,
-      theme = theme(
-        plot.caption = element_text(size = 14, hjust = 0.5, face = "bold")
-      )
-    )
-  }
-  
-  return(p)
 }
 
 #' Create a volcano plot from meta-analysis results
@@ -412,4 +359,91 @@ plotMetaVolcano <- function(meta_df,
   }
 
   p
+}
+
+#' Create a forest plot for meta-analysis results
+#'
+#' @description Creates a standardized forest plot for visualizing meta-analysis results
+#' @param meta_obj Meta-analysis object from metagen() function
+#' @param xlab Label for x-axis
+#' @param show_common Logical, whether to show common effect model
+#' @return A forest plot visualization
+#' @export
+createForestPlot <- function(meta_obj,
+                             xlab = "Effect Size (95% CI)",
+                             show_common = FALSE) {
+  # Validate input
+  if (!inherits(meta_obj, "meta") && !inherits(meta_obj, "metagen")) {
+    stop("Input must be a meta-analysis object from the 'meta' package")
+  }
+
+  # Format p-value text for random effects model
+  p_val <- meta_obj$pval.random
+  p_text <- if(p_val < 0.001) {
+    paste("Random-Effects Model (p =", format(p_val, scientific = TRUE, digits = 3), ")")
+  } else {
+    paste("Random-Effects Model (p =", round(p_val, 3), ")")
+  }
+
+  # Create forest plot
+  meta::forest(meta_obj,
+               xlab = xlab,
+               slab = "study",
+               print.pval.common = show_common,
+               boxsize = 0.2,
+               lineheight = "auto",
+               print.pval.Q = FALSE,
+               print.I2 = FALSE,
+               print.tau2 = FALSE,
+               common = show_common,
+               text.random = p_text
+  )
+}
+
+#' Create plot with common axis labels
+#'
+#' @description Creates a plot with common axis labels for multiple subplots from plotMultipleCorrelations or plotMultipleGroupComparisons
+#' @param p A patchwork object from plotMultipleCorrelations or plotMultipleGroupComparisons
+#' @param x_title Common x-axis title (optional, only for correlation plots)
+#' @param y_title Common y-axis title
+#' @return A patchwork/ggplot object with common axis labels
+createPlotWithCommonAxes <- function(p, x_title = NULL, y_title = NULL) {
+  # Check if plot object is valid
+  if (is.null(p)) {
+    warning("Input plot is NULL. Returning NULL.")
+    return(NULL)
+  }
+  
+  # If p is a list (when patchwork is not available), return it as is
+  if (is.list(p) && !inherits(p, "ggplot") && !inherits(p, "patchwork")) {
+    warning("Input is a list of plots, not a combined plot. Returning original list.")
+    return(p)
+  }
+  
+  if (!requireNamespace("patchwork", quietly = TRUE)) {
+    warning("patchwork package not available. Returning original plot.")
+    return(p)
+  }
+  
+  # Build caption text for axis labels
+  caption_text <- ""
+  if (!is.null(x_title) && !is.null(y_title)) {
+    caption_text <- paste0("X-axis: ", x_title, "   Y-axis: ", y_title)
+  } else if (!is.null(y_title)) {
+    caption_text <- paste0("Y-axis: ", y_title)
+  } else if (!is.null(x_title)) {
+    caption_text <- paste0("X-axis: ", x_title)
+  }
+  
+  # Add caption as axis labels using plot_annotation
+  if (caption_text != "") {
+    p <- p + patchwork::plot_annotation(
+      caption = caption_text,
+      theme = theme(
+        plot.caption = element_text(size = 14, hjust = 0.5, face = "bold")
+      )
+    )
+  }
+  
+  return(p)
 }

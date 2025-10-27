@@ -3,35 +3,35 @@
 #' @description This file contains color palettes and theme settings for DROMA package visualizations.
 #'
 
-#' Bright color palette with 26 distinct colors
+#' Soft color palette with 26 distinct colors
 #' 
-#' @description A palette of 26 bright, distinct colors for visualization
+#' @description A palette of 26 soft, distinct colors for visualization
 #' @export
-bright_palette_26 <- c(
-  "#FF5733", # Bright red-orange
-  "#33C4FF", # Bright sky blue
-  "#FF33E9", # Bright pink
-  "#33FF57", # Bright green
-  "#FFD133", # Bright yellow
-  "#8B33FF", # Bright purple
-  "#FF8B33", # Bright orange
-  "#33FFC4", # Bright teal
-  "#FF3355", # Bright red
-  "#33FFED", # Bright cyan
-  "#C433FF", # Bright violet
-  "#BBFF33", # Bright lime
-  "#FF33BB", # Bright magenta
-  "#33FFB2", # Bright mint
-  "#3357FF", # Bright blue
-  "#FF9933", # Bright amber
-  "#33FF78", # Bright seafoam
-  "#ED33FF", # Bright fuchsia
-  "#57FF33", # Bright chartreuse
-  "#FF33C4", # Bright hot pink
-  "#33A5FF", # Bright azure
-  "#FFB233", # Bright gold
-  "#3378FF", # Bright royal blue
-  "#FF5733", # Bright vermilion
-  "#33FF9E", # Bright turquoise
-  "#D6FF33"  # Bright yellow-green
+soft_palette_26 <- c(
+  "#8DD3C7", # Soft teal
+  "#FFFFB3", # Soft yellow
+  "#BEBADA", # Soft lavender
+  "#FB8072", # Soft coral
+  "#80B1D3", # Soft blue
+  "#FDB462", # Soft orange
+  "#B3DE69", # Soft lime
+  "#FCCDE5", # Soft pink
+  "#D9D9D9", # Soft gray
+  "#BC80BD", # Soft purple
+  "#CCEBC5", # Soft mint
+  "#FFED6F", # Soft gold
+  "#A6D8F0", # Soft sky blue
+  "#F4B3C2", # Soft rose
+  "#C7E9C0", # Soft green
+  "#FFD8B1", # Soft peach
+  "#E5C9DC", # Soft mauve
+  "#B8E2F2", # Soft cyan
+  "#F9D5A7", # Soft apricot
+  "#D4E4BC", # Soft sage
+  "#FAD4D8", # Soft blush
+  "#C2D8E8", # Soft periwinkle
+  "#F5E6A8", # Soft cream
+  "#D1C4E9", # Soft lilac
+  "#B7DED2", # Soft aqua
+  "#F8E5B9"  # Soft beige
 )

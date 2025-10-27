@@ -77,21 +77,21 @@ generateStatisticalPlots <- function(projects = "all",
 
   # Determine which projects to use
   if ("all" %in% projects) {
-    selected_projects <- all_projects$projects
+    selected_projects <- all_projects$project_name
   } else {
     # Validate provided project names
-    invalid_projects <- setdiff(projects, all_projects$projects)
+    invalid_projects <- setdiff(projects, all_projects$project_name)
     if (length(invalid_projects) > 0) {
       warning("Invalid project names: ", paste(invalid_projects, collapse = ", "))
     }
-    selected_projects <- intersect(projects, all_projects$projects)
+    selected_projects <- intersect(projects, all_projects$project_name)
     if (length(selected_projects) == 0) {
       stop("No valid projects found")
     }
   }
 
   # Filter project info to selected projects
-  project_info <- all_projects[all_projects$projects %in% selected_projects, ]
+  project_info <- all_projects[all_projects$project_name %in% selected_projects, ]
 
   # Get annotations from database
   sample_annotations <- NULL
@@ -157,7 +157,7 @@ generateCountPlots <- function(project_info, use_gap_plots = TRUE) {
 
   for (i in 1:nrow(project_info)) {
     project_row <- project_info[i, ]
-    projects <- project_row$projects
+    projects <- project_row$project_name
     dataset_type <- if(is.na(project_row$dataset_type)) "Other" else project_row$dataset_type
     sample_count <- if(is.na(project_row$sample_count)) 0 else project_row$sample_count
     drug_count <- if(is.na(project_row$drug_count)) 0 else project_row$drug_count
@@ -410,7 +410,7 @@ generateCharacteristicsPlot <- function(project_info) {
                    "fusion", "proteinrppa", "proteinms", "meth")
 
   for (i in 1:nrow(project_info)) {
-    projects <- project_info$projects[i]
+    projects <- project_info$project_name[i]
     data_types_str <- project_info$data_types[i]
     dataset_type <- if(is.na(project_info$dataset_type[i])) "Other" else project_info$dataset_type[i]
 
@@ -476,27 +476,30 @@ generateCharacteristicsPlot <- function(project_info) {
     "PDC" = "#1F78B4",         # Blue
     "PDO" = "#33A02C",         # Green
     "PDX" = "#FF7F00",         # Orange
-    "Clinical" = "#9966CC",    # Purple
-    "Unavailable" = "#CCCCCC"        # Gray
+    "Clinical" = "#9966CC"     # Purple
   )
 
   # Create the plot with conditional coloring
-  # Available points use dataset type colors, unavailable points use grey80
+  # Available points use dataset type colors, unavailable points use grey
   plot_data$Point_Color <- ifelse(plot_data$Available,
                                  as.character(plot_data$Dataset_Type),
-                                 "Unavailable")
+                                 NA_character_)
+  
+  # Filter data for available and unavailable points
+  available_data <- plot_data[plot_data$Available, ]
+  unavailable_data <- plot_data[!plot_data$Available, ]
 
-  # Ensure factor levels for Dataset_Type match our color scheme
-  # plot_data$Dataset_Type <- factor(plot_data$Dataset_Type,
-  #                                 levels = names(dataset_colors))
   # Create the plot
   p_characteristics <- ggplot(plot_data, aes(x = Feature_Display, y = Project)) +
-    geom_point(aes(size = Available, color = Point_Color), alpha = 0.8) +
-    scale_size_manual(values = c(2, 6), guide = "none") +
+    # Add unavailable points first (grey, no legend)
+    geom_point(data = unavailable_data, size = 2, color = "#CCCCCC", alpha = 0.8) +
+    # Add available points with colors (with legend)
+    geom_point(data = available_data, aes(color = Point_Color), size = 6, alpha = 0.8) +
     scale_color_manual(values = dataset_colors,
                       name = "Dataset Type",
                       breaks = names(dataset_colors),
-                      labels = names(dataset_colors)) +
+                      labels = names(dataset_colors),
+                      na.value = "#CCCCCC") +
     theme_bw() +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
@@ -718,7 +721,7 @@ generateTumorTypePlot <- function(sample_annotations) {
         ggrepel::geom_text_repel(
           aes(label = paste0(TumorType, " (", Frequency, ")")),
           color = "black",
-          size = 3.2,
+          size = 3.6,
           box.padding = 0.7,
           segment.color = "grey50",
           max.overlaps = Inf
@@ -727,6 +730,7 @@ generateTumorTypePlot <- function(sample_annotations) {
         scale_color_brewer(palette = "Set3") +
         theme_bw() +
         theme(
+          axis.title.y = element_text(size = 17, color = "black"),
           axis.text.x = element_text(angle = 60, hjust = 1),
           axis.text = element_text(size = 17, color = "black"),
           legend.position = "none",
@@ -758,40 +762,5 @@ generateTumorTypePlot <- function(sample_annotations) {
   }, error = function(e) {
     warning("Could not create tumor type plot: ", e$message)
     return(NULL)
-  })
-}
-
-#' Create comprehensive statistical dashboard
-#'
-#' @description Combines multiple statistical plots into a dashboard layout
-#' @param plot_list List of plots from generateStatisticalPlots
-#' @param layout Character specifying layout: "grid", "tabs", or "sequential"
-#' @return Combined plot object or list of plots
-#' @export
-createStatisticalDashboard <- function(plot_list, layout = "grid") {
-
-  # Filter out NULL plots
-  valid_plots <- plot_list[!sapply(plot_list, is.null)]
-
-  if (length(valid_plots) == 0) {
-    warning("No valid plots to display")
-    return(NULL)
-  }
-
-  tryCatch({
-    if (layout == "grid" && requireNamespace("patchwork", quietly = TRUE)) {
-      # Use patchwork for grid layout
-      combined_plot <- Reduce(`+`, valid_plots)
-      return(combined_plot)
-    } else if (layout == "grid" && requireNamespace("gridExtra", quietly = TRUE)) {
-      # Use gridExtra as fallback
-      return(gridExtra::grid.arrange(grobs = valid_plots))
-    } else {
-      # Return individual plots
-      return(valid_plots)
-    }
-  }, error = function(e) {
-    warning("Could not create dashboard layout: ", e$message)
-    return(valid_plots)
   })
 }
