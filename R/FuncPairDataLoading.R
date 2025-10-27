@@ -41,8 +41,8 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
                                            return_data = TRUE,
                                            zscore = zscore)
 
-      if (is.matrix(feature_data) && select_features %in% rownames(feature_data)) {
-        feature_vector <- as.numeric(feature_data[select_features, ])
+      if (is.matrix(feature_data) && nrow(feature_data) > 0) {
+        feature_vector <- as.numeric(feature_data[1, ])
         names(feature_vector) <- colnames(feature_data)
         result <- list()
         result[[dromaset_object@name]] <- feature_vector[!is.na(feature_vector)]
@@ -52,6 +52,7 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
       # Molecular profile data
       feature_data <- loadMolecularProfiles(dromaset_object,
                                            feature_type = feature_type,
+                                           select_features = select_features,
                                            data_type = data_type,
                                            tumor_type = tumor_type,
                                            return_data = TRUE,
@@ -59,8 +60,8 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
 
       if (is_continuous) {
         # Continuous data
-        if (is.matrix(feature_data) && select_features %in% rownames(feature_data)) {
-          feature_vector <- as.numeric(feature_data[select_features, ])
+        if (is.matrix(feature_data) && nrow(feature_data) > 0) {
+          feature_vector <- as.numeric(feature_data[1, ])
           names(feature_vector) <- colnames(feature_data)
           result <- list()
           result[[dromaset_object@name]] <- feature_vector[!is.na(feature_vector)]
@@ -68,9 +69,9 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
         }
       } else {
         # Discrete data - long dataframe format with samples and features columns
-        if (is.data.frame(feature_data) && "samples" %in% colnames(feature_data) && "features" %in% colnames(feature_data)) {
-          # Extract samples where the feature matches select_features
-          present_samples <- feature_data$samples[feature_data$features == select_features]
+        if (is.data.frame(feature_data) && "samples" %in% colnames(feature_data)) {
+          # Since select_features was specified, the returned data should only contain that feature
+          present_samples <- feature_data$samples
           
           result <- list()
           if (return_all_samples) {
@@ -98,8 +99,8 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
                                                         zscore = zscore)
 
       result <- lapply(feature_data, function(data_matrix) {
-        if (is.matrix(data_matrix) && select_features %in% rownames(data_matrix)) {
-          data_vector <- as.numeric(data_matrix[select_features, ])
+        if (is.matrix(data_matrix) && nrow(data_matrix) > 0) {
+          data_vector <- as.numeric(data_matrix[1, ])
           names(data_vector) <- colnames(data_matrix)
           return(data_vector[!is.na(data_vector)])
         }
@@ -109,6 +110,7 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
       # Molecular profile data
       feature_data <- loadMultiProjectMolecularProfiles(dromaset_object,
                                                         feature_type = feature_type,
+                                                        select_features = select_features,
                                                         data_type = data_type,
                                                         tumor_type = tumor_type,
                                                         zscore = zscore)
@@ -116,8 +118,8 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
       if (is_continuous) {
         # Continuous data
         result <- lapply(feature_data, function(omics_matrix) {
-          if (is.matrix(omics_matrix) && select_features %in% rownames(omics_matrix)) {
-            omics_vector <- as.numeric(omics_matrix[select_features, ])
+          if (is.matrix(omics_matrix) && nrow(omics_matrix) > 0) {
+            omics_vector <- as.numeric(omics_matrix[1, ])
             names(omics_vector) <- colnames(omics_matrix)
             return(omics_vector[!is.na(omics_vector)])
           }
@@ -129,9 +131,9 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
         result <- lapply(seq_along(feature_data), function(i) {
           omics_df <- feature_data[[i]]
           projects <- project_names[i]
-          if (is.data.frame(omics_df) && "samples" %in% colnames(omics_df) && "features" %in% colnames(omics_df)) {
-            # Extract samples where the feature matches select_features
-            present_samples <- omics_df$samples[omics_df$features == select_features]
+          if (is.data.frame(omics_df) && "samples" %in% colnames(omics_df)) {
+            # Since select_features was specified, the returned data should only contain that feature
+            present_samples <- omics_df$samples
             
             if (return_all_samples) {
               # Get all profiled samples for this omics type from the specific project

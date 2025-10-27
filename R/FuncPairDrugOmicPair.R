@@ -95,8 +95,17 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
       individual_pairs <- myPairs[names(myPairs) != "merged_dataset"]
     }
 
-    # Create plots for individual studies using plotMultipleCorrelations
-    if (length(individual_pairs) > 0) {
+    # Create plots for individual studies
+    if (length(individual_pairs) == 1) {
+      # When only one pair, use single plot method (like merged_plot)
+      single_pair <- individual_pairs[[1]]
+      result$plot <- plotCorrelation(single_pair$feature1,
+                                     single_pair$feature2,
+                                     x_label = paste(feature_type, "expression"),
+                                     y_label = "drug sensitivity(Area Above Curve)",
+                                     title = paste(feature_type, ":", select_features, "vs", select_drugs),
+                                     method = "spearman")
+    } else if (length(individual_pairs) > 1) {
       multi_plot <- plotMultipleCorrelations(individual_pairs,
                                               x_label = paste0(select_features, " (", feature_type, ")"),
                                               y_label = "Drug Response")
@@ -116,8 +125,8 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
                                            method = "spearman")
     }
 
-    # Perform meta-analysis on individual pairs only (exclude merged data)
-    if(meta_enabled && length(individual_pairs) > 0){
+    # Perform meta-analysis only when there are multiple pairs (exclude merged data)
+    if(meta_enabled && length(individual_pairs) > 1){
       meta_result <- metaCalcConCon(individual_pairs)
       if (!is.null(meta_result)) {
         result$meta <- meta_result
@@ -141,8 +150,15 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
       individual_pairs <- myPairs[names(myPairs) != "merged_dataset"]
     }
 
-    # Create plots for individual studies using plotMultipleGroupComparisons
-    if (length(individual_pairs) > 0) {
+    # Create plots for individual studies
+    if (length(individual_pairs) == 1) {
+      # When only one pair, use single plot method (like merged_plot)
+      single_pair <- individual_pairs[[1]]
+      result$plot <- plotGroupComparison(single_pair$no, single_pair$yes,
+                                        group_labels = c(paste("Without", select_features), paste("With", select_features)),
+                                        title = paste(feature_type, ":", select_features, "vs", select_drugs),
+                                        y_label = "drug sensitivity(Area Above Curve)")
+    } else if (length(individual_pairs) > 1) {
       multi_plot <- plotMultipleGroupComparisons(individual_pairs,
                                                 group_labels = c(paste("Without", select_features), paste("With", select_features)),
                                                 x_label = paste0(select_features, " (", feature_type, ")"),
@@ -160,8 +176,8 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
                                                 y_label = "drug sensitivity(Area Above Curve)")
     }
 
-    # Perform meta-analysis on individual pairs only (exclude merged data)
-    if(meta_enabled && length(individual_pairs) > 0){
+    # Perform meta-analysis only when there are multiple pairs (exclude merged data)
+    if(meta_enabled && length(individual_pairs) > 1){
       meta_result <- metaCalcConDis(individual_pairs)
       if (!is.null(meta_result)) {
         result$meta <- meta_result

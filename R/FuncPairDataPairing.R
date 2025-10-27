@@ -8,7 +8,6 @@
 #' @param merged Logical, if TRUE, creates an additional merged dataset combining all pairs
 #' @param intersection_cache Optional pre-computed sample intersection cache (NULL for auto-compute)
 #' @return List of paired data with feature1 and feature2 values
-#' @export
 pairContinuousFeatures <- function(dataset1, dataset2, merged = FALSE, intersection_cache = NULL) {
   pair_list2 <- lapply(1:length(dataset1), function(x) {
     feat1_sel <- dataset1[[x]]
@@ -82,7 +81,6 @@ pairContinuousFeatures <- function(dataset1, dataset2, merged = FALSE, intersect
 #' @param continuous_dataset List with continuous feature data (numeric values)
 #' @param merged Logical, if TRUE, creates an additional merged dataset
 #' @return List of paired data with yes/no groups for continuous values
-#' @export
 pairDiscreteFeatures <- function(discrete_dataset, continuous_dataset, merged = FALSE) {
   pair_list2 <- lapply(1:length(discrete_dataset), function(x) {
     discrete_sel <- discrete_dataset[[x]]
@@ -152,7 +150,6 @@ pairDiscreteFeatures <- function(discrete_dataset, continuous_dataset, merged = 
 #' @param feature2_type Type of second feature
 #' @param samples_search Reference data for all samples
 #' @return List of paired data with contingency tables
-#' @export
 pairDiscreteDiscrete <- function(discrete_dataset1, discrete_dataset2,
                                 feature1_type, feature2_type,
                                 samples_search) {
@@ -218,7 +215,6 @@ pairDiscreteDiscrete <- function(discrete_dataset1, discrete_dataset2,
 #' @description Converts seconds into a more readable time format (hours, minutes, seconds)
 #' @param seconds Number of seconds
 #' @return Formatted time string
-#' @export
 formatTime <- function(seconds) {
   if (seconds < 60) {
     return(sprintf("%d seconds", round(seconds)))
@@ -240,7 +236,6 @@ formatTime <- function(seconds) {
 #' @param total Total number of items
 #' @param elapsed_time Time elapsed so far in seconds
 #' @return Estimated time remaining in seconds
-#' @export
 estimateTimeRemaining <- function(done, total, elapsed_time) {
   if (done == 0) return(Inf)
   rate <- elapsed_time / done

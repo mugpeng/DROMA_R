@@ -11,15 +11,15 @@ metaCalcConCon <- function(selected_pair) {
 
   # Test pairs one by one
   cal_list <- lapply(1:length(selected_pair), function(y) {
-    fea1_sel <- selected_pair[[y]][[1]]
-    fea2_sel <- selected_pair[[y]][[2]]
+    fea1_sel <- selected_pair[[y]][[1]]  # Feature 1 values (e.g., drug sensitivity)
+    fea2_sel <- selected_pair[[y]][[2]]  # Feature 2 values (e.g., gene expression)
 
     # Check for minimum length
     if (length(fea1_sel) < 3 || length(fea2_sel) < 3) return(NULL)
 
-    options(warn = -1)
+    # Spearman correlation: positive means both increase together
     cor_re <- tryCatch(
-      cor.test(fea1_sel, fea2_sel, method = "spearman"),
+      suppressWarnings(cor.test(fea1_sel, fea2_sel, method = "spearman")),
       error = function(x) { return(NULL) }
     )
 
@@ -27,7 +27,7 @@ metaCalcConCon <- function(selected_pair) {
 
     data.frame(
       p = cor_re$p.value,
-      effect = cor_re$estimate,
+      effect = cor_re$estimate,  # Correlation coefficient: positive means positive association
       N = length(fea2_sel)
     )
   })
@@ -64,24 +64,27 @@ metaCalcConCon <- function(selected_pair) {
 #' @return Meta-analysis result object or NULL if insufficient data
 #' @export
 metaCalcConDis <- function(selected_pair) {
-  options(warn = -1)
   if (length(selected_pair) < 1) return(NULL)
 
   cal_list <- lapply(1:length(selected_pair), function(y) {
-    yes_drugs <- selected_pair[[y]][[1]]
-    no_drugs <- selected_pair[[y]][[2]]
+    yes_drugs <- selected_pair[[y]][[1]]  # Samples with feature present (e.g., mutated)
+    no_drugs <- selected_pair[[y]][[2]]   # Samples without feature (e.g., wild-type)
 
     # Check for minimum length
     if (length(yes_drugs) < 3 || length(no_drugs) < 3) return(NULL)
 
+    # Wilcox test: yes vs no (positive effect means yes > no)
     wilcox_re <- tryCatch(
-      wilcox.test(no_drugs, yes_drugs),
+      suppressWarnings(wilcox.test(yes_drugs, no_drugs)),
       error = function(x) { return(NULL) }
     )
     if (is.null(wilcox_re)) return(NULL)
 
+    # Cliff's Delta: yes vs no (positive effect means yes > no)
+    # This ensures that when feature presence (e.g., mutation) increases values,
+    # the effect size is positive
     cliff_delta <- tryCatch(
-      cliff.delta(no_drugs, yes_drugs),
+      suppressWarnings(cliff.delta(yes_drugs, no_drugs)),
       error = function(x) { return(NULL) }
     )
     if (is.null(cliff_delta)) return(NULL)
@@ -139,12 +142,18 @@ metaCalcDisDis <- function(selected_pair) {
     # Calculate odds ratio and its standard error
     tryCatch({
       # Extract values from contingency table
-      a <- cont_table[1,1] # yes-yes
-      b <- cont_table[1,2] # yes-no
-      c <- cont_table[2,1] # no-yes
-      d <- cont_table[2,2] # no-no
+      # Contingency table structure:
+      #              Feature2
+      #              Yes    No
+      # Feature1 Yes  a     b
+      #          No   c     d
+      a <- cont_table[1,1] # both features present (e.g., both mutations)
+      b <- cont_table[1,2] # feature1 yes, feature2 no
+      c <- cont_table[2,1] # feature1 no, feature2 yes
+      d <- cont_table[2,2] # both features absent
 
       # Calculate log odds ratio and its standard error
+      # OR = (a*d)/(b*c): positive association → OR > 1 → log(OR) > 0
       log_or <- log((a * d)/(b * c))
       se_log_or <- sqrt(1/a + 1/b + 1/c + 1/d)
 
@@ -152,7 +161,7 @@ metaCalcDisDis <- function(selected_pair) {
       fisher_test <- fisher.test(cont_table)
 
       data.frame(
-        log_or = log_or,
+        log_or = log_or,  # Positive value means positive association between features
         se = se_log_or,
         p = fisher_test$p.value,
         N = sum(cont_table)
@@ -221,124 +230,4 @@ createForestPlot <- function(meta_obj,
                common = show_common,
                text.random = p_text
   )
-}
-
-#' Create a volcano plot from meta-analysis results
-#'
-#' @param meta_df Data frame containing meta-analysis results with columns:
-#'                effect_size, p_value, and name
-#' @param es_t Effect size threshold to consider significant
-#' @param P_t P-value threshold to consider significant
-#' @param label Whether to add labels to top points (TRUE/FALSE)
-#' @param top_label_each Number of top points in each direction to label
-#' @param label_size Size of text labels
-#' @param point_size Size of points
-#' @param point_alpha Alpha transparency of points
-#' @param title Plot title (NULL for no title)
-#' @param p_adj_method Method for p-value adjustment ("none", "BH", "bonferroni")
-#' @param custom_colors Custom color vector for Up, NS, Down (NULL for defaults)
-#' @return ggplot object with volcano plot
-#' @export
-plotMetaVolcano <- function(meta_df,
-                            es_t = .4,
-                            P_t = .001,
-                            label = TRUE,
-                            top_label_each = 5,
-                            label_size = 5,
-                            point_size = 2.5,
-                            point_alpha = 0.6,
-                            title = NULL,
-                            p_adj_method = "none",
-                            custom_colors = NULL) {
-
-  # Input validation
-  if(!is.data.frame(meta_df)) stop("meta_df must be a data frame")
-  if(!all(c("effect_size", "p_value", "name") %in% colnames(meta_df))) {
-    stop("meta_df must contain columns: effect_size, p_value, and name")
-  }
-
-  # Handle p-value adjustment if requested
-  if(p_adj_method != "none") {
-    meta_df$p_value <- p.adjust(meta_df$p_value, method = p_adj_method)
-  }
-
-  # Default colors
-  if(is.null(custom_colors)) {
-    custom_colors <- c("Down" = "#44bce4", "NS" = "grey", "Up" = "#fc7474")
-  }
-
-  # Group the points based on thresholds
-  meta_df$group <- dplyr::case_when(
-    meta_df$effect_size > es_t & meta_df$p_value < P_t ~ "Up",
-    meta_df$effect_size < -es_t & meta_df$p_value < P_t ~ "Down",
-    TRUE ~ "NS"
-  )
-
-  # Count significant findings
-  sig_counts <- table(meta_df$group)
-  sig_text <- paste0(
-    "Up: ", sum(meta_df$group == "Up"), ", ",
-    "Down: ", sum(meta_df$group == "Down"), ", ",
-    "Total: ", nrow(meta_df)
-  )
-
-  # Basic volcano plot
-  p <- ggplot(data = meta_df,
-              aes(x = effect_size,
-                  y = -log10(p_value))) +
-    geom_point(size = point_size, alpha = point_alpha,
-               aes(color = group)) +
-    theme_bw() +
-    theme(
-      legend.position = "none",
-      title = element_text(size = 15, face = "bold"),
-      axis.title = element_text(size = 15, colour = "black"),
-      axis.text = element_text(size = 15, color = "black"),
-      legend.title = element_text(size = 15, colour = "black"),
-      legend.text = element_text(size = 15),
-      text = element_text(colour = "black"),
-      axis.title.x = element_text(colour = "black")
-    ) +
-    ylab("-log10(Pvalue)") +
-    xlab("Effect Size") +
-    scale_color_manual(values = custom_colors) +
-    geom_vline(xintercept = c(-es_t, es_t), lty = 4, col = "black", lwd = 0.5) +
-    geom_hline(yintercept = -log10(P_t), lty = 4, col = "black", lwd = 0.5) +
-    annotate("text", x = min(meta_df$effect_size, na.rm = TRUE) * 0.8,
-             y = max(-log10(meta_df$p_value), na.rm = TRUE) * 0.9,
-             label = sig_text, hjust = 0, size = 5)
-
-  # Add title if provided
-  if(!is.null(title)) {
-    p <- p + ggtitle(title)
-  }
-
-  # Add labels if requested
-  if(label) {
-    meta_df2 <- meta_df[meta_df$group != "NS",]
-
-    # Skip labeling if there are no significant points
-    if(nrow(meta_df2) > 0) {
-      # Get top points to label
-      low_indices <- head(order(meta_df2$effect_size), min(top_label_each, nrow(meta_df2)))
-      high_indices <- tail(order(meta_df2$effect_size), min(top_label_each, nrow(meta_df2)))
-      forlabel_names <- c(meta_df2$name[low_indices], meta_df2$name[high_indices])
-      forlabel_df <- meta_df2[meta_df2$name %in% forlabel_names,]
-
-      p <- p +
-        geom_point(size = point_size + 0.5, shape = 1, data = forlabel_df) +
-        ggrepel::geom_text_repel(
-          data = forlabel_df,
-          aes(label = name),
-          size = label_size,
-          color = "black",
-          box.padding = 0.5,
-          point.padding = 0.3,
-          force = 5,
-          max.overlaps = 20
-        )
-    }
-  }
-
-  p
 }

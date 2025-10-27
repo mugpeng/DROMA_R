@@ -269,3 +269,147 @@ createPlotWithCommonAxes <- function(p, x_title = NULL, y_title = NULL) {
   
   return(p)
 }
+
+#' Create a volcano plot from meta-analysis results
+#'
+#' @param meta_df Data frame containing meta-analysis results with columns:
+#'                effect_size, q_value, n_datasets, and name
+#' @param es_t Effect size threshold to consider significant
+#' @param P_t Q-value threshold to consider significant
+#' @param n_datasets_t Minimum number of datasets threshold (NULL for no threshold)
+#' @param label Whether to add labels to top points (TRUE/FALSE)
+#' @param top_label_each Number of top points in each direction to label
+#' @param label_size Size of text labels
+#' @param point_size Size of points
+#' @param point_alpha Alpha transparency of points
+#' @param title Plot title (NULL for no title)
+#' @param custom_colors Custom color vector for Up, NS, Down (NULL for defaults)
+#' @return ggplot object with volcano plot
+#' @export
+plotMetaVolcano <- function(meta_df,
+                            es_t = .4,
+                            P_t = .01,
+                            n_datasets_t = NULL,
+                            label = TRUE,
+                            top_label_each = 5,
+                            label_size = 5,
+                            point_size = 2.5,
+                            point_alpha = 0.6,
+                            title = NULL,
+                            custom_colors = NULL) {
+
+  # Input validation
+  if(!is.data.frame(meta_df)) stop("meta_df must be a data frame")
+  if(!all(c("effect_size", "q_value", "name", "n_datasets") %in% colnames(meta_df))) {
+    stop("meta_df must contain columns: effect_size, q_value, n_datasets, and name")
+  }
+
+  # Default colors
+  if(is.null(custom_colors)) {
+    custom_colors <- c("Down" = "#44bce4", "NS" = "grey", "Up" = "#fc7474")
+  }
+
+  # Group the points based on thresholds
+  if(is.null(n_datasets_t)) {
+    # No n_datasets threshold
+    meta_df$group <- dplyr::case_when(
+      meta_df$effect_size > es_t & meta_df$q_value < P_t ~ "Up",
+      meta_df$effect_size < -es_t & meta_df$q_value < P_t ~ "Down",
+      TRUE ~ "NS"
+    )
+  } else {
+    # With n_datasets threshold
+    meta_df$group <- dplyr::case_when(
+      meta_df$effect_size > es_t & meta_df$q_value < P_t & meta_df$n_datasets >= n_datasets_t ~ "Up",
+      meta_df$effect_size < -es_t & meta_df$q_value < P_t & meta_df$n_datasets >= n_datasets_t ~ "Down",
+      TRUE ~ "NS"
+    )
+  }
+
+  # Count significant findings
+  sig_counts <- table(meta_df$group)
+  sig_text <- paste0(
+    "Up: ", sum(meta_df$group == "Up"), ", ",
+    "Down: ", sum(meta_df$group == "Down"), ", ",
+    "Total: ", nrow(meta_df)
+  )
+
+  # Get min and max for legend breaks
+  min_datasets <- min(meta_df$n_datasets)
+  max_datasets <- max(meta_df$n_datasets)
+  
+  # Basic volcano plot
+  # Using scale_size makes the radius proportional to n_datasets
+  # This means n_datasets=30 will have 3x the radius of n_datasets=10
+  p <- ggplot(data = meta_df,
+              aes(x = effect_size,
+                  y = -log10(q_value))) +
+    geom_point(alpha = point_alpha,
+               aes(color = group, size = n_datasets)) +
+    scale_size(range = c(point_size * 0.5, point_size * 2), 
+               name = "N Datasets",
+               breaks = function(x) {
+                 # Generate nice breaks for the legend
+                 if(max_datasets - min_datasets <= 5) {
+                   return(seq(min_datasets, max_datasets, by = 1))
+                 } else {
+                   pretty_breaks <- pretty(c(min_datasets, max_datasets), n = 4)
+                   return(pretty_breaks[pretty_breaks >= min_datasets & 
+                                       pretty_breaks <= max_datasets])
+                 }
+               }) +
+    theme_bw() +
+    theme(
+      title = element_text(size = 15, face = "bold"),
+      axis.title = element_text(size = 15, colour = "black"),
+      axis.text = element_text(size = 15, color = "black"),
+      legend.title = element_text(size = 13, colour = "black", face = "bold"),
+      legend.text = element_text(size = 12),
+      legend.position = "right",
+      legend.box = "vertical",
+      text = element_text(colour = "black"),
+      axis.title.x = element_text(colour = "black")
+    ) +
+    ylab("-log10(Qvalue)") +
+    xlab("Effect Size") +
+    scale_color_manual(values = custom_colors, guide = "none") +
+    geom_vline(xintercept = c(-es_t, es_t), lty = 4, col = "black", lwd = 0.5) +
+    geom_hline(yintercept = -log10(P_t), lty = 4, col = "black", lwd = 0.5) +
+    annotate("text", x = 0,
+             y = max(-log10(meta_df$q_value), na.rm = TRUE) * 0.9,
+             label = sig_text, hjust = 0.5, size = 5, fontface = "bold")
+
+  # Add title if provided
+  if(!is.null(title)) {
+    p <- p + ggtitle(title)
+  }
+
+  # Add labels if requested
+  if(label) {
+    meta_df2 <- meta_df[meta_df$group != "NS",]
+
+    # Skip labeling if there are no significant points
+    if(nrow(meta_df2) > 0) {
+      # Get top points to label
+      low_indices <- head(order(meta_df2$effect_size), min(top_label_each, nrow(meta_df2)))
+      high_indices <- tail(order(meta_df2$effect_size), min(top_label_each, nrow(meta_df2)))
+      forlabel_names <- c(meta_df2$name[low_indices], meta_df2$name[high_indices])
+      forlabel_df <- meta_df2[meta_df2$name %in% forlabel_names,]
+
+      p <- p +
+        geom_point(aes(size = n_datasets), shape = 1, data = forlabel_df, show.legend = FALSE) +
+        ggrepel::geom_text_repel(
+          data = forlabel_df,
+          aes(label = name),
+          size = label_size,
+          color = "black",
+          box.padding = 0.5,
+          point.padding = 0.3,
+          force = 5,
+          max.overlaps = 20
+        )
+    }
+  }
+
+  p
+}

@@ -1,5 +1,195 @@
 # Helper Functions for Data Loading ----
-# Note: loadFeatureData() and filterFeatureData() have been moved to FuncPairDataLoading.R
+
+#' Process a single feature pair for batch analysis
+#' @param feature_idx Index of feature2 in feature2_list
+#' @param feature2_list Vector of feature2 names to test
+#' @param dromaset_object DromaSet or MultiDromaSet object
+#' @param preloaded_feature2_data Pre-loaded feature2 data matrix or dataframe
+#' @param selected_feas1 Feature1 data
+#' @param feature1_type Type of feature1
+#' @param feature2_type Type of feature2
+#' @param is_continuous1 Whether feature1 is continuous
+#' @param is_continuous2 Whether feature2 is continuous
+#' @param data_type Filter by data type
+#' @param tumor_type Filter by tumor type
+#' @param overlap_only Whether to use only overlapping samples
+#' @param samples_search Sample metadata for discrete vs discrete analysis
+#' @param sample_intersection_cache Cached sample intersections
+#' @param progress_callback Optional progress callback function
+#' @param start_time Start time for progress tracking
+#' @param verbose Logical, whether to display detailed messages
+#' @return Data frame with p_value, effect_size, n_datasets or NULL
+#' @keywords internal
+processFeaturePair <- function(feature_idx, feature2_list, dromaset_object,
+                               preloaded_feature2_data, selected_feas1,
+                               feature1_type, feature2_type,
+                               is_continuous1, is_continuous2,
+                               data_type, tumor_type, overlap_only,
+                               samples_search, sample_intersection_cache,
+                               progress_callback = NULL, start_time = NULL,
+                               verbose = TRUE) {
+  results <- tryCatch({
+    # Validate input index
+    if (!is.numeric(feature_idx) || feature_idx < 1 || feature_idx > length(feature2_list)) {
+      stop(sprintf("Invalid feature index: %d", feature_idx))
+    }
+
+    feature2_name <- feature2_list[feature_idx]
+
+    # Extract feature2 data from preloaded matrix (key optimization)
+    selected_feas2 <- NULL
+
+    if (!is.null(preloaded_feature2_data)) {
+      if (is_continuous2) {
+        # Continuous data - extract from matrix
+        selected_feas2 <- lapply(preloaded_feature2_data, function(data_matrix) {
+          if (is.matrix(data_matrix) && feature2_name %in% rownames(data_matrix)) {
+            data_vector <- as.numeric(data_matrix[feature2_name, ])
+            names(data_vector) <- colnames(data_matrix)
+            return(data_vector[!is.na(data_vector)])
+          }
+          return(NULL)
+        })
+        # Remove NULL entries
+        selected_feas2 <- selected_feas2[!sapply(selected_feas2, is.null)]
+      } else {
+        # Discrete data - use loadFeatureData for proper format
+        if (!verbose) {
+          selected_feas2 <- suppressMessages(
+            loadFeatureData(dromaset_object, feature2_type, feature2_name,
+                           data_type, tumor_type, overlap_only, FALSE,
+                           return_all_samples = TRUE)
+          )
+        } else {
+          selected_feas2 <- loadFeatureData(dromaset_object, feature2_type, feature2_name,
+                                           data_type, tumor_type, overlap_only, FALSE,
+                                           return_all_samples = TRUE)
+        }
+      }
+    }
+
+    if (is.null(selected_feas2) || length(selected_feas2) == 0) {
+      return(NULL)
+    }
+
+    # Filter feature2 data to ensure minimum sample size
+    if (!verbose) {
+      selected_feas2 <- suppressMessages(
+        filterFeatureData(selected_feas2, min_samples = 3, is_discrete_with_all = !is_continuous2)
+      )
+    } else {
+      selected_feas2 <- filterFeatureData(selected_feas2, min_samples = 3, is_discrete_with_all = !is_continuous2)
+    }
+
+    # Skip if no sufficient data remains after filtering
+    if(is.null(selected_feas2) || length(selected_feas2) == 0) {
+      return(NULL)
+    }
+
+    # do statistics test based on four circumstances
+    # con vs con ----
+    if (is_continuous1 && is_continuous2) {
+      if (!verbose) {
+        selected_pair <- suppressMessages(
+          pairContinuousFeatures(selected_feas1, selected_feas2,
+                                merged = FALSE,
+                                intersection_cache = sample_intersection_cache)
+        )
+        cal_meta_re <- suppressMessages(metaCalcConCon(selected_pair))
+      } else {
+        selected_pair <- pairContinuousFeatures(selected_feas1, selected_feas2,
+                                                merged = FALSE,
+                                                intersection_cache = sample_intersection_cache)
+        cal_meta_re <- metaCalcConCon(selected_pair)
+      }
+      # dis vs con ----
+    } else if ((is_continuous1 && !is_continuous2) || (!is_continuous1 && is_continuous2)) {
+      if (!verbose) {
+        if (is_continuous1 && !is_continuous2){
+          selected_pair <- suppressMessages(
+            pairDiscreteFeatures(selected_feas2, selected_feas1)
+          )
+        } else {
+          selected_pair <- suppressMessages(
+            pairDiscreteFeatures(selected_feas1, selected_feas2)
+          )
+        }
+        cal_meta_re <- suppressMessages(metaCalcConDis(selected_pair))
+      } else {
+        if (is_continuous1 && !is_continuous2){
+          selected_pair <- pairDiscreteFeatures(selected_feas2, selected_feas1)
+        } else {
+          selected_pair <- pairDiscreteFeatures(selected_feas1, selected_feas2)
+        }
+        cal_meta_re <- metaCalcConDis(selected_pair)
+      }
+      # dis vs dis ----
+    } else {
+      # Discrete vs discrete analysis
+      # Get sample metadata needed for pairing
+      if (is.null(samples_search)) {
+        # Get sample metadata if not already available
+        if (!verbose) {
+          samples_search <- suppressMessages(
+            getSampleMetadata(dromaset_object, feature1_type, feature2_type)
+          )
+        } else {
+          samples_search <- getSampleMetadata(dromaset_object, feature1_type, feature2_type)
+        }
+        if (is.null(samples_search) || nrow(samples_search) == 0) {
+          return(NULL)
+        }
+      }
+
+      if (!verbose) {
+        selected_pair <- suppressMessages(
+          pairDiscreteDiscrete(selected_feas1, selected_feas2,
+                              feature1_type, feature2_type,
+                              samples_search)
+        )
+        cal_meta_re <- suppressMessages(metaCalcDisDis(selected_pair))
+      } else {
+        selected_pair <- pairDiscreteDiscrete(selected_feas1, selected_feas2,
+                                             feature1_type, feature2_type,
+                                             samples_search)
+        cal_meta_re <- metaCalcDisDis(selected_pair)
+      }
+    }
+
+    if(is.null(cal_meta_re)) return(NULL)
+    
+    # Extract p_value and effect_size
+    p_val <- cal_meta_re[["pval.random"]]
+    eff_size <- cal_meta_re[["TE.random"]]
+    n_datasets <- length(cal_meta_re[["studlab"]])
+    
+    # Replace NA values: p_value -> 1, effect_size -> 0
+    if(is.na(p_val)) p_val <- 1
+    if(is.na(eff_size)) eff_size <- 0
+    
+    results <- data.frame(
+      p_value = p_val,
+      effect_size = eff_size,
+      n_datasets = n_datasets
+    )
+  }, error = function(e) {
+    # Log detailed error but continue processing
+    if (verbose) {
+      error_msg <- sprintf("Error processing feature %d (%s) of type %s: %s",
+                          feature_idx, feature2_list[feature_idx], feature2_type, e$message)
+      message(error_msg)
+    }
+    NULL
+  })
+
+  # Update progress if callback provided
+  if(!is.null(progress_callback) && !is.null(start_time)) {
+    progress_callback(feature_idx, length(feature2_list),
+                      difftime(Sys.time(), start_time, units = "secs"))
+  }
+
+  return(results)
+}
 
 #' Get sample metadata for discrete vs discrete analysis
 #' @param dromaset_object Either a DromaSet or MultiDromaSet object
@@ -84,7 +274,8 @@ getSampleMetadata <- function(dromaset_object, feature1_type, feature2_type) {
 #' @param cores Number of CPU cores to use for parallel processing
 #' @param progress_callback Optional callback function for progress updates
 #' @param test_top_n Integer, number of top features to test (default: NULL for all features)
-#' @return Data frame with meta-analysis results (p_value, effect_size, n_datasets, name). NA values are replaced: p_value -> 1, effect_size -> 0
+#' @param verbose Logical, whether to display detailed messages from internal functions (default: FALSE)
+#' @return Data frame with meta-analysis results (p_value, effect_size, n_datasets, name, q_value). NA values are replaced: p_value -> 1, effect_size -> 0. q_value is calculated using Benjamini-Hochberg method
 #' @export
 #' @examples
 #' \dontrun{
@@ -110,7 +301,8 @@ batchFindSignificantFeatures <- function(dromaset_object,
                                       overlap_only = FALSE,
                                       cores = 1,
                                       progress_callback = NULL,
-                                      test_top_n = NULL
+                                      test_top_n = NULL,
+                                      verbose = FALSE
 ) {
   # Validate input object
   if (is.null(dromaset_object)) {
@@ -179,13 +371,28 @@ batchFindSignificantFeatures <- function(dromaset_object,
   is_continuous2 <- feature2_type %in% continuous_types
 
   # Get selected specific feature1 data using helper function
-  selected_feas1 <- loadFeatureData(dromaset_object, feature1_type, feature1_name,
-                                    data_type, tumor_type, overlap_only, is_continuous1)
+  if (!verbose) {
+    selected_feas1 <- suppressMessages(
+      loadFeatureData(dromaset_object, feature1_type, feature1_name,
+                      data_type, tumor_type, overlap_only, is_continuous1,
+                      return_all_samples = !is_continuous1)
+    )
+  } else {
+    selected_feas1 <- loadFeatureData(dromaset_object, feature1_type, feature1_name,
+                                      data_type, tumor_type, overlap_only, is_continuous1,
+                                      return_all_samples = !is_continuous1)
+  }
 
   # Pre-load sample metadata for discrete vs discrete analysis
   samples_search <- NULL
   if (!is_continuous1 && !is_continuous2) {
-    samples_search <- getSampleMetadata(dromaset_object, feature1_type, feature2_type)
+    if (!verbose) {
+      samples_search <- suppressMessages(
+        getSampleMetadata(dromaset_object, feature1_type, feature2_type)
+      )
+    } else {
+      samples_search <- getSampleMetadata(dromaset_object, feature1_type, feature2_type)
+    }
   }
 
   if(is.null(selected_feas1) || length(selected_feas1) == 0) {
@@ -193,7 +400,13 @@ batchFindSignificantFeatures <- function(dromaset_object,
   }
 
   # Filter feature1 data to ensure minimum sample size
-  selected_feas1 <- filterFeatureData(selected_feas1)
+  if (!verbose) {
+    selected_feas1 <- suppressMessages(
+      filterFeatureData(selected_feas1, min_samples = 3, is_discrete_with_all = !is_continuous1)
+    )
+  } else {
+    selected_feas1 <- filterFeatureData(selected_feas1, min_samples = 3, is_discrete_with_all = !is_continuous1)
+  }
 
   # Check if any data remains after filtering
   if(is.null(selected_feas1) || length(selected_feas1) == 0) {
@@ -214,7 +427,13 @@ batchFindSignificantFeatures <- function(dromaset_object,
       available_features <- availableTreatmentResponses(dromaset_object)
       if ("drug" %in% available_features) {
         # Load all drugs to get feature names
-        all_drug_data <- loadTreatmentResponse(dromaset_object, return_data = TRUE, zscore = TRUE)
+        if (!verbose) {
+          all_drug_data <- suppressMessages(
+            loadTreatmentResponse(dromaset_object, return_data = TRUE, zscore = TRUE)
+          )
+        } else {
+          all_drug_data <- loadTreatmentResponse(dromaset_object, return_data = TRUE, zscore = TRUE)
+        }
         if (is.matrix(all_drug_data)) {
           feature2_list <- rownames(all_drug_data)
         }
@@ -224,12 +443,23 @@ batchFindSignificantFeatures <- function(dromaset_object,
       available_profiles <- availableMolecularProfiles(dromaset_object)
       if (feature2_type %in% available_profiles) {
         # Load all features to get feature names
-        all_omics_data <- loadMolecularProfiles(dromaset_object,
-                                               feature_type = feature2_type,
-                                               data_type = data_type,
-                                               tumor_type = tumor_type,
-                                               return_data = TRUE,
-                                               zscore = TRUE)
+        if (!verbose) {
+          all_omics_data <- suppressMessages(
+            loadMolecularProfiles(dromaset_object,
+                                 feature_type = feature2_type,
+                                 data_type = data_type,
+                                 tumor_type = tumor_type,
+                                 return_data = TRUE,
+                                 zscore = TRUE)
+          )
+        } else {
+          all_omics_data <- loadMolecularProfiles(dromaset_object,
+                                                 feature_type = feature2_type,
+                                                 data_type = data_type,
+                                                 tumor_type = tumor_type,
+                                                 return_data = TRUE,
+                                                 zscore = TRUE)
+        }
         if (is.matrix(all_omics_data)) {
           feature2_list <- rownames(all_omics_data)
         } else if (is.data.frame(all_omics_data) && "features" %in% colnames(all_omics_data)) {
@@ -247,7 +477,13 @@ batchFindSignificantFeatures <- function(dromaset_object,
       if (feature2_type %in% c("drug")) {
         available_features <- availableTreatmentResponses(dromaset)
         if ("drug" %in% available_features) {
-          all_drug_data <- loadTreatmentResponse(dromaset, return_data = TRUE, zscore = TRUE)
+          if (!verbose) {
+            all_drug_data <- suppressMessages(
+              loadTreatmentResponse(dromaset, return_data = TRUE, zscore = TRUE)
+            )
+          } else {
+            all_drug_data <- loadTreatmentResponse(dromaset, return_data = TRUE, zscore = TRUE)
+          }
           if (is.matrix(all_drug_data)) {
             all_feature_lists[[projects]] <- rownames(all_drug_data)
           }
@@ -255,12 +491,23 @@ batchFindSignificantFeatures <- function(dromaset_object,
       } else {
         available_profiles <- availableMolecularProfiles(dromaset)
         if (feature2_type %in% available_profiles) {
-          all_omics_data <- loadMolecularProfiles(dromaset,
-                                                 feature_type = feature2_type,
-                                                 data_type = data_type,
-                                                 tumor_type = tumor_type,
-                                                 return_data = TRUE,
-                                                 zscore = TRUE)
+          if (!verbose) {
+            all_omics_data <- suppressMessages(
+              loadMolecularProfiles(dromaset,
+                                   feature_type = feature2_type,
+                                   data_type = data_type,
+                                   tumor_type = tumor_type,
+                                   return_data = TRUE,
+                                   zscore = TRUE)
+            )
+          } else {
+            all_omics_data <- loadMolecularProfiles(dromaset,
+                                                   feature_type = feature2_type,
+                                                   data_type = data_type,
+                                                   tumor_type = tumor_type,
+                                                   return_data = TRUE,
+                                                   zscore = TRUE)
+          }
           if (is.matrix(all_omics_data)) {
             all_feature_lists[[projects]] <- rownames(all_omics_data)
           } else if (is.data.frame(all_omics_data) && "features" %in% colnames(all_omics_data)) {
@@ -288,7 +535,13 @@ batchFindSignificantFeatures <- function(dromaset_object,
       if (feature2_type %in% c("drug")) {
         available_features <- availableTreatmentResponses(dromaset_object)
         if ("drug" %in% available_features) {
-          all_drug_data <- loadTreatmentResponse(dromaset_object, return_data = TRUE, zscore = TRUE)
+          if (!verbose) {
+            all_drug_data <- suppressMessages(
+              loadTreatmentResponse(dromaset_object, return_data = TRUE, zscore = TRUE)
+            )
+          } else {
+            all_drug_data <- loadTreatmentResponse(dromaset_object, return_data = TRUE, zscore = TRUE)
+          }
           if (is.matrix(all_drug_data)) {
             all_available_features <- rownames(all_drug_data)
           }
@@ -296,12 +549,23 @@ batchFindSignificantFeatures <- function(dromaset_object,
       } else {
         available_profiles <- availableMolecularProfiles(dromaset_object)
         if (feature2_type %in% available_profiles) {
-          all_omics_data <- loadMolecularProfiles(dromaset_object,
-                                                 feature_type = feature2_type,
-                                                 data_type = data_type,
-                                                 tumor_type = tumor_type,
-                                                 return_data = TRUE,
-                                                 zscore = TRUE)
+          if (!verbose) {
+            all_omics_data <- suppressMessages(
+              loadMolecularProfiles(dromaset_object,
+                                   feature_type = feature2_type,
+                                   data_type = data_type,
+                                   tumor_type = tumor_type,
+                                   return_data = TRUE,
+                                   zscore = TRUE)
+            )
+          } else {
+            all_omics_data <- loadMolecularProfiles(dromaset_object,
+                                                   feature_type = feature2_type,
+                                                   data_type = data_type,
+                                                   tumor_type = tumor_type,
+                                                   return_data = TRUE,
+                                                   zscore = TRUE)
+          }
           if (is.matrix(all_omics_data)) {
             all_available_features <- rownames(all_omics_data)
           } else if (is.data.frame(all_omics_data) && "features" %in% colnames(all_omics_data)) {
@@ -319,7 +583,13 @@ batchFindSignificantFeatures <- function(dromaset_object,
         if (feature2_type %in% c("drug")) {
           available_features <- availableTreatmentResponses(dromaset)
           if ("drug" %in% available_features) {
-            all_drug_data <- loadTreatmentResponse(dromaset, return_data = TRUE, zscore = TRUE)
+            if (!verbose) {
+              all_drug_data <- suppressMessages(
+                loadTreatmentResponse(dromaset, return_data = TRUE, zscore = TRUE)
+              )
+            } else {
+              all_drug_data <- loadTreatmentResponse(dromaset, return_data = TRUE, zscore = TRUE)
+            }
             if (is.matrix(all_drug_data)) {
               all_feature_lists[[projects]] <- rownames(all_drug_data)
             }
@@ -327,12 +597,23 @@ batchFindSignificantFeatures <- function(dromaset_object,
         } else {
           available_profiles <- availableMolecularProfiles(dromaset)
           if (feature2_type %in% available_profiles) {
-            all_omics_data <- loadMolecularProfiles(dromaset,
-                                                   feature_type = feature2_type,
-                                                   data_type = data_type,
-                                                   tumor_type = tumor_type,
-                                                   return_data = TRUE,
-                                                   zscore = TRUE)
+            if (!verbose) {
+              all_omics_data <- suppressMessages(
+                loadMolecularProfiles(dromaset,
+                                     feature_type = feature2_type,
+                                     data_type = data_type,
+                                     tumor_type = tumor_type,
+                                     return_data = TRUE,
+                                     zscore = TRUE)
+              )
+            } else {
+              all_omics_data <- loadMolecularProfiles(dromaset,
+                                                     feature_type = feature2_type,
+                                                     data_type = data_type,
+                                                     tumor_type = tumor_type,
+                                                     return_data = TRUE,
+                                                     zscore = TRUE)
+            }
             if (is.matrix(all_omics_data)) {
               all_feature_lists[[projects]] <- rownames(all_omics_data)
             } else if (is.data.frame(all_omics_data) && "features" %in% colnames(all_omics_data)) {
@@ -380,24 +661,46 @@ batchFindSignificantFeatures <- function(dromaset_object,
     # Single DromaSet
     if (feature2_type %in% c("drug")) {
       preloaded_feature2_data <- list()
-      all_drug_data <- loadTreatmentResponse(dromaset_object,
-                                                       data_type = data_type,
-                                                       tumor_type = tumor_type,
-                                                       return_data = TRUE,
-                                                       zscore = TRUE)
+      if (!verbose) {
+        all_drug_data <- suppressMessages(
+          loadTreatmentResponse(dromaset_object,
+                                data_type = data_type,
+                                tumor_type = tumor_type,
+                                return_data = TRUE,
+                                zscore = TRUE)
+        )
+      } else {
+        all_drug_data <- loadTreatmentResponse(dromaset_object,
+                                                data_type = data_type,
+                                                tumor_type = tumor_type,
+                                                return_data = TRUE,
+                                                zscore = TRUE)
+      }
       if (is.matrix(all_drug_data)) {
         preloaded_feature2_data[[dromaset_object@name]] <- all_drug_data
       }
     } else {
       # Molecular profile data
       preloaded_feature2_data <- list()
-      all_omics_data <- loadMolecularProfiles(dromaset_object,
-                                                        feature_type = feature2_type,
-                                                        select_features = feature2_list,
-                                                        data_type = data_type,
-                                                        tumor_type = tumor_type,
-                                                        return_data = TRUE,
-                                                        zscore = TRUE)
+      if (!verbose) {
+        all_omics_data <- suppressMessages(
+          loadMolecularProfiles(dromaset_object,
+                                feature_type = feature2_type,
+                                select_features = feature2_list,
+                                data_type = data_type,
+                                tumor_type = tumor_type,
+                                return_data = TRUE,
+                                zscore = TRUE)
+        )
+      } else {
+        all_omics_data <- loadMolecularProfiles(dromaset_object,
+                                                feature_type = feature2_type,
+                                                select_features = feature2_list,
+                                                data_type = data_type,
+                                                tumor_type = tumor_type,
+                                                return_data = TRUE,
+                                                zscore = TRUE)
+      }
       if (!is.null(all_omics_data)) {
         preloaded_feature2_data[[dromaset_object@name]] <- all_omics_data
       }
@@ -405,19 +708,40 @@ batchFindSignificantFeatures <- function(dromaset_object,
   } else {
     # MultiDromaSet - load data for all projects
     if (feature2_type %in% c("drug")) {
-      preloaded_feature2_data <- loadMultiProjectTreatmentResponse(dromaset_object,
-                                                                             overlap_only = overlap_only,
-                                                                             data_type = data_type,
-                                                                             tumor_type = tumor_type,
-                                                                             zscore = TRUE)
+      if (!verbose) {
+        preloaded_feature2_data <- suppressMessages(
+          loadMultiProjectTreatmentResponse(dromaset_object,
+                                            overlap_only = overlap_only,
+                                            data_type = data_type,
+                                            tumor_type = tumor_type,
+                                            zscore = TRUE)
+        )
+      } else {
+        preloaded_feature2_data <- loadMultiProjectTreatmentResponse(dromaset_object,
+                                                                      overlap_only = overlap_only,
+                                                                      data_type = data_type,
+                                                                      tumor_type = tumor_type,
+                                                                      zscore = TRUE)
+      }
     } else {
       # Molecular profile data
-      preloaded_feature2_data <- loadMultiProjectMolecularProfiles(dromaset_object,
-                                                                             feature_type = feature2_type,
-                                                                             overlap_only = overlap_only,
-                                                                             data_type = data_type,
-                                                                             tumor_type = tumor_type,
-                                                                             zscore = TRUE)
+      if (!verbose) {
+        preloaded_feature2_data <- suppressMessages(
+          loadMultiProjectMolecularProfiles(dromaset_object,
+                                            feature_type = feature2_type,
+                                            overlap_only = overlap_only,
+                                            data_type = data_type,
+                                            tumor_type = tumor_type,
+                                            zscore = TRUE)
+        )
+      } else {
+        preloaded_feature2_data <- loadMultiProjectMolecularProfiles(dromaset_object,
+                                                                      feature_type = feature2_type,
+                                                                      overlap_only = overlap_only,
+                                                                      data_type = data_type,
+                                                                      tumor_type = tumor_type,
+                                                                      zscore = TRUE)
+      }
     }
   }
 
@@ -452,121 +776,27 @@ batchFindSignificantFeatures <- function(dromaset_object,
     message("Sample intersections cached successfully.")
   }
 
-  # Define the worker function
+  # Define the worker function as a wrapper for processFeaturePair
   worker_function <- function(x) {
-    results <- tryCatch({
-      # Validate input index
-      if (!is.numeric(x) || x < 1 || x > length(feature2_list)) {
-        stop(sprintf("Invalid feature index: %d", x))
-      }
-
-      feature2_name <- feature2_list[x]
-
-      # Extract feature2 data from preloaded matrix (key optimization)
-      selected_feas2 <- NULL
-
-      if (!is.null(preloaded_feature2_data)) {
-        if (is_continuous2) {
-          # Continuous data - extract from matrix
-          selected_feas2 <- lapply(preloaded_feature2_data, function(data_matrix) {
-            if (is.matrix(data_matrix) && feature2_name %in% rownames(data_matrix)) {
-              data_vector <- as.numeric(data_matrix[feature2_name, ])
-              names(data_vector) <- colnames(data_matrix)
-              return(data_vector[!is.na(data_vector)])
-            }
-            return(NULL)
-          })
-        } else {
-          # Discrete data - extract sample IDs from long dataframe format
-          selected_feas2 <- lapply(preloaded_feature2_data, function(omics_df) {
-            if (is.data.frame(omics_df) && "samples" %in% colnames(omics_df) && "features" %in% colnames(omics_df)) {
-              sample_ids <- omics_df$samples[omics_df$features == feature2_name]
-              return(sample_ids)
-            }
-            return(NULL)
-          })
-        }
-
-        # Remove NULL entries
-        selected_feas2 <- selected_feas2[!sapply(selected_feas2, is.null)]
-      }
-
-      if (is.null(selected_feas2) || length(selected_feas2) == 0) {
-        return(NULL)
-      }
-
-      # Filter feature2 data to ensure minimum sample size
-      selected_feas2 <- filterFeatureData(selected_feas2)
-
-      # Skip if no sufficient data remains after filtering
-      if(is.null(selected_feas2) || length(selected_feas2) == 0) {
-        return(NULL)
-      }
-
-      # do statistics test based on four circumstances
-      # con vs con ----
-      if (is_continuous1 && is_continuous2) {
-        selected_pair <- pairContinuousFeatures(selected_feas1, selected_feas2,
-                                                merged = FALSE,
-                                                intersection_cache = sample_intersection_cache)
-        cal_meta_re <- metaCalcConCon(selected_pair)
-        # dis vs con ----
-      } else if ((is_continuous1 && !is_continuous2) || (!is_continuous1 && is_continuous2)) {
-        if (is_continuous1 && !is_continuous2){
-          selected_pair <- pairDiscreteFeatures(selected_feas2, selected_feas1)
-        } else {
-          selected_pair <- pairDiscreteFeatures(selected_feas1, selected_feas2)
-        }
-        cal_meta_re <- metaCalcConDis(selected_pair)
-        # dis vs dis ----
-      } else {
-        # Discrete vs discrete analysis
-        # Get sample metadata needed for pairing
-        if (is.null(samples_search)) {
-          # Get sample metadata if not already available
-          samples_search <- getSampleMetadata(dromaset_object, feature1_type, feature2_type)
-          if (is.null(samples_search) || nrow(samples_search) == 0) {
-            return(NULL)
-          }
-        }
-
-        selected_pair <- pairDiscreteDiscrete(selected_feas1, selected_feas2,
-                                             feature1_type, feature2_type,
-                                             samples_search)
-        cal_meta_re <- metaCalcDisDis(selected_pair)
-      }
-
-      if(is.null(cal_meta_re)) return(NULL)
-      
-      # Extract p_value and effect_size
-      p_val <- cal_meta_re[["pval.random"]]
-      eff_size <- cal_meta_re[["TE.random"]]
-      n_datasets <- length(cal_meta_re[["studlab"]])
-      
-      # Replace NA values: p_value -> 1, effect_size -> 0
-      if(is.na(p_val)) p_val <- 1
-      if(is.na(eff_size)) eff_size <- 0
-      
-      results <- data.frame(
-        p_value = p_val,
-        effect_size = eff_size,
-        n_datasets = n_datasets
-      )
-    }, error = function(e) {
-      # Log detailed error but continue processing
-      error_msg <- sprintf("Error processing feature %d (%s) of type %s: %s",
-                          x, feature2_list[x], feature2_type, e$message)
-      message(error_msg)
-      NULL
-    })
-
-    # Update progress if callback provided
-    if(!is.null(progress_callback)) {
-      progress_callback(x, length(feature2_list),
-                        difftime(Sys.time(), start_time, units = "secs"))
-    }
-
-    return(results)
+    processFeaturePair(
+      feature_idx = x,
+      feature2_list = feature2_list,
+      dromaset_object = dromaset_object,
+      preloaded_feature2_data = preloaded_feature2_data,
+      selected_feas1 = selected_feas1,
+      feature1_type = feature1_type,
+      feature2_type = feature2_type,
+      is_continuous1 = is_continuous1,
+      is_continuous2 = is_continuous2,
+      data_type = data_type,
+      tumor_type = tumor_type,
+      overlap_only = overlap_only,
+      samples_search = samples_search,
+      sample_intersection_cache = sample_intersection_cache,
+      progress_callback = progress_callback,
+      start_time = start_time,
+      verbose = verbose
+    )
   }
   message("Please be patient, it may take long time to run.")
   # Use parallel processing if cores > 1
@@ -588,11 +818,12 @@ batchFindSignificantFeatures <- function(dromaset_object,
         sfLibrary(DROMA.R)
 
         # Export required data and functions
-        # Key change: export preloaded_feature2_data instead of dromaset_object to reduce data transfer
+        # Note: export dromaset_object for discrete feature2 loading
         sfExport("preloaded_feature2_data", "selected_feas1", "feature2_list",
                  "is_continuous1", "is_continuous2",
                  "feature1_type", "feature2_type", "data_type", "tumor_type", "overlap_only",
-                 "start_time", "samples_search", "sample_intersection_cache")
+                 "start_time", "samples_search", "sample_intersection_cache", "dromaset_object",
+                 "verbose")
 
         # Run parallel computation
         cal_re_list <- sfLapply(seq_along(feature2_list), worker_function)
@@ -625,12 +856,13 @@ batchFindSignificantFeatures <- function(dromaset_object,
 
   cal_re_df <- do.call(rbind, cal_re_list)
   cal_re_df$name <- fea_names
+  cal_re_df$q_value <- p.adjust(cal_re_df$p_value, method = "BH")
 
   # Log completion
   total_time <- difftime(Sys.time(), start_time, units = "secs")
   message(sprintf("Analysis completed in %s", formatTime(as.numeric(total_time))))
   message(sprintf("Found %d significant associations out of %d features.",
-                  sum(cal_re_df$p_value < 0.05), nrow(cal_re_df)))
+                  sum(cal_re_df$q_value < 0.01), nrow(cal_re_df)))
 
   return(cal_re_df)
 }
