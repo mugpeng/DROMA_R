@@ -267,6 +267,72 @@ formatDrugTable <- function(drug_data, caption = "Drug sensitivity data - showin
   DT::formatRound(columns = c('zscore_value', 'raw_value'), digits = 3)
 }
 
+#' Get Drug Sensitivity Data using DromaSet objects
+#'
+#' @description Wrapper function that processes and returns drug sensitivity data from DromaSet or MultiDromaSet objects
+#' @details This function combines the functionality of `processDrugData()` and `annotateDrugData()`.
+#'   When `include_annotations = TRUE`, it will add sample annotations to the drug data.
+#'   Sample annotations can be provided directly via the `sample_annotations` parameter,
+#'   or loaded from the global `sample_anno` variable, or retrieved from the SQLite
+#'   database specified by `db_path`.
+#' @param dromaset_object Either a DromaSet or MultiDromaSet object
+#' @param select_drugs Character string specifying the drug name
+#' @param data_type Filter by data type ("all", "CellLine", "PDC", "PDO", "PDX")
+#' @param tumor_type Filter by tumor type (use "all" for all tumor types)
+#' @param overlap_only For MultiDromaSet, whether to use only overlapping samples (default: FALSE).
+#'   TRUE: Use only sample types present in all projects (recommended for meta-analysis)
+#'   FALSE: Use all available samples from each project (may increase power but introduce bias)
+#' @param include_annotations Logical indicating whether to include sample annotations
+#' @param sample_annotations Optional dataframe containing sample annotations
+#' @param db_path Optional path to SQLite database for loading sample annotations if not provided and not in global environment
+#' @return A dataframe with drug sensitivity data
+#' @examples
+#' \dontrun{
+#' # Using DromaSet
+#' gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
+#' drug_data <- getDrugSensitivityData(gCSI, "Paclitaxel")
+#'
+#' # Using MultiDromaSet with overlapping samples (recommended)
+#' multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"))
+#' drug_data <- getDrugSensitivityData(multi_set, "Paclitaxel",
+#'                                    include_annotations = TRUE)
+#'
+#' # Using MultiDromaSet with all available samples
+#' drug_data_all <- getDrugSensitivityData(multi_set, "Paclitaxel",
+#'                                        overlap_only = FALSE,
+#'                                        include_annotations = TRUE)
+#'
+#' # Using database path to load sample annotations
+#' drug_data <- getDrugSensitivityData(gCSI, "Paclitaxel",
+#'                                    include_annotations = TRUE,
+#'                                    db_path = "path/to/droma.sqlite")
+#'
+#' # Using custom sample annotations
+#' my_annotations <- data.frame(SampleID = c("sample1", "sample2"),
+#'                             TumorType = c("BRCA", "LUAD"))
+#' drug_data <- getDrugSensitivityData(gCSI, "Paclitaxel",
+#'                                    include_annotations = TRUE,
+#'                                    sample_annotations = my_annotations)
+#' }
+getDrugSensitivityData <- function(dromaset_object,
+                                   select_drugs,
+                                   data_type = "all",
+                                   tumor_type = "all",
+                                   overlap_only = FALSE,
+                                   include_annotations = TRUE,
+                                   sample_annotations = NULL,
+                                   db_path = NULL) {
+  # Process drug data
+  drug_data <- processDrugData(dromaset_object, select_drugs, data_type, tumor_type, overlap_only)
+
+  # Add annotations if requested
+  if (include_annotations) {
+    drug_data <- annotateDrugData(drug_data, sample_annotations, db_path)
+  }
+
+  return(drug_data)
+}
+
 # Visualization Functions ----
 #' Plot continuous variable comparison
 #'
@@ -480,10 +546,11 @@ createDrugComparisonPlot <- function(data, comparison_var, value_column = "value
 #' @param select_drugs Character string specifying the drug name
 #' @param data_type Filter by data type: "all" (default), "CellLine", "PDC", "PDO", "PDX"
 #' @param tumor_type Filter by tumor type: "all" (default) or specific tumor type
-#' @param highlight Character vector specifying samples to highlight. Can be:
-#'   - A value from data_type (e.g., "CellLine") to highlight all samples of that type
-#'   - A value from tumor_type (e.g., "breast cancer") to highlight all samples of that tumor type
-#'   - A vector of specific sample IDs to highlight
+#' @param highlight Specifying samples to highlight. Can be:
+#'   - A numeric value (e.g., 10) to highlight the top N samples by rank
+#'   - A character value from data_type (e.g., "CellLine") to highlight all samples of that type
+#'   - A character value from tumor_type (e.g., "breast cancer") to highlight all samples of that tumor type
+#'   - A character vector of specific sample IDs to highlight
 #'   Note: If more than 20 samples are highlighted, only the top 20 will be labeled
 #' @param color Character string specifying the variable to use for coloring points.
 #'   Options: NULL (default, no coloring), "data_type", "tumor_type", or any column name in sample annotations
@@ -502,6 +569,9 @@ createDrugComparisonPlot <- function(data, comparison_var, value_column = "value
 #' \dontrun{
 #' # Basic rank plot
 #' rank_plot <- plotDrugSensitivityRank(gCSI, "Paclitaxel")
+#'
+#' # Highlight top 10 most sensitive samples
+#' rank_plot <- plotDrugSensitivityRank(gCSI, "Paclitaxel", highlight = 10)
 #'
 #' # Highlight cell line samples and color by tumor type
 #' rank_plot <- plotDrugSensitivityRank(
@@ -646,8 +716,15 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
 
   # Determine highlighting
   highlight_samples <- character(0)
+  is_numeric_highlight <- FALSE
   if (!is.null(highlight)) {
-    if (length(highlight) == 1) {
+    if (length(highlight) == 1 && is.numeric(highlight)) {
+      # If highlight is a number, highlight top N unique samples by rank
+      is_numeric_highlight <- TRUE
+      unique_samples_ordered <- unique(drug_data$SampleID)
+      n_highlight <- min(as.integer(highlight), length(unique_samples_ordered))
+      highlight_samples <- unique_samples_ordered[1:n_highlight]
+    } else if (length(highlight) == 1) {
       # Check if highlight value matches data_type values
       if ("DataType" %in% colnames(drug_data) && highlight %in% drug_data$DataType) {
         highlight_samples <- drug_data$SampleID[drug_data$DataType == highlight]
@@ -713,21 +790,50 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
   # Add highlighting circles and labels for highlighted samples
   if (length(highlight_samples) > 0) {
     highlighted_data <- drug_data[drug_data$highlighted, ]
-
-    # Limit labeling to top 20 if too many highlighted samples
-    if (nrow(highlighted_data) > 20) {
-      # Sort by rank and take top 20
-      highlighted_data <- highlighted_data[order(highlighted_data$rank), ]
-      highlighted_data_to_label <- highlighted_data[1:20, ]
-
-      # Warn user about limitation
-      message("Note: ", nrow(highlighted_data), " samples were highlighted, but only the top 20 will be labeled to avoid overcrowding.")
+    
+    # For numeric highlight, work with unique samples; otherwise use all highlighted data
+    if (is_numeric_highlight) {
+      n_unique_highlighted <- length(unique(highlighted_data$SampleID))
+      
+      # Limit labeling to top 20 if too many highlighted samples
+      if (n_unique_highlighted > 20) {
+        # Sort by rank and take top 20 unique samples
+        highlighted_data <- highlighted_data[order(highlighted_data$rank), ]
+        unique_samples_to_label <- unique(highlighted_data$SampleID)[1:20]
+        highlighted_data_to_label <- highlighted_data[highlighted_data$SampleID %in% unique_samples_to_label, ]
+        highlighted_data_to_label <- highlighted_data_to_label[!duplicated(highlighted_data_to_label$SampleID), ]
+        
+        # Warn user about limitation
+        message("Note: ", n_unique_highlighted, " unique samples were highlighted, but only the top 20 will be labeled to avoid overcrowding.")
+      } else {
+        # For numeric highlight, only label first occurrence of each sample
+        highlighted_data_to_label <- highlighted_data[!duplicated(highlighted_data$SampleID), ]
+      }
+      highlighted_data_for_circle <- highlighted_data[!duplicated(highlighted_data$SampleID), ]
     } else {
-      highlighted_data_to_label <- highlighted_data
+      # For non-numeric highlight, keep all data (including duplicates in merged mode)
+      if (nrow(highlighted_data) > 20) {
+        # Sort by rank and take top 20
+        highlighted_data <- highlighted_data[order(highlighted_data$rank), ]
+        highlighted_data_to_label <- highlighted_data[1:20, ]
+        
+        # Warn user about limitation
+        message("Note: ", nrow(highlighted_data), " samples were highlighted, but only the top 20 will be labeled to avoid overcrowding.")
+      } else {
+        highlighted_data_to_label <- highlighted_data
+      }
+      highlighted_data_for_circle <- highlighted_data
+    }
+    
+    # Create labels with project info if merged
+    if (merge && "ProjectID" %in% colnames(highlighted_data_to_label)) {
+      highlighted_data_to_label$label <- paste0(highlighted_data_to_label$SampleID, " (", highlighted_data_to_label$ProjectID, ")")
+    } else {
+      highlighted_data_to_label$label <- highlighted_data_to_label$SampleID
     }
 
-    # Add larger circles around ALL highlighted points
-    p <- p + geom_point(data = highlighted_data,
+    # Add larger circles around highlighted points
+    p <- p + geom_point(data = highlighted_data_for_circle,
                        aes(x = rank, y = .data[[value_column]]),
                        size = point_size + 0.5,
                        shape = 1,
@@ -738,7 +844,7 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
     if (requireNamespace("ggrepel", quietly = TRUE)) {
       p <- p + ggrepel::geom_text_repel(
         data = highlighted_data_to_label,
-        aes(x = rank, y = .data[[value_column]], label = SampleID),
+        aes(x = rank, y = .data[[value_column]], label = label),
         size = 3,
         box.padding = 0.5,
         point.padding = 0.3,

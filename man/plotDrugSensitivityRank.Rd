@@ -29,10 +29,11 @@ plotDrugSensitivityRank(
 
 \item{tumor_type}{Filter by tumor type: "all" (default) or specific tumor type}
 
-\item{highlight}{Character vector specifying samples to highlight. Can be:
-- A value from data_type (e.g., "CellLine") to highlight all samples of that type
-- A value from tumor_type (e.g., "breast cancer") to highlight all samples of that tumor type
-- A vector of specific sample IDs to highlight
+\item{highlight}{Specifying samples to highlight. Can be:
+- A numeric value (e.g., 10) to highlight the top N samples by rank
+- A character value from data_type (e.g., "CellLine") to highlight all samples of that type
+- A character value from tumor_type (e.g., "breast cancer") to highlight all samples of that tumor type
+- A character vector of specific sample IDs to highlight
 Note: If more than 20 samples are highlighted, only the top 20 will be labeled}
 
 \item{color}{Character string specifying the variable to use for coloring points.
@@ -70,6 +71,9 @@ This function creates a rank plot where samples are ordered by drug sensitivity 
 \dontrun{
 # Basic rank plot
 rank_plot <- plotDrugSensitivityRank(gCSI, "Paclitaxel")
+
+# Highlight top 10 most sensitive samples
+rank_plot <- plotDrugSensitivityRank(gCSI, "Paclitaxel", highlight = 10)
 
 # Highlight cell line samples and color by tumor type
 rank_plot <- plotDrugSensitivityRank(
