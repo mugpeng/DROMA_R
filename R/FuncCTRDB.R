@@ -9,7 +9,6 @@
 #' @param auto_log Logical, whether to automatically detect and apply log transformation (default: TRUE)
 #' @param log_threshold Maximum value threshold to determine if data is already log-transformed (default: 50)
 #' @return Expression matrix with genes as rows and samples as columns, or NULL if retrieval fails
-#' @export
 #' @examples
 #' \dontrun{
 #' # Connect to CTRDB database
@@ -526,79 +525,4 @@ createClinicalForestPlot <- function(meta_obj,
                common = show_common,
                text.random = p_text
   )
-}
-
-#' Get clinical drug response summary statistics
-#'
-#' @description Provides summary statistics for clinical drug response analysis
-#' @param result_obj Result object from analyzeClinicalDrugResponse
-#' @return Data frame with summary statistics
-#' @export
-getClinicalSummary <- function(result_obj) {
-
-  if (is.null(result_obj$data) || length(result_obj$data) == 0) {
-    return(NULL)
-  }
-
-  # Calculate summary statistics for each patient
-  summary_stats <- data.frame(
-    PatientID = character(),
-    N_Response = integer(),
-    N_Non_Response = integer(),
-    Mean_Response = numeric(),
-    Mean_Non_Response = numeric(),
-    P_Value = numeric(),
-    Effect_Size = numeric(),
-    stringsAsFactors = FALSE
-  )
-
-  for (patient_id in names(result_obj$data)) {
-    patient_data <- result_obj$data[[patient_id]]
-
-    # Calculate basic statistics
-    n_resp <- length(patient_data$response)
-    n_non_resp <- length(patient_data$non_response)
-    mean_resp <- mean(patient_data$response, na.rm = TRUE)
-    mean_non_resp <- mean(patient_data$non_response, na.rm = TRUE)
-
-    # Perform statistical test (Response vs Non-response)
-    test_result <- tryCatch({
-      wilcox.test(patient_data$response, patient_data$non_response)
-    }, error = function(e) list(p.value = NA))
-
-    # Calculate effect size (Response vs Non-response)
-    effect_size <- tryCatch({
-      effsize::cliff.delta(patient_data$response, patient_data$non_response)$estimate
-    }, error = function(e) NA)
-
-    # Add to summary
-    summary_stats <- rbind(summary_stats, data.frame(
-      PatientID = patient_id,
-      N_Response = n_resp,
-      N_Non_Response = n_non_resp,
-      Mean_Response = round(mean_resp, 3),
-      Mean_Non_Response = round(mean_non_resp, 3),
-      P_Value = round(test_result$p.value, 4),
-      Effect_Size = round(effect_size, 3),
-      stringsAsFactors = FALSE
-    ))
-  }
-
-  # Add meta-analysis results if available
-  if (!is.null(result_obj$meta)) {
-    meta_row <- data.frame(
-      PatientID = "Meta-Analysis",
-      N_Response = sum(summary_stats$N_Response),
-      N_Non_Response = sum(summary_stats$N_Non_Response),
-      Mean_Response = NA,
-      Mean_Non_Response = NA,
-      P_Value = round(result_obj$meta$pval.random, 4),
-      Effect_Size = round(result_obj$meta$TE.random, 3),
-      stringsAsFactors = FALSE
-    )
-
-    summary_stats <- rbind(summary_stats, meta_row)
-  }
-
-  return(summary_stats)
 }
