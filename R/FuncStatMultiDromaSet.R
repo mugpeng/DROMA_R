@@ -62,7 +62,7 @@ generateStatisticalPlots <- function(projects = "all",
   }
 
   # Get project information from database
-  all_projects <- DROMA.Set::listDROMAProjects(connection = connection)
+  all_projects <- listDROMAProjects(connection = connection)
   if (nrow(all_projects) == 0) {
     stop("No projects found in database")
   }
@@ -98,14 +98,14 @@ generateStatisticalPlots <- function(projects = "all",
   drug_annotations <- NULL
 
   sample_annotations <- tryCatch({
-    DROMA.Set::getDROMAAnnotation("sample", connection = connection)
+    getDROMAAnnotation("sample", connection = connection)
   }, error = function(e) {
     warning("Could not load sample annotations from database: ", e$message)
     NULL
   })
 
   drug_annotations <- tryCatch({
-    DROMA.Set::getDROMAAnnotation("drug", connection = connection)
+    getDROMAAnnotation("drug", connection = connection)
   }, error = function(e) {
     warning("Could not load drug annotations from database: ", e$message)
     NULL
@@ -330,7 +330,7 @@ generateOverlapPlots <- function(selected_projects, connection) {
   for (projects in selected_projects) {
     # Get drugs for this project
     tryCatch({
-      drugs <- DROMA.Set::listDROMAFeatures(projects, "drug", connection = connection)
+      drugs <- listDROMAFeatures(projects, "drug", connection = connection)
       if (length(drugs) > 0) {
         drug_list[[projects]] <- drugs
       }
@@ -340,7 +340,7 @@ generateOverlapPlots <- function(selected_projects, connection) {
 
     # Get samples for this project
     tryCatch({
-      samples <- DROMA.Set::listDROMASamples(projects, connection = connection)
+      samples <- listDROMASamples(projects, connection = connection)
       if (length(samples) > 0) {
         sample_list[[projects]] <- samples
       }
