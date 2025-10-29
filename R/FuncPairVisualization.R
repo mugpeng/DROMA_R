@@ -23,7 +23,7 @@ plotCorrelation <- function(x_values, y_values,
 
   # Create scatter plot with correlation statistics
   p <- ggscatter(cor_df, x = "x", y = "y", alpha = 0.2) +
-    stat_cor(size = 6, method = method) +
+    stat_cor(size = 6, method = method, label.x.npc = "left", label.y.npc = "top") +
     stat_smooth(formula = y ~ x, method = "lm") +
     theme_bw() +
     theme(
@@ -61,8 +61,9 @@ plotGroupComparison <- function(no_values, yes_values,
   p <- ggboxplot(data = box_df, x = "group", y = "values",
                  fill = "group", palette = c("#BEBADAFF", "#FB8072FF"),
                  add = "jitter", add.params = list(alpha = 0.15)) +
-    stat_compare_means(size = 6, label.x = 0.8,
-                       label.y = (max(box_df$values) - max(box_df$values)/8),
+    stat_compare_means(size = 6,
+                       label.x.npc = "left",
+                       label.y.npc = "top",
                        label = "p.format") +
     theme_bw() +
     theme(
