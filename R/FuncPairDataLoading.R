@@ -3,14 +3,14 @@
 #' Load feature data from DromaSet or MultiDromaSet
 #' @param dromaset_object Either a DromaSet or MultiDromaSet object
 #' @param feature_type Type of feature to load
-#' @param select_features Name of feature to load
+#' @param select_features Name(s) of feature(s) to load. Can be a single feature name or a vector of feature names. If multiple features are provided for continuous data, returns a matrix with all features.
 #' @param data_type Filter by data type
 #' @param tumor_type Filter by tumor type
 #' @param overlap_only For MultiDromaSet, whether to use only overlapping samples
 #' @param is_continuous Whether the feature is continuous
 #' @param return_all_samples For discrete features, whether to return all profiled samples in addition to feature-present samples (default: FALSE)
 #' @param zscore Whether to apply z-score normalization (default: TRUE)
-#' @return List of feature data by dataset. For continuous features: named vector of values. For discrete features: if return_all_samples=FALSE, vector of sample IDs; if return_all_samples=TRUE, list with 'present' and 'all' components.
+#' @return For single feature (continuous): List of named vectors by dataset. For multiple features (continuous): List of matrices by dataset. For discrete features: if return_all_samples=FALSE, vector of sample IDs; if return_all_samples=TRUE, list with 'present' and 'all' components.
 #' @keywords internal
 loadFeatureData <- function(dromaset_object, feature_type, select_features,
                            data_type = "all", tumor_type = "all",
@@ -28,8 +28,11 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
     stop("feature_type must be a non-empty character string")
   }
   if (is.null(select_features) || !is.character(select_features) || length(select_features) == 0) {
-    stop("select_features must be a non-empty character string")
+    stop("select_features must be a non-empty character string or character vector")
   }
+  
+  # Detect mode: single feature vs multiple features
+  is_batch_mode <- length(select_features) > 1
 
   if (inherits(dromaset_object, "DromaSet")) {
     # Single DromaSet
@@ -42,10 +45,16 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
                                            zscore = zscore)
 
       if (is.matrix(feature_data) && nrow(feature_data) > 0) {
-        feature_vector <- as.numeric(feature_data[1, ])
-        names(feature_vector) <- colnames(feature_data)
         result <- list()
-        result[[dromaset_object@name]] <- feature_vector[!is.na(feature_vector)]
+        if (is_batch_mode) {
+          # Return full matrix for batch mode
+          result[[dromaset_object@name]] <- feature_data
+        } else {
+          # Return vector for single feature mode
+          feature_vector <- as.numeric(feature_data[1, ])
+          names(feature_vector) <- colnames(feature_data)
+          result[[dromaset_object@name]] <- feature_vector[!is.na(feature_vector)]
+        }
         return(result)
       }
     } else {
@@ -61,10 +70,16 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
       if (is_continuous) {
         # Continuous data
         if (is.matrix(feature_data) && nrow(feature_data) > 0) {
-          feature_vector <- as.numeric(feature_data[1, ])
-          names(feature_vector) <- colnames(feature_data)
           result <- list()
-          result[[dromaset_object@name]] <- feature_vector[!is.na(feature_vector)]
+          if (is_batch_mode) {
+            # Return full matrix for batch mode (preload scenario)
+            result[[dromaset_object@name]] <- feature_data
+          } else {
+            # Return vector for single feature mode (backward compatible)
+            feature_vector <- as.numeric(feature_data[1, ])
+            names(feature_vector) <- colnames(feature_data)
+            result[[dromaset_object@name]] <- feature_vector[!is.na(feature_vector)]
+          }
           return(result)
         }
       } else {
@@ -100,9 +115,15 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
 
       result <- lapply(feature_data, function(data_matrix) {
         if (is.matrix(data_matrix) && nrow(data_matrix) > 0) {
-          data_vector <- as.numeric(data_matrix[1, ])
-          names(data_vector) <- colnames(data_matrix)
-          return(data_vector[!is.na(data_vector)])
+          if (is_batch_mode) {
+            # Return full matrix for batch mode
+            return(data_matrix)
+          } else {
+            # Return vector for single feature mode
+            data_vector <- as.numeric(data_matrix[1, ])
+            names(data_vector) <- colnames(data_matrix)
+            return(data_vector[!is.na(data_vector)])
+          }
         }
         return(NULL)
       })
@@ -119,9 +140,15 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
         # Continuous data
         result <- lapply(feature_data, function(omics_matrix) {
           if (is.matrix(omics_matrix) && nrow(omics_matrix) > 0) {
-            omics_vector <- as.numeric(omics_matrix[1, ])
-            names(omics_vector) <- colnames(omics_matrix)
-            return(omics_vector[!is.na(omics_vector)])
+            if (is_batch_mode) {
+              # Return full matrix for batch mode (preload scenario)
+              return(omics_matrix)
+            } else {
+              # Return vector for single feature mode (backward compatible)
+              omics_vector <- as.numeric(omics_matrix[1, ])
+              names(omics_vector) <- colnames(omics_matrix)
+              return(omics_vector[!is.na(omics_vector)])
+            }
           }
           return(NULL)
         })

@@ -8,7 +8,6 @@ processFeaturePair(
   feature_idx,
   feature2_list,
   dromaset_object,
-  preloaded_feature2_data,
   selected_feas1,
   feature1_type,
   feature2_type,
@@ -20,8 +19,7 @@ processFeaturePair(
   samples_search,
   sample_intersection_cache,
   progress_callback = NULL,
-  start_time = NULL,
-  verbose = TRUE
+  start_time = NULL
 )
 }
 \arguments{
@@ -30,8 +28,6 @@ processFeaturePair(
 \item{feature2_list}{Vector of feature2 names to test}
 
 \item{dromaset_object}{DromaSet or MultiDromaSet object}
-
-\item{preloaded_feature2_data}{Pre-loaded feature2 data matrix or dataframe}
 
 \item{selected_feas1}{Feature1 data}
 
@@ -56,8 +52,6 @@ processFeaturePair(
 \item{progress_callback}{Optional progress callback function}
 
 \item{start_time}{Start time for progress tracking}
-
-\item{verbose}{Logical, whether to display detailed messages}
 }
 \value{
 Data frame with p_value, effect_size, n_datasets or NULL

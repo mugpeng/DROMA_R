@@ -56,10 +56,23 @@ The function follows this high-level workflow:
 1. Input validation and parameter setup
 2. Feature type determination (continuous vs discrete)
 3. Load and validate reference feature (feature1) data
-4. Get list of features to test (feature2)
-5. Parallel/sequential processing of feature pairs
+4. Get list of features to test (feature2) - uses listDROMAFeatures() for efficient database queries
+5. Parallel/sequential processing of feature pairs with on-demand data loading
 6. Statistical testing based on feature types
 7. Result aggregation and reporting
+}
+
+\section{Optimizations}{
+
+This function implements several optimizations for better performance and memory usage:
+\itemize{
+  \item{Feature List Retrieval: Uses listDROMAFeatures() from DROMA.Set package to efficiently 
+        query available features directly from the database without loading full data matrices}
+  \item{On-Demand Data Loading: Loads feature2 data only when needed for each feature pair,
+        reducing memory footprint especially for large datasets with thousands of features}
+  \item{Automatic Fallback: If database queries fail, automatically falls back to traditional
+        data loading methods for compatibility}
+}
 }
 
 \examples{

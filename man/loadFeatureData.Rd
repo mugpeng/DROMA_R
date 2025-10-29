@@ -21,7 +21,7 @@ loadFeatureData(
 
 \item{feature_type}{Type of feature to load}
 
-\item{select_features}{Name of feature to load}
+\item{select_features}{Name(s) of feature(s) to load. Can be a single feature name or a vector of feature names. If multiple features are provided for continuous data, returns a matrix with all features.}
 
 \item{data_type}{Filter by data type}
 
@@ -36,7 +36,7 @@ loadFeatureData(
 \item{zscore}{Whether to apply z-score normalization (default: TRUE)}
 }
 \value{
-List of feature data by dataset. For continuous features: named vector of values. For discrete features: if return_all_samples=FALSE, vector of sample IDs; if return_all_samples=TRUE, list with 'present' and 'all' components.
+For single feature (continuous): List of named vectors by dataset. For multiple features (continuous): List of matrices by dataset. For discrete features: if return_all_samples=FALSE, vector of sample IDs; if return_all_samples=TRUE, list with 'present' and 'all' components.
 }
 \description{
 Load feature data from DromaSet or MultiDromaSet
