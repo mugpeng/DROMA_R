@@ -181,7 +181,6 @@ print(volcano_plot)
 - **`analyzeStratifiedCTRDB()`**: Stratified analysis across different drugs
 - **`getPatientExpressionData()`**: Retrieve patient expression data from CTRDB
 - **`analyzeClinicalMeta()`**: Meta-analysis across clinical datasets
-- **`createClinicalForestPlot()`**: Forest plots for clinical meta-analysis
 - **`getClinicalSummary()`**: Summary statistics for clinical analysis
 - **`getStratifiedCTRDBSummary()`**: Summary for stratified CTRDB analysis
 

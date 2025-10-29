@@ -93,7 +93,9 @@ getPatientExpressionData <- function(patient_id,
 #' @param tumor_type Filter by tumor type ("all" or specific tumor types)
 #' @param connection Optional database connection object. If NULL, uses global connection
 #' @param meta_enabled Logical, whether to perform meta-analysis across datasets
-#' @return A list containing plot, meta-analysis results, and data
+#' @param zscore Logical, whether to apply z-score normalization to omics expression data (default: TRUE). If FALSE, merged_enabled should be set to FALSE to avoid combining non-normalized data from different patients.
+#' @param merged_enabled Logical, whether to create a merged dataset from all patients
+#' @return A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), meta-analysis results, and data
 #' @export
 #' @examples
 #' \dontrun{
@@ -106,15 +108,20 @@ getPatientExpressionData <- function(patient_id,
 #' # View individual patient plots
 #' result$plot
 #'
-#' # View meta-analysis forest plot
-#' result$forest_plot
+#' # View merged dataset plot
+#' result$merged_plot
+#'
+#' # View meta-analysis results
+#' result$meta
 #' }
 analyzeClinicalDrugResponse <- function(select_omics,
                                       select_drugs,
                                       data_type = "all",
                                       tumor_type = "all",
                                       connection = NULL,
-                                      meta_enabled = TRUE) {
+                                      meta_enabled = TRUE,
+                                      zscore = TRUE,
+                                      merged_enabled = TRUE) {
 
   # Validate inputs
   if (missing(select_omics) || is.null(select_omics) || select_omics == "") {
@@ -123,6 +130,11 @@ analyzeClinicalDrugResponse <- function(select_omics,
 
   if (missing(select_drugs) || is.null(select_drugs) || select_drugs == "") {
     stop("select_drugs must be specified")
+  }
+
+  # Warning if zscore is FALSE but merged_enabled is TRUE
+  if (!zscore && merged_enabled) {
+    warning("Without z-score normalization (zscore=FALSE), merging data from different patients may not be appropriate. Consider setting merged_enabled=FALSE.")
   }
 
   # Get CTRDB connection from global environment if not provided
@@ -136,7 +148,7 @@ analyzeClinicalDrugResponse <- function(select_omics,
   # Get sample annotations from DROMA
   sample_anno <- tryCatch({
     # Use DROMA.Set function to get sample annotations
-    DROMA.Set::getDROMAAnnotation("sample")
+    getDROMAAnnotation("sample")
   }, error = function(e) {
     stop("Failed to load sample annotations from DROMA: ", e$message)
   })
@@ -246,6 +258,15 @@ analyzeClinicalDrugResponse <- function(select_omics,
       expr_values <- as.numeric(expr_data[select_omics, common_samples])
       names(expr_values) <- common_samples
 
+      # Apply z-score normalization if enabled
+      if (zscore) {
+        mean_expr <- mean(expr_values, na.rm = TRUE)
+        sd_expr <- sd(expr_values, na.rm = TRUE)
+        if (sd_expr > 0) {
+          expr_values <- (expr_values - mean_expr) / sd_expr
+        }
+      }
+
       # Group by response
       response_groups <- split(expr_values, patient_meta$Response[match(names(expr_values), patient_meta$SampleID)])
 
@@ -287,29 +308,83 @@ analyzeClinicalDrugResponse <- function(select_omics,
   # Initialize result list
   result <- list()
 
-  # Create plots for each patient
-  result$plot <- plotAllClinicaldatasets(patient_data_list, select_omics, select_drugs)
+  # Transform patient data to match expected format for plotting functions
+  transformed_pairs <- lapply(patient_data_list, function(patient_data) {
+    list(
+      yes = patient_data$response,      # Response samples
+      no = patient_data$non_response    # Non-response samples
+    )
+  })
+  names(transformed_pairs) <- names(patient_data_list)
+
+  # Create plots for individual patients/studies
+  if (length(transformed_pairs) > 0) {
+    if (length(transformed_pairs) == 1) {
+      # Single plot case
+      result$plot <- plotGroupComparison(
+        transformed_pairs[[1]]$no,
+        transformed_pairs[[1]]$yes,
+        group_labels = c("Non_response", "Response"),
+        title = names(transformed_pairs)[1],
+        y_label = if(zscore) paste0(select_omics, " Expression (z-score)") else paste(select_omics, "Expression")
+      )
+    } else if (length(transformed_pairs) > 1) {
+      # Multiple plots case
+      multi_plot <- plotMultipleGroupComparisons(
+        transformed_pairs,
+        group_labels = c("Non_response", "Response"),
+        x_label = select_omics,
+        y_label = if(zscore) "Expression (z-score)" else "Expression"
+      )
+      # Add common axis label
+      result$plot <- createPlotWithCommonAxes(multi_plot,
+                                              y_title = if(zscore) paste0(select_omics, " Expression (z-score)") else paste(select_omics, "Expression"))
+    }
+  }
+
+  # Create merged plot if we have multiple datasets and merged_enabled is TRUE
+  if (length(transformed_pairs) > 1 && merged_enabled) {
+    # Combine all data for merged analysis
+    all_response <- unlist(lapply(transformed_pairs, function(x) x$yes))
+    all_non_response <- unlist(lapply(transformed_pairs, function(x) x$no))
+
+    # Apply overall z-score to merged data if zscore is enabled
+    if (zscore) {
+      all_values <- c(all_response, all_non_response)
+      mean_all <- mean(all_values, na.rm = TRUE)
+      sd_all <- sd(all_values, na.rm = TRUE)
+      if (sd_all > 0) {
+        all_response <- (all_response - mean_all) / sd_all
+        all_non_response <- (all_non_response - mean_all) / sd_all
+      }
+    }
+
+    result$merged_plot <- plotGroupComparison(
+      all_non_response,
+      all_response,
+      group_labels = c("Non_response", "Response"),
+      title = paste("Merged:", select_omics, "vs", select_drugs),
+      y_label = if(zscore) paste0(select_omics, " Expression (z-score)") else paste(select_omics, "Expression")
+    )
+  }
 
   # Perform meta-analysis if enabled and we have multiple datasets
-  if (meta_enabled && length(patient_data_list) > 1) {
+  if (meta_enabled && length(transformed_pairs) > 1) {
     meta_result <- analyzeClinicalMeta(patient_data_list)
     if (!is.null(meta_result)) {
       result$meta <- meta_result
-      result$forest_plot <- createClinicalForestPlot(meta_result,
-                                                   xlab = paste("Effect Size (", select_omics, " vs ", select_drugs, " Response)"))
     }
   }
 
   # Store data
   result$data <- patient_data_list
-  result$summary <- data.frame(
-    PatientID = names(patient_data_list),
-    N_Response = sapply(patient_data_list, function(x) length(x$response)),
-    N_Non_Response = sapply(patient_data_list, function(x) length(x$non_response)),
-    stringsAsFactors = FALSE
-  )
 
-  return(result)
+  # Return results if there's a plot or merged plot
+  if (is.null(result$plot) && is.null(result$merged_plot)) {
+    return(list())
+  } else {
+    return(result)
+  }
 }
 
 #' Analyze clinical meta-analysis across datasets
@@ -319,210 +394,23 @@ analyzeClinicalDrugResponse <- function(select_omics,
 #' @return Meta-analysis results object or NULL if analysis couldn't be performed
 #' @export
 analyzeClinicalMeta <- function(patient_data_list) {
-  options(warn = -1)
+  # Transform patient data to match expected format for metaCalcConDis
+  # Response = yes, Non_response = no
+  transformed_pairs <- lapply(patient_data_list, function(patient_data) {
+    list(
+      yes = patient_data$response,      # Response samples
+      no = patient_data$non_response    # Non-response samples
+    )
+  })
+  names(transformed_pairs) <- names(patient_data_list)
 
-  # Initialize list to store test results
-  test_list <- list()
-  valid_datasets <- character()
-
-  # Analyze each patient
-  for (patient_id in names(patient_data_list)) {
-    tryCatch({
-      patient_data <- patient_data_list[[patient_id]]
-      response_values <- patient_data$response
-      non_response_values <- patient_data$non_response
-
-      # Check for valid data
-      if (length(response_values) < 2 || length(non_response_values) < 2) next
-
-      # Perform statistical test (Wilcoxon test)
-      # Response vs Non-response (R - NR), so positive effect means higher expression in responders
-      wilcox_test <- wilcox.test(response_values, non_response_values)
-
-      # Calculate effect size (Cliff's Delta)
-      # Response vs Non-response, so positive delta means higher expression in responders
-      cliff_delta <- tryCatch({
-        effsize::cliff.delta(response_values, non_response_values)
-      }, error = function(e) {
-        # Fallback effect size calculation
-        list(estimate = (median(response_values, na.rm = TRUE) - median(non_response_values, na.rm = TRUE)) /
-                       (mad(c(response_values, non_response_values), na.rm = TRUE) + 1e-10))
-      })
-
-      # Store results
-      test_list[[patient_id]] <- data.frame(
-        p = wilcox_test$p.value,
-        effect = cliff_delta$estimate,
-        N = length(response_values) + length(non_response_values),
-        n1 = length(response_values),
-        n2 = length(non_response_values)
-      )
-      valid_datasets <- c(valid_datasets, patient_id)
-
-    }, error = function(e) {
-      warning("Error analyzing patient ", patient_id, ": ", e$message)
-    })
-  }
-
-  # Return NULL if no tests could be performed
-  if (length(test_list) < 1) return(NULL)
-
-  # Prepare data for meta-analysis
-  meta_df <- do.call(rbind, test_list)
-  meta_df$study <- valid_datasets
-
-  # Calculate standard error for Cliff's Delta
-  meta_df$se <- sqrt((1 - meta_df$effect^2) * (meta_df$n1 + meta_df$n2 + 1) /
-                     (12 * meta_df$n1 * meta_df$n2))
-
-  # Perform meta-analysis
-  tryCatch({
-    # Only perform meta-analysis if we have at least 2 studies
-    if (nrow(meta_df) >= 2) {
-      meta_result <- meta::metagen(TE = meta_df$effect,
-                                   seTE = meta_df$se,
-                                   data = meta_df,
-                                   sm = "CMD",  # Custom Mean Difference (using Cliff's Delta)
-                                   studlab = meta_df$study)
-      return(meta_result)
-    } else {
-      return(NULL)
-    }
+  # Use existing meta-analysis function from FuncPairMetaAnalysis
+  meta_result <- tryCatch({
+    metaCalcConDis(transformed_pairs)
   }, error = function(e) {
     warning("Meta-analysis failed: ", e$message)
     return(NULL)
   })
-}
 
-#' Plot clinical drug response for all datasets
-#'
-#' @description Creates and combines plots for all clinical datasets showing drug response differences
-#' @param patient_data_list List of patient data
-#' @param select_omics Name of the omics feature
-#' @param select_drugs Name of the drug
-#' @return A combined plot with all patient comparisons or NULL if no valid data
-#' @export
-plotAllClinicaldatasets <- function(patient_data_list, select_omics, select_drugs) {
-
-  # Initialize list to store plots
-  p_list <- list()
-
-  # Create plot for each patient
-  for (patient_id in names(patient_data_list)) {
-    tryCatch({
-      patient_data <- patient_data_list[[patient_id]]
-      response_values <- patient_data$response
-      non_response_values <- patient_data$non_response
-
-      # Ensure adequate data for plotting
-      if (length(response_values) < 2 || length(non_response_values) < 2) next
-
-      # Create plot and add to list
-      p_list[[patient_id]] <- plotClinicalPatient(response_values, non_response_values, patient_id)
-
-    }, error = function(e) {
-      warning("Error creating plot for patient ", patient_id, ": ", e$message)
-    })
-  }
-
-  # Remove NULL entries from list
-  p_list <- p_list[!sapply(p_list, is.null)]
-
-  # Combine plots using patchwork if plots exist
-  if (length(p_list) > 0) {
-    if (requireNamespace("patchwork", quietly = TRUE)) {
-      if (length(p_list) <= 3) {
-        combined_plot <- patchwork::wrap_plots(p_list, ncol = length(p_list))
-      } else {
-        combined_plot <- patchwork::wrap_plots(p_list, ncol = 3)
-      }
-
-      # Add overall title
-      combined_plot <- combined_plot +
-        patchwork::plot_annotation(
-          title = paste(select_omics, "Expression vs", select_drugs, "Response (Clinical Data)"),
-          theme = theme(plot.title = element_text(size = 16, hjust = 0.5, face = "bold"))
-        )
-
-      return(combined_plot)
-    } else {
-      warning("patchwork package not available. Returning list of individual plots.")
-      return(p_list)
-    }
-  } else {
-    return(NULL)
-  }
-}
-
-#' Plot clinical drug response for a single dataset
-#'
-#' @description Creates a boxplot comparing omics expression between response and non-response samples
-#' @param response_values Expression values for response samples
-#' @param non_response_values Expression values for non-response samples
-#' @param patient_id Dataset identifier for plot title
-#' @return A ggplot2 object with boxplot and statistical test
-#' @export
-plotClinicalPatient <- function(response_values, non_response_values, patient_id) {
-  # Combine data into dataframe
-  box_df <- data.frame(
-    expression = c(non_response_values, response_values),
-    response = rep(c("NR", "R"),
-                   times = c(length(non_response_values), length(response_values)))
-  )
-
-  # Create boxplot with statistical test
-  ggboxplot(data = box_df, x = "response", y = "expression",
-            fill = "response", palette = c("#BEBADAFF", "#FB8072FF"),
-            add = "jitter", add.params = list(alpha = 0.15)) +
-    stat_compare_means(size = 6, label.x = 0.8,
-                       label.y = (max(box_df$expression) - max(box_df$expression)/8),
-                       label = "p.format") +
-    theme_bw() +
-    theme(
-      axis.title = element_blank(),
-      title = element_text(size = 15, face = "bold"),
-      axis.text = element_text(size = 12),
-      legend.position = "none"
-    ) +
-    coord_cartesian(ylim = c(NA, max(box_df$expression) + max(box_df$expression)/20)) +
-    ggtitle(patient_id)
-}
-
-#' Create a forest plot for clinical meta-analysis results
-#'
-#' @description Creates a standardized forest plot for visualizing clinical meta-analysis results
-#' @param meta_obj Meta-analysis object from metagen() function
-#' @param xlab Label for x-axis
-#' @param show_common Logical, whether to show common effect model
-#' @return A forest plot visualization
-#' @export
-createClinicalForestPlot <- function(meta_obj,
-                                   xlab = "Effect Size (95% CI)",
-                                   show_common = FALSE) {
-  # Validate input
-  if (!inherits(meta_obj, "meta") && !inherits(meta_obj, "metagen")) {
-    stop("Input must be a meta-analysis object from the 'meta' package")
-  }
-
-  # Format p-value text for random effects model
-  p_val <- meta_obj$pval.random
-  p_text <- if(p_val < 0.001) {
-    paste("Random-Effects Model (p =", format(p_val, scientific = TRUE, digits = 3), ")")
-  } else {
-    paste("Random-Effects Model (p =", round(p_val, 3), ")")
-  }
-
-  # Create forest plot
-  meta::forest(meta_obj,
-               xlab = xlab,
-               slab = "study",
-               print.pval.common = show_common,
-               boxsize = 0.2,
-               lineheight = "auto",
-               print.pval.Q = FALSE,
-               print.I2 = FALSE,
-               print.tau2 = FALSE,
-               common = show_common,
-               text.random = p_text
-  )
+  return(meta_result)
 }
