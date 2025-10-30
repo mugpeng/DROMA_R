@@ -722,8 +722,19 @@ batchFindSignificantFeatures <- function(dromaset_object,
       message("Consider using preloaded=TRUE for better performance with cores>1")
     }
     
-    # Setup future plan for parallel processing
-    future::plan(future::multisession, workers = cores)
+    # Setup future plan: use multicore (memory-efficient) on Unix/Mac, multisession on Windows
+    # Increase memory limit for both backends
+    old_size <- getOption("future.globals.maxSize")
+    options(future.globals.maxSize = 2 * 1024^3)  # 2GB
+    on.exit(options(future.globals.maxSize = old_size), add = TRUE)
+
+    if (.Platform$OS.type == "unix") {
+      future::plan(future::multicore, workers = cores)
+      message(sprintf("Using fork-based parallelization with %d cores (memory-efficient)", cores))
+    } else {
+      future::plan(future::multisession, workers = cores)
+      message(sprintf("Using multisession parallelization with %d cores (Windows)", cores))
+    }
     on.exit(future::plan(future::sequential), add = TRUE)
     
     # Task chunking: divide features into batches for better efficiency
