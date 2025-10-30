@@ -18,8 +18,7 @@ processFeaturePair(
   overlap_only,
   samples_search,
   sample_intersection_cache,
-  progress_callback = NULL,
-  start_time = NULL
+  preloaded_data = NULL
 )
 }
 \arguments{
@@ -49,9 +48,7 @@ processFeaturePair(
 
 \item{sample_intersection_cache}{Cached sample intersections}
 
-\item{progress_callback}{Optional progress callback function}
-
-\item{start_time}{Start time for progress tracking}
+\item{preloaded_data}{Preloaded feature2 data (NULL for on-demand loading)}
 }
 \value{
 Data frame with p_value, effect_size, n_datasets or NULL

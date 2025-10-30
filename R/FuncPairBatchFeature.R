@@ -1,5 +1,64 @@
 # Helper Functions for Data Loading ----
 
+#' Create default progress callback function
+#'
+#' @description Creates a progress tracking function that displays processing status,
+#'   elapsed time, and estimated time remaining
+#' @param show_progress Logical, whether to show progress messages (default: TRUE)
+#' @param update_interval Integer, minimum seconds between progress updates (default: 10)
+#' @return A progress callback function
+#' @keywords internal
+createDefaultProgressCallback <- function(show_progress = TRUE, update_interval = 10) {
+  if (!show_progress) {
+    # Return a no-op function
+    return(function(done, total, elapsed) {})
+  }
+  
+  # Initialize tracking variables in closure
+  last_update_time <- 0
+  
+  # Return the callback function
+  function(done, total, elapsed) {
+    # Only update if enough time has passed since last update
+    if (elapsed - last_update_time < update_interval && done < total) {
+      return(invisible(NULL))
+    }
+    
+    # Update last update time
+    last_update_time <<- elapsed
+    
+    # Calculate progress
+    progress_pct <- (done / total) * 100
+    
+    # Estimate remaining time
+    time_remaining <- estimateTimeRemaining(done, total, elapsed)
+    
+    # Format messages
+    elapsed_str <- formatTime(elapsed)
+    remaining_str <- if (is.finite(time_remaining)) {
+      formatTime(time_remaining)
+    } else {
+      "calculating..."
+    }
+    
+    # Display progress
+    if (done < total) {
+      message(sprintf(
+        "Progress: %d/%d (%.1f%%) | Elapsed: %s | ETA: %s",
+        done, total, progress_pct, elapsed_str, remaining_str
+      ))
+    } else {
+      # Final message
+      message(sprintf(
+        "Progress: %d/%d (100%%) | Total time: %s",
+        done, total, elapsed_str
+      ))
+    }
+    
+    invisible(NULL)
+  }
+}
+
 #' Process a single feature pair for batch analysis
 #' @param feature_idx Index of feature2 in feature2_list
 #' @param feature2_list Vector of feature2 names to test
@@ -14,8 +73,7 @@
 #' @param overlap_only Whether to use only overlapping samples
 #' @param samples_search Sample metadata for discrete vs discrete analysis
 #' @param sample_intersection_cache Cached sample intersections
-#' @param progress_callback Optional progress callback function
-#' @param start_time Start time for progress tracking
+#' @param preloaded_data Preloaded feature2 data (NULL for on-demand loading)
 #' @return Data frame with p_value, effect_size, n_datasets or NULL
 #' @keywords internal
 processFeaturePair <- function(feature_idx, feature2_list, dromaset_object,
@@ -24,7 +82,7 @@ processFeaturePair <- function(feature_idx, feature2_list, dromaset_object,
                                is_continuous1, is_continuous2,
                                data_type, tumor_type, overlap_only,
                                samples_search, sample_intersection_cache,
-                               progress_callback = NULL, start_time = NULL) {
+                               preloaded_data = NULL) {
   results <- tryCatch({
     # Validate input index
     if (!is.numeric(feature_idx) || feature_idx < 1 || feature_idx > length(feature2_list)) {
@@ -33,10 +91,43 @@ processFeaturePair <- function(feature_idx, feature2_list, dromaset_object,
 
     feature2_name <- feature2_list[feature_idx]
 
-    # Load feature2 data on-demand
-    selected_feas2 <- loadFeatureData(dromaset_object, feature2_type, feature2_name,
-                                     data_type, tumor_type, overlap_only, is_continuous2,
-                                     return_all_samples = !is_continuous2)
+    # Load feature2 data: use preloaded data if available, otherwise load on-demand
+    if (!is.null(preloaded_data)) {
+      if (is_continuous2) {
+        # Extract from preloaded continuous data
+        # Preloaded_data is a list of matrices (features as rows, samples as columns)
+        selected_feas2 <- lapply(preloaded_data, function(data_matrix) {
+          if (is.matrix(data_matrix) && feature2_name %in% rownames(data_matrix)) {
+            feature_vector <- as.numeric(data_matrix[feature2_name, ])
+            names(feature_vector) <- colnames(data_matrix)
+            return(feature_vector[!is.na(feature_vector)])
+          }
+          return(NULL)
+        })
+        selected_feas2 <- selected_feas2[!sapply(selected_feas2, is.null)]
+      } else {
+        # Extract from preloaded discrete data
+        # Preloaded_data format: list(present = list(feat1 = vec1, feat2 = vec2, ...), all = vec) per dataset
+        selected_feas2 <- lapply(preloaded_data, function(dataset) {
+          if (is.list(dataset) && "present" %in% names(dataset)) {
+            # Extract the specific feature from present list
+            if (feature2_name %in% names(dataset$present)) {
+              return(list(present = dataset$present[[feature2_name]], all = dataset$all))
+            }
+          }
+          return(NULL)
+        })
+        selected_feas2 <- selected_feas2[!sapply(selected_feas2, is.null)]
+      }
+    } else {
+      # Load feature2 data on-demand (continuous features only)
+      if (!is_continuous2) {
+        stop("Discrete features require preloaded data. This should not happen.")
+      }
+      selected_feas2 <- loadFeatureData(dromaset_object, feature2_type, feature2_name,
+                                       data_type, tumor_type, overlap_only, is_continuous2,
+                                       return_all_samples = !is_continuous2)
+    }
 
     if (is.null(selected_feas2) || length(selected_feas2) == 0) {
       return(NULL)
@@ -103,12 +194,6 @@ processFeaturePair <- function(feature_idx, feature2_list, dromaset_object,
     # Silently continue processing on error
     NULL
   })
-
-  # Update progress if callback provided
-  if(!is.null(progress_callback) && !is.null(start_time)) {
-    progress_callback(feature_idx, length(feature2_list),
-                      difftime(Sys.time(), start_time, units = "secs"))
-  }
 
   return(results)
 }
@@ -283,20 +368,11 @@ getSampleMetadata <- function(dromaset_object, feature1_type, feature2_type) {
 #' 2. Feature type determination (continuous vs discrete)
 #' 3. Load and validate reference feature (feature1) data
 #' 4. Get list of features to test (feature2) - uses listDROMAFeatures() for efficient database queries
-#' 5. Parallel/sequential processing of feature pairs with on-demand data loading
-#' 6. Statistical testing based on feature types
-#' 7. Result aggregation and reporting
+#' 5. Data loading strategy: discrete features use preload mode (required), continuous features can use preload or on-demand
+#' 6. Parallel/sequential processing of feature pairs
+#' 7. Statistical testing based on feature types
+#' 8. Result aggregation and reporting
 #'
-#' @section Optimizations:
-#' This function implements several optimizations for better performance and memory usage:
-#' \itemize{
-#'   \item{Feature List Retrieval: Uses listDROMAFeatures() from DROMA.Set package to efficiently 
-#'         query available features directly from the database without loading full data matrices}
-#'   \item{On-Demand Data Loading: Loads feature2 data only when needed for each feature pair,
-#'         reducing memory footprint especially for large datasets with thousands of features}
-#'   \item{Automatic Fallback: If database queries fail, automatically falls back to traditional
-#'         data loading methods for compatibility}
-#' }
 #' @param dromaset_object Either a DromaSet or MultiDromaSet object
 #' @param feature1_type Type of the reference feature (e.g., "drug", "mRNA")
 #' @param feature1_name Name of the reference feature
@@ -305,9 +381,19 @@ getSampleMetadata <- function(dromaset_object, feature1_type, feature2_type) {
 #' @param data_type Filter by data type ("all", "CellLine", "PDO", "PDC", "PDX")
 #' @param tumor_type Filter by tumor type ("all" or specific tumor types)
 #' @param overlap_only For MultiDromaSet, whether to use only overlapping samples (default: FALSE)
-#' @param cores Number of CPU cores to use for parallel processing
-#' @param progress_callback Optional callback function for progress updates
+#' @param cores Number of CPU cores to use for parallel processing (uses future + furrr with task chunking for efficiency)
+#' @param show_progress Logical, whether to show progress updates (default: TRUE). 
+#'   Progress updates include: current count, percentage, elapsed time, and estimated time remaining.
+#'   Serial mode (cores=1): uses built-in progress tracker. Parallel mode (cores>1): uses progressr package if available.
+#' @param progress_callback Optional custom callback function for progress updates (serial mode only). 
+#'   If NULL (default), uses built-in progress tracking. Function signature: function(done, total, elapsed_seconds)
 #' @param test_top_n Integer, number of top features to test (default: NULL for all features)
+#' @param preloaded Logical or NULL, whether to preload all feature2 data at once (default: NULL for auto).
+#'   Note: Discrete features (mutation_gene, mutation_site, fusion) ONLY support preload mode.
+#'   For continuous features:
+#'   NULL (auto): Preload when feature2 count > 1000, otherwise load on-demand
+#'   TRUE: Always preload all feature2 data (faster for large datasets, uses more memory)
+#'   FALSE: Load feature2 data on-demand (slower but memory efficient)
 #' @param verbose Logical, whether to display detailed messages from internal functions (default: FALSE)
 #' @return Data frame with meta-analysis results (p_value, effect_size, n_datasets, name, q_value). NA values are replaced: p_value -> 1, effect_size -> 0. q_value is calculated using Benjamini-Hochberg method
 #' @export
@@ -324,6 +410,39 @@ getSampleMetadata <- function(dromaset_object, feature1_type, feature2_type) {
 #'
 #' # Test only top 50 features for debugging
 #' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", test_top_n = 50)
+#'
+#' # Force preload for faster processing (recommended for >1000 continuous features)
+#' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", 
+#'                                         preloaded = TRUE, cores = 8)
+#'
+#' # Force on-demand loading for memory efficiency (continuous features only)
+#' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", 
+#'                                         preloaded = FALSE)
+#'
+#' # Auto mode (default): preloads when >1000 continuous features
+#' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA")
+#'
+#' # Discrete features always use preload mode (required)
+#' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mutation_gene", 
+#'                                         cores = 8)
+#'
+#' # With progress tracking (serial mode, cores = 1)
+#' results <- batchFindSignificantFeatures(gCSI, "drug", "Paclitaxel", "mRNA",
+#'                                         cores = 1, show_progress = TRUE)
+#'
+#' # Parallel with progressr (requires: install.packages("progressr"))
+#' library(progressr)
+#' handlers(global = TRUE)
+#' handlers("progress")  # or "txtprogressbar"
+#' results <- batchFindSignificantFeatures(gCSI, "drug", "Paclitaxel", "mRNA",
+#'                                         cores = 8, show_progress = TRUE)
+#'
+#' # Custom progress callback (serial mode only)
+#' my_progress <- function(done, total, elapsed) {
+#'   message(sprintf("Processed %d/%d features in %.1f seconds", done, total, elapsed))
+#' }
+#' results <- batchFindSignificantFeatures(gCSI, "drug", "Paclitaxel", "mRNA",
+#'                                         progress_callback = my_progress, cores = 1)
 #' }
 batchFindSignificantFeatures <- function(dromaset_object,
                                       feature1_type,
@@ -334,8 +453,10 @@ batchFindSignificantFeatures <- function(dromaset_object,
                                       tumor_type = "all",
                                       overlap_only = FALSE,
                                       cores = 1,
+                                      show_progress = TRUE,
                                       progress_callback = NULL,
                                       test_top_n = NULL,
+                                      preloaded = NULL,
                                       verbose = FALSE
 ) {
   # Validate input object
@@ -377,7 +498,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
 
   # Validate cores parameter
   max_cores <- ifelse(requireNamespace("parallel", quietly = TRUE),
-                    parallel::detectCores(),
+                    parallel::detectCores() - 1,
                     1)
   if (!is.numeric(cores) || cores < 1 || cores > max_cores) {
     stop(paste0("cores must be a positive integer between 1 and ", max_cores))
@@ -395,6 +516,28 @@ batchFindSignificantFeatures <- function(dromaset_object,
     }
   }
 
+  # Validate preloaded parameter
+  if (!is.null(preloaded) && !is.logical(preloaded)) {
+    stop("preloaded must be NULL, TRUE, or FALSE")
+  }
+
+  # Validate show_progress parameter
+  if (!is.logical(show_progress) || length(show_progress) != 1) {
+    stop("show_progress must be TRUE or FALSE")
+  }
+
+  # Setup progress tracking
+  # Serial mode: use custom callback or default tracker
+  if (cores == 1 && is.null(progress_callback)) {
+    progress_callback <- createDefaultProgressCallback(
+      show_progress = show_progress,
+      update_interval = 10  # Update every 10 seconds
+    )
+  } else if (cores > 1 && !is.null(progress_callback)) {
+    message("Note: Custom progress_callback only works in serial mode")
+    progress_callback <- NULL
+  }
+
   # Track timing for progress updates
   start_time <- Sys.time()
 
@@ -406,11 +549,11 @@ batchFindSignificantFeatures <- function(dromaset_object,
 
   # Get selected specific feature1 data using helper function
   if (!verbose) {
-    selected_feas1 <- suppressMessages(
+    selected_feas1 <- suppressWarnings(suppressMessages(
       loadFeatureData(dromaset_object, feature1_type, feature1_name,
                       data_type, tumor_type, overlap_only, is_continuous1,
                       return_all_samples = !is_continuous1)
-    )
+    ))
   } else {
     selected_feas1 <- loadFeatureData(dromaset_object, feature1_type, feature1_name,
                                       data_type, tumor_type, overlap_only, is_continuous1,
@@ -421,9 +564,9 @@ batchFindSignificantFeatures <- function(dromaset_object,
   samples_search <- NULL
   if (!is_continuous1 && !is_continuous2) {
     if (!verbose) {
-      samples_search <- suppressMessages(
+      samples_search <- suppressWarnings(suppressMessages(
         getSampleMetadata(dromaset_object, feature1_type, feature2_type)
-      )
+      ))
     } else {
       samples_search <- getSampleMetadata(dromaset_object, feature1_type, feature2_type)
     }
@@ -435,9 +578,9 @@ batchFindSignificantFeatures <- function(dromaset_object,
 
   # Filter feature1 data to ensure minimum sample size
   if (!verbose) {
-    selected_feas1 <- suppressMessages(
+    selected_feas1 <- suppressWarnings(suppressMessages(
       filterFeatureData(selected_feas1, min_samples = 3, is_discrete_with_all = !is_continuous1)
-    )
+    ))
   } else {
     selected_feas1 <- filterFeatureData(selected_feas1, min_samples = 3, is_discrete_with_all = !is_continuous1)
   }
@@ -451,7 +594,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
 
   # Get and validate feature2 list using optimized helper function
   if (!verbose) {
-    feature2_list <- suppressMessages(
+    feature2_list <- suppressWarnings(suppressMessages(
       getAndValidateFeatureList(
         dromaset_object = dromaset_object,
         feature_type = feature2_type,
@@ -459,7 +602,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
         data_type = data_type,
         tumor_type = tumor_type
       )
-    )
+    ))
   } else {
     feature2_list <- getAndValidateFeatureList(
       dromaset_object = dromaset_object,
@@ -479,7 +622,42 @@ batchFindSignificantFeatures <- function(dromaset_object,
     stop("No features found for the selected feature 2 type or all specified feature2_name features are invalid.")
   }
 
-  message("Starting batch analysis with on-demand data loading...")
+  # Determine whether to preload feature2 data based on preloaded parameter
+  # Note: Discrete features ONLY support preload mode
+  use_preload <- FALSE
+  if (!is_continuous2) {
+    # Discrete features always use preload mode
+    use_preload <- TRUE
+    if (!is.null(preloaded) && preloaded == FALSE) {
+      message("Note: Discrete features only support preload mode. Switching to preload=TRUE.")
+    }
+  } else if (is.null(preloaded)) {
+    # Auto mode for continuous: preload if more than 1000 features
+    use_preload <- length(feature2_list) > 1000
+  } else {
+    # User-specified mode for continuous
+    use_preload <- preloaded
+  }
+
+  # Preload all feature2 data if use_preload is TRUE
+  preloaded_feas2 <- NULL
+  if (use_preload) {
+    message("Preloading all feature2 data (", length(feature2_list), " features)...")
+    if (!verbose) {
+      preloaded_feas2 <- suppressWarnings(suppressMessages(
+        loadFeatureData(dromaset_object, feature2_type, feature2_list,
+                       data_type, tumor_type, overlap_only, is_continuous2,
+                       return_all_samples = !is_continuous2)
+      ))
+    } else {
+      preloaded_feas2 <- loadFeatureData(dromaset_object, feature2_type, feature2_list,
+                                        data_type, tumor_type, overlap_only, is_continuous2,
+                                        return_all_samples = !is_continuous2)
+    }
+    message("Preloading completed. Starting batch analysis...")
+  } else {
+    message("Starting batch analysis with on-demand data loading...")
+  }
 
   # Sample intersection cache - set to NULL for on-demand computation
   # Sample intersections will be computed as needed during pairing
@@ -487,8 +665,9 @@ batchFindSignificantFeatures <- function(dromaset_object,
 
   # Define the worker function as a wrapper for processFeaturePair
   worker_function <- function(x) {
-    if (!verbose) {
-      suppressMessages(
+    # Process the feature pair
+    result <- if (!verbose) {
+      suppressWarnings(suppressMessages(
         processFeaturePair(
           feature_idx = x,
           feature2_list = feature2_list,
@@ -503,10 +682,9 @@ batchFindSignificantFeatures <- function(dromaset_object,
           overlap_only = overlap_only,
           samples_search = samples_search,
           sample_intersection_cache = sample_intersection_cache,
-          progress_callback = progress_callback,
-          start_time = start_time
+          preloaded_data = preloaded_feas2
         )
-      )
+      ))
     } else {
       processFeaturePair(
         feature_idx = x,
@@ -522,54 +700,62 @@ batchFindSignificantFeatures <- function(dromaset_object,
         overlap_only = overlap_only,
         samples_search = samples_search,
         sample_intersection_cache = sample_intersection_cache,
-        progress_callback = progress_callback,
-        start_time = start_time
+        preloaded_data = preloaded_feas2
       )
     }
+    
+    # Update progress outside of suppressMessages (always show, regardless of verbose)
+    if (!is.null(progress_callback) && !is.null(start_time)) {
+      progress_callback(x, length(feature2_list),
+                       as.numeric(difftime(Sys.time(), start_time, units = "secs")))
+    }
+    
+    return(result)
   }
   message("Please be patient, it may take long time to run.")
+  
   # Use parallel processing if cores > 1
   if (cores > 1) {
-    # Check if snowfall is available
-    if (!requireNamespace("snowfall", quietly = TRUE)) {
-      warning("snowfall package not available. Running sequentially instead.")
-      cores <- 1
-    } else {
-      # Initialize snowfall
-      tryCatch({
-        sfInit(parallel = TRUE, cpus = cores)
-
-        # Load required packages on worker nodes
-        sfLibrary(meta)
-        sfLibrary(metafor)
-        sfLibrary(effsize)
-        sfLibrary(DROMA.Set)
-        sfLibrary(DROMA.R)
-
-        # Export required data and functions
-        # Note: export dromaset_object for feature2 loading
-        sfExport("selected_feas1", "feature2_list",
-                 "is_continuous1", "is_continuous2",
-                 "feature1_type", "feature2_type", "data_type", "tumor_type", "overlap_only",
-                 "start_time", "samples_search", "sample_intersection_cache", "dromaset_object",
-                 "verbose")
-
-        # Run parallel computation
-        cal_re_list <- sfLapply(seq_along(feature2_list), worker_function)
-
-        # Clean up snowfall
-        sfStop()
-      }, error = function(e) {
-        message("Parallel processing failed. Running sequentially instead.")
-        message("Error details: ", e$message)
-        sfStop()  # Clean up any existing parallel cluster
-        # Run sequential computation
-        cal_re_list <- lapply(seq_along(feature2_list), worker_function)
-      })
+    # Warn if using on-demand loading without preload
+    if (is.null(preloaded_feas2)) {
+      message("Note: Parallel processing without preloaded data may have database contention.")
+      message("Consider using preloaded=TRUE for better performance with cores>1")
     }
-  }
-
-  if (cores == 1) {
+    
+    # Setup future plan for parallel processing
+    future::plan(future::multisession, workers = cores)
+    on.exit(future::plan(future::sequential), add = TRUE)
+    
+    # Task chunking: divide features into batches for better efficiency
+    n_features <- length(feature2_list)
+    chunk_size <- max(1, ceiling(n_features / (cores * 4)))  # 4 tasks per core
+    chunks <- split(seq_along(feature2_list), 
+                   ceiling(seq_along(feature2_list) / chunk_size))
+    
+    # Process chunks in parallel with progressr support
+    if (show_progress && requireNamespace("progressr", quietly = TRUE)) {
+      progressr::with_progress({
+        p <- progressr::progressor(steps = n_features)
+        chunk_results <- furrr::future_map(chunks, function(indices) {
+          lapply(indices, function(idx) {
+            result <- worker_function(idx)
+            p()  # Update progress
+            result
+          })
+        }, .options = furrr::furrr_options(seed = TRUE))
+      })
+    } else {
+      if (show_progress) {
+        message("Note: Install 'progressr' for progress tracking: install.packages('progressr')")
+      }
+      chunk_results <- furrr::future_map(chunks, function(indices) {
+        lapply(indices, worker_function)
+      }, .options = furrr::furrr_options(seed = TRUE))
+    }
+    
+    # Flatten results
+    cal_re_list <- unlist(chunk_results, recursive = FALSE)
+  } else {
     # Run sequential computation
     cal_re_list <- lapply(seq_along(feature2_list), worker_function)
   }
@@ -590,7 +776,14 @@ batchFindSignificantFeatures <- function(dromaset_object,
   # Log completion
   total_time <- difftime(Sys.time(), start_time, units = "secs")
   message(sprintf("Analysis completed in %s", formatTime(as.numeric(total_time))))
-  message(sprintf("Found %d significant associations out of %d features.",
+  
+  # Report filtered features if any
+  n_filtered <- length(feature2_list) - nrow(cal_re_df)
+  if (n_filtered > 0) {
+    message(sprintf("Note: %d feature(s) were filtered out due to insufficient data or failed processing.", n_filtered))
+  }
+  
+  message(sprintf("Found %d significant associations out of %d valid features.",
                   sum(cal_re_df$q_value < 0.01), nrow(cal_re_df)))
 
   return(cal_re_df)

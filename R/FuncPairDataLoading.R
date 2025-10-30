@@ -10,7 +10,7 @@
 #' @param is_continuous Whether the feature is continuous
 #' @param return_all_samples For discrete features, whether to return all profiled samples in addition to feature-present samples (default: FALSE)
 #' @param zscore Whether to apply z-score normalization (default: TRUE)
-#' @return For single feature (continuous): List of named vectors by dataset. For multiple features (continuous): List of matrices by dataset. For discrete features: if return_all_samples=FALSE, vector of sample IDs; if return_all_samples=TRUE, list with 'present' and 'all' components.
+#' @return For continuous data: single feature returns list of named vectors by dataset; multiple features return list of matrices by dataset. For discrete data: single feature returns vector of sample IDs (or list with 'present' and 'all' if return_all_samples=TRUE); multiple features return named list of sample vectors per feature (or list with 'present' as named list and 'all' if return_all_samples=TRUE).
 #' @keywords internal
 loadFeatureData <- function(dromaset_object, feature_type, select_features,
                            data_type = "all", tumor_type = "all",
@@ -85,19 +85,37 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
       } else {
         # Discrete data - long dataframe format with samples and features columns
         if (is.data.frame(feature_data) && "samples" %in% colnames(feature_data)) {
-          # Since select_features was specified, the returned data should only contain that feature
-          present_samples <- feature_data$samples
-          
           result <- list()
-          if (return_all_samples) {
-            # Get all profiled samples for this feature type
-            all_profiled_samples <- listDROMASamples(dromaset_object@name,
-                                                     feature_type = feature_type,
-                                                     data_type = data_type,
-                                                     tumor_type = tumor_type)
-            result[[dromaset_object@name]] <- list(present = present_samples, all = all_profiled_samples)
+          
+          if (is_batch_mode) {
+            # Batch mode: organize by feature
+            present_list <- lapply(select_features, function(feat) {
+              feature_data$samples[feature_data$features == feat]
+            })
+            names(present_list) <- select_features
+            
+            if (return_all_samples) {
+              all_profiled_samples <- listDROMASamples(dromaset_object@name,
+                                                       feature_type = feature_type,
+                                                       data_type = data_type,
+                                                       tumor_type = tumor_type)
+              result[[dromaset_object@name]] <- list(present = present_list, all = all_profiled_samples)
+            } else {
+              result[[dromaset_object@name]] <- present_list
+            }
           } else {
-            result[[dromaset_object@name]] <- present_samples
+            # Single mode: backward compatible
+            present_samples <- feature_data$samples
+            
+            if (return_all_samples) {
+              all_profiled_samples <- listDROMASamples(dromaset_object@name,
+                                                       feature_type = feature_type,
+                                                       data_type = data_type,
+                                                       tumor_type = tumor_type)
+              result[[dromaset_object@name]] <- list(present = present_samples, all = all_profiled_samples)
+            } else {
+              result[[dromaset_object@name]] <- present_samples
+            }
           }
           return(result)
         }
@@ -159,18 +177,36 @@ loadFeatureData <- function(dromaset_object, feature_type, select_features,
           omics_df <- feature_data[[i]]
           projects <- project_names[i]
           if (is.data.frame(omics_df) && "samples" %in% colnames(omics_df)) {
-            # Since select_features was specified, the returned data should only contain that feature
-            present_samples <- omics_df$samples
             
-            if (return_all_samples) {
-              # Get all profiled samples for this omics type from the specific project
-              all_profiled_samples <- listDROMASamples(dromaset_object@DromaSets[[projects]]@name,
-                                                       feature_type = feature_type,
-                                                       data_type = data_type,
-                                                       tumor_type = tumor_type)
-              return(list(present = present_samples, all = all_profiled_samples))
+            if (is_batch_mode) {
+              # Batch mode: organize by feature
+              present_list <- lapply(select_features, function(feat) {
+                omics_df$samples[omics_df$features == feat]
+              })
+              names(present_list) <- select_features
+              
+              if (return_all_samples) {
+                all_profiled_samples <- listDROMASamples(dromaset_object@DromaSets[[projects]]@name,
+                                                         feature_type = feature_type,
+                                                         data_type = data_type,
+                                                         tumor_type = tumor_type)
+                return(list(present = present_list, all = all_profiled_samples))
+              } else {
+                return(present_list)
+              }
             } else {
-              return(present_samples)
+              # Single mode: backward compatible
+              present_samples <- omics_df$samples
+              
+              if (return_all_samples) {
+                all_profiled_samples <- listDROMASamples(dromaset_object@DromaSets[[projects]]@name,
+                                                         feature_type = feature_type,
+                                                         data_type = data_type,
+                                                         tumor_type = tumor_type)
+                return(list(present = present_samples, all = all_profiled_samples))
+              } else {
+                return(present_samples)
+              }
             }
           }
           return(NULL)

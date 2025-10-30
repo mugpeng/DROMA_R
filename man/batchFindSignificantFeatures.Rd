@@ -14,8 +14,10 @@ batchFindSignificantFeatures(
   tumor_type = "all",
   overlap_only = FALSE,
   cores = 1,
+  show_progress = TRUE,
   progress_callback = NULL,
   test_top_n = NULL,
+  preloaded = NULL,
   verbose = FALSE
 )
 }
@@ -38,9 +40,19 @@ batchFindSignificantFeatures(
 
 \item{cores}{Number of CPU cores to use for parallel processing}
 
-\item{progress_callback}{Optional callback function for progress updates}
+\item{show_progress}{Logical, whether to show progress updates (default: TRUE). 
+Progress updates include: current count, percentage, elapsed time, and estimated time remaining.
+Note: Progress updates only work in serial mode (cores = 1). In parallel mode, a message is shown instead.}
+
+\item{progress_callback}{Optional custom callback function for progress updates. 
+If NULL (default), uses built-in progress tracking. Function signature: function(done, total, elapsed_seconds)}
 
 \item{test_top_n}{Integer, number of top features to test (default: NULL for all features)}
+
+\item{preloaded}{Logical or NULL, whether to preload all feature2 data at once (default: NULL for auto).
+NULL (auto): Preload when feature2 count > 1000, otherwise load on-demand
+TRUE: Always preload all feature2 data (faster for large datasets, uses more memory)
+FALSE: Always load feature2 data on-demand (slower but memory efficient)}
 
 \item{verbose}{Logical, whether to display detailed messages from internal functions (default: FALSE)}
 }
@@ -88,5 +100,31 @@ results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA",
 
 # Test only top 50 features for debugging
 results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", test_top_n = 50)
+
+# Force preload for faster processing (recommended for >1000 features)
+results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", 
+                                        preloaded = TRUE, cores = 8)
+
+# Force on-demand loading for memory efficiency
+results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", 
+                                        preloaded = FALSE)
+
+# Auto mode (default): preloads when >1000 features
+results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA")
+
+# With progress tracking (default, only works with cores = 1)
+results <- batchFindSignificantFeatures(gCSI, "drug", "Paclitaxel", "mRNA",
+                                        cores = 1, show_progress = TRUE)
+
+# Disable progress messages
+results <- batchFindSignificantFeatures(gCSI, "drug", "Paclitaxel", "mRNA",
+                                        show_progress = FALSE)
+
+# Custom progress callback
+my_progress <- function(done, total, elapsed) {
+  message(sprintf("Processed \%d/\%d features in \%.1f seconds", done, total, elapsed))
+}
+results <- batchFindSignificantFeatures(gCSI, "drug", "Paclitaxel", "mRNA",
+                                        progress_callback = my_progress, cores = 1)
 }
 }
