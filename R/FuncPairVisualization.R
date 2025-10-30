@@ -338,10 +338,13 @@ plotMetaVolcano <- function(meta_df,
 
     # Skip labeling if there are no significant points
     if(nrow(meta_df2) > 0) {
-      # Get top points to label
-      low_indices <- head(order(meta_df2$effect_size), min(top_label_each, nrow(meta_df2)))
-      high_indices <- tail(order(meta_df2$effect_size), min(top_label_each, nrow(meta_df2)))
-      forlabel_names <- c(meta_df2$name[low_indices], meta_df2$name[high_indices])
+      # Get top points to label, ensuring exact counts
+      ordered_indices <- order(meta_df2$effect_size)
+      n_low <- min(top_label_each, sum(meta_df2$group == "Down"))
+      n_high <- min(top_label_each, sum(meta_df2$group == "Up"))
+      low_indices <- head(ordered_indices, n_low)
+      high_indices <- tail(ordered_indices, n_high)
+      forlabel_names <- unique(c(meta_df2$name[low_indices], meta_df2$name[high_indices]))
       forlabel_df <- meta_df2[meta_df2$name %in% forlabel_names,]
 
       p <- p +

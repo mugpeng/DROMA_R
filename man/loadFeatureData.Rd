@@ -36,7 +36,7 @@ loadFeatureData(
 \item{zscore}{Whether to apply z-score normalization (default: TRUE)}
 }
 \value{
-For single feature (continuous): List of named vectors by dataset. For multiple features (continuous): List of matrices by dataset. For discrete features: if return_all_samples=FALSE, vector of sample IDs; if return_all_samples=TRUE, list with 'present' and 'all' components.
+For continuous data: single feature returns list of named vectors by dataset; multiple features return list of matrices by dataset. For discrete data: single feature returns vector of sample IDs (or list with 'present' and 'all' if return_all_samples=TRUE); multiple features return named list of sample vectors per feature (or list with 'present' as named list and 'all' if return_all_samples=TRUE).
 }
 \description{
 Load feature data from DromaSet or MultiDromaSet

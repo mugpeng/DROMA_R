@@ -357,6 +357,165 @@ getSampleMetadata <- function(dromaset_object, feature1_type, feature2_type) {
   return(NULL)
 }
 
+#' Get significant features from meta-analysis results
+#'
+#' @description Filters meta-analysis results to identify significant features based on effect size, q-value, and optionally minimum number of datasets
+#' @param meta_df Data frame containing meta-analysis results with columns: effect_size, q_value, n_datasets, and name
+#' @param es_t Effect size threshold (default: 0.4)
+#' @param P_t Q-value threshold (default: 0.01)
+#' @param n_datasets_t Minimum number of datasets threshold (default: NULL for no threshold)
+#' @return Data frame with significant features only, including a "direction" column ("Up" or "Down")
+#' @export
+#' @examples
+#' \dontrun{
+#' # Get all significant features
+#' sig_features <- getSignificantFeatures(meta_df)
+#'
+#' # With custom thresholds
+#' sig_features <- getSignificantFeatures(meta_df, es_t = 0.5, P_t = 0.05)
+#'
+#' # Require features in at least 3 datasets
+#' sig_features <- getSignificantFeatures(meta_df, n_datasets_t = 3)
+#' }
+getSignificantFeatures <- function(meta_df,
+                                   es_t = 0.4,
+                                   P_t = 0.01,
+                                   n_datasets_t = NULL) {
+  # Input validation
+  if(!is.data.frame(meta_df)) stop("meta_df must be a data frame")
+  if(!all(c("effect_size", "q_value", "name", "n_datasets") %in% colnames(meta_df))) {
+    stop("meta_df must contain columns: effect_size, q_value, n_datasets, and name")
+  }
+  # Transfrom to data.frame
+  meta_df <- as.data.frame(meta_df)
+  # Filter based on thresholds
+  if(is.null(n_datasets_t)) {
+    sig_df <- meta_df[(abs(meta_df$effect_size) > es_t & meta_df$q_value < P_t), ]
+  } else {
+    sig_df <- meta_df[(abs(meta_df$effect_size) > es_t & 
+                       meta_df$q_value < P_t & 
+                       meta_df$n_datasets >= n_datasets_t), ]
+  }
+  
+  # Add direction column
+  if(nrow(sig_df) > 0) {
+    sig_df$direction <- ifelse(sig_df$effect_size > 0, "Up", "Down")
+    # Reorder columns to put direction after name
+    col_order <- c("name", "direction", setdiff(names(sig_df), c("name", "direction")))
+    sig_df <- sig_df[, col_order]
+  }
+  
+  return(sig_df)
+}
+
+#' Get intersection of significant features across multiple analyses
+#'
+#' @description Identifies features that are significant across multiple meta-analysis results and merges their statistics
+#' @param ... Named data frames from getSignificantFeatures(), or a named list of such data frames.
+#'   Names will be used as suffixes for columns (e.g., effect_size_drug1, effect_size_drug2)
+#' @return Data frame with intersecting features and their statistics from each analysis (columns suffixed by input names)
+#' @export
+#' @examples
+#' \dontrun{
+#' # Get significant features for two drugs
+#' sig_drug1 <- getSignificantFeatures(meta_df1)
+#' sig_drug2 <- getSignificantFeatures(meta_df2)
+#'
+#' # Find common significant features (using named arguments)
+#' common <- getIntersectSignificantFeatures(drug1 = sig_drug1, drug2 = sig_drug2)
+#'
+#' # Or using a named list
+#' sig_list <- list(Paclitaxel = sig_drug1, Gemcitabine = sig_drug2, Cisplatin = sig_drug3)
+#' common <- getIntersectSignificantFeatures(sig_list)
+#' }
+getIntersectSignificantFeatures <- function(...) {
+  # Get input data frames
+  args <- list(...)
+  
+  # If first argument is a list, use it
+  if (length(args) == 1 && is.list(args[[1]]) && !is.data.frame(args[[1]])) {
+    df_list <- args[[1]]
+  } else {
+    df_list <- args
+  }
+  
+  # Validate inputs
+  if (length(df_list) < 2) {
+    stop("At least 2 data frames are required for intersection")
+  }
+  
+  if (is.null(names(df_list)) || any(names(df_list) == "")) {
+    stop("All input data frames must be named. Use named arguments or a named list.")
+  }
+  
+  # Validate each data frame has 'name' column
+  for (i in seq_along(df_list)) {
+    if (!is.data.frame(df_list[[i]])) {
+      stop(paste0("Input '", names(df_list)[i], "' is not a data frame"))
+    }
+    if (!"name" %in% colnames(df_list[[i]])) {
+      stop(paste0("Data frame '", names(df_list)[i], "' must contain a 'name' column"))
+    }
+  }
+  
+  # Find intersection of feature names
+  common_names <- Reduce(intersect, lapply(df_list, function(df) df$name))
+  
+  if (length(common_names) == 0) {
+    warning("No common features found across all inputs")
+    return(data.frame(name = character(0)))
+  }
+  
+  # Filter for consistent direction across all inputs
+  if (all(sapply(df_list, function(df) "direction" %in% colnames(df)))) {
+    consistent_names <- common_names[sapply(common_names, function(fname) {
+      directions <- sapply(df_list, function(df) df$direction[df$name == fname])
+      length(unique(directions)) == 1
+    })]
+    
+    if (length(consistent_names) < length(common_names)) {
+      n_filtered <- length(common_names) - length(consistent_names)
+      message(sprintf("Filtered out %d feature(s) with inconsistent directions", n_filtered))
+    }
+    common_names <- consistent_names
+    
+    if (length(common_names) == 0) {
+      warning("No features with consistent directions found across all inputs")
+      return(data.frame(name = character(0)))
+    }
+  }
+  
+  # Build result data frame
+  result <- data.frame(name = common_names, stringsAsFactors = FALSE)
+  
+  # Merge each data frame with suffixes
+  for (i in seq_along(df_list)) {
+    df_name <- names(df_list)[i]
+    df <- df_list[[i]]
+    
+    # Filter to common names only
+    df_filtered <- df[df$name %in% common_names, ]
+    
+    # Add suffix to all columns except 'name'
+    colnames_to_rename <- setdiff(colnames(df_filtered), "name")
+    for (col in colnames_to_rename) {
+      colnames(df_filtered)[colnames(df_filtered) == col] <- paste0(col, "_", df_name)
+    }
+    
+    # Merge with result
+    result <- merge(result, df_filtered, by = "name", all.x = TRUE)
+  }
+  
+  # Sort by name
+  result <- result[order(result$name), ]
+  rownames(result) <- NULL
+  
+  message(sprintf("Found %d common significant features across %d analyses", 
+                  nrow(result), length(df_list)))
+  
+  return(result)
+}
+
 # Main function----
 #' Batch analysis to find significant features associated with a reference feature using DromaSet objects
 #'

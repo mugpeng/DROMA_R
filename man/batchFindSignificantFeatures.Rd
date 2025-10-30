@@ -38,21 +38,23 @@ batchFindSignificantFeatures(
 
 \item{overlap_only}{For MultiDromaSet, whether to use only overlapping samples (default: FALSE)}
 
-\item{cores}{Number of CPU cores to use for parallel processing}
+\item{cores}{Number of CPU cores to use for parallel processing (uses future + furrr with task chunking for efficiency)}
 
 \item{show_progress}{Logical, whether to show progress updates (default: TRUE). 
 Progress updates include: current count, percentage, elapsed time, and estimated time remaining.
-Note: Progress updates only work in serial mode (cores = 1). In parallel mode, a message is shown instead.}
+Serial mode (cores=1): uses built-in progress tracker. Parallel mode (cores>1): uses progressr package if available.}
 
-\item{progress_callback}{Optional custom callback function for progress updates. 
+\item{progress_callback}{Optional custom callback function for progress updates (serial mode only). 
 If NULL (default), uses built-in progress tracking. Function signature: function(done, total, elapsed_seconds)}
 
 \item{test_top_n}{Integer, number of top features to test (default: NULL for all features)}
 
 \item{preloaded}{Logical or NULL, whether to preload all feature2 data at once (default: NULL for auto).
+Note: Discrete features (mutation_gene, mutation_site, fusion) ONLY support preload mode.
+For continuous features:
 NULL (auto): Preload when feature2 count > 1000, otherwise load on-demand
 TRUE: Always preload all feature2 data (faster for large datasets, uses more memory)
-FALSE: Always load feature2 data on-demand (slower but memory efficient)}
+FALSE: Load feature2 data on-demand (slower but memory efficient)}
 
 \item{verbose}{Logical, whether to display detailed messages from internal functions (default: FALSE)}
 }
@@ -69,22 +71,10 @@ The function follows this high-level workflow:
 2. Feature type determination (continuous vs discrete)
 3. Load and validate reference feature (feature1) data
 4. Get list of features to test (feature2) - uses listDROMAFeatures() for efficient database queries
-5. Parallel/sequential processing of feature pairs with on-demand data loading
-6. Statistical testing based on feature types
-7. Result aggregation and reporting
-}
-
-\section{Optimizations}{
-
-This function implements several optimizations for better performance and memory usage:
-\itemize{
-  \item{Feature List Retrieval: Uses listDROMAFeatures() from DROMA.Set package to efficiently 
-        query available features directly from the database without loading full data matrices}
-  \item{On-Demand Data Loading: Loads feature2 data only when needed for each feature pair,
-        reducing memory footprint especially for large datasets with thousands of features}
-  \item{Automatic Fallback: If database queries fail, automatically falls back to traditional
-        data loading methods for compatibility}
-}
+5. Data loading strategy: discrete features use preload mode (required), continuous features can use preload or on-demand
+6. Parallel/sequential processing of feature pairs
+7. Statistical testing based on feature types
+8. Result aggregation and reporting
 }
 
 \examples{
@@ -101,26 +91,33 @@ results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA",
 # Test only top 50 features for debugging
 results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", test_top_n = 50)
 
-# Force preload for faster processing (recommended for >1000 features)
+# Force preload for faster processing (recommended for >1000 continuous features)
 results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", 
                                         preloaded = TRUE, cores = 8)
 
-# Force on-demand loading for memory efficiency
+# Force on-demand loading for memory efficiency (continuous features only)
 results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", 
                                         preloaded = FALSE)
 
-# Auto mode (default): preloads when >1000 features
+# Auto mode (default): preloads when >1000 continuous features
 results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA")
 
-# With progress tracking (default, only works with cores = 1)
+# Discrete features always use preload mode (required)
+results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mutation_gene", 
+                                        cores = 8)
+
+# With progress tracking (serial mode, cores = 1)
 results <- batchFindSignificantFeatures(gCSI, "drug", "Paclitaxel", "mRNA",
                                         cores = 1, show_progress = TRUE)
 
-# Disable progress messages
+# Parallel with progressr (requires: install.packages("progressr"))
+library(progressr)
+handlers(global = TRUE)
+handlers("progress")  # or "txtprogressbar"
 results <- batchFindSignificantFeatures(gCSI, "drug", "Paclitaxel", "mRNA",
-                                        show_progress = FALSE)
+                                        cores = 8, show_progress = TRUE)
 
-# Custom progress callback
+# Custom progress callback (serial mode only)
 my_progress <- function(done, total, elapsed) {
   message(sprintf("Processed \%d/\%d features in \%.1f seconds", done, total, elapsed))
 }
