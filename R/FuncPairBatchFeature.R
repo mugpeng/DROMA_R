@@ -654,63 +654,71 @@ batchFindSignificantFeatures <- function(dromaset_object,
                                         data_type, tumor_type, overlap_only, is_continuous2,
                                         return_all_samples = !is_continuous2)
     }
+    
+    # [OPTIMIZATION 3] Pre-filter feature2 data to avoid repeated filtering in worker
+    if (!is.null(preloaded_feas2)) {
+      preloaded_feas2 <- filterFeatureData(preloaded_feas2, min_samples = 3, 
+                                          is_discrete_with_all = !is_continuous2)
+    }
     message("Preloading completed. Starting batch analysis...")
   } else {
     message("Starting batch analysis with on-demand data loading...")
   }
 
-  # Sample intersection cache - set to NULL for on-demand computation
-  # Sample intersections will be computed as needed during pairing
+  # [OPTIMIZATION 1] Pre-compute sample intersection cache for continuous vs continuous
   sample_intersection_cache <- NULL
-
-  # Define the worker function as a wrapper for processFeaturePair
-  worker_function <- function(x) {
-    # Process the feature pair
-    result <- if (!verbose) {
-      suppressWarnings(suppressMessages(
-        processFeaturePair(
-          feature_idx = x,
-          feature2_list = feature2_list,
-          dromaset_object = dromaset_object,
-          selected_feas1 = selected_feas1,
-          feature1_type = feature1_type,
-          feature2_type = feature2_type,
-          is_continuous1 = is_continuous1,
-          is_continuous2 = is_continuous2,
-          data_type = data_type,
-          tumor_type = tumor_type,
-          overlap_only = overlap_only,
-          samples_search = samples_search,
-          sample_intersection_cache = sample_intersection_cache,
-          preloaded_data = preloaded_feas2
+  if (is_continuous1 && is_continuous2 && !is.null(preloaded_feas2)) {
+    sample_intersection_cache <- list()
+    for (i in seq_along(selected_feas1)) {
+      for (j in seq_along(preloaded_feas2)) {
+        cache_key <- paste(names(selected_feas1)[i], names(preloaded_feas2)[j], sep = "||")
+        sample_intersection_cache[[cache_key]] <- intersect(
+          names(selected_feas1[[i]]), 
+          colnames(preloaded_feas2[[j]])
         )
-      ))
-    } else {
-      processFeaturePair(
-        feature_idx = x,
-        feature2_list = feature2_list,
-        dromaset_object = dromaset_object,
-        selected_feas1 = selected_feas1,
-        feature1_type = feature1_type,
-        feature2_type = feature2_type,
-        is_continuous1 = is_continuous1,
-        is_continuous2 = is_continuous2,
-        data_type = data_type,
-        tumor_type = tumor_type,
-        overlap_only = overlap_only,
-        samples_search = samples_search,
-        sample_intersection_cache = sample_intersection_cache,
-        preloaded_data = preloaded_feas2
-      )
+      }
     }
-    
-    # Update progress outside of suppressMessages (always show, regardless of verbose)
-    if (!is.null(progress_callback) && !is.null(start_time)) {
-      progress_callback(x, length(feature2_list),
-                       as.numeric(difftime(Sys.time(), start_time, units = "secs")))
+  }
+
+  # [OPTIMIZATION 2] Create worker function once, outside hot loop
+  base_worker <- function(x) {
+    processFeaturePair(
+      feature_idx = x,
+      feature2_list = feature2_list,
+      dromaset_object = dromaset_object,
+      selected_feas1 = selected_feas1,
+      feature1_type = feature1_type,
+      feature2_type = feature2_type,
+      is_continuous1 = is_continuous1,
+      is_continuous2 = is_continuous2,
+      data_type = data_type,
+      tumor_type = tumor_type,
+      overlap_only = overlap_only,
+      samples_search = samples_search,
+      sample_intersection_cache = sample_intersection_cache,
+      preloaded_data = preloaded_feas2
+    )
+  }
+  
+  # Wrap with suppress only if needed
+  worker_function <- if (!verbose) {
+    function(x) {
+      result <- suppressWarnings(suppressMessages(base_worker(x)))
+      if (!is.null(progress_callback)) {
+        progress_callback(x, length(feature2_list),
+                         as.numeric(difftime(Sys.time(), start_time, units = "secs")))
+      }
+      result
     }
-    
-    return(result)
+  } else {
+    function(x) {
+      result <- base_worker(x)
+      if (!is.null(progress_callback)) {
+        progress_callback(x, length(feature2_list),
+                         as.numeric(difftime(Sys.time(), start_time, units = "secs")))
+      }
+      result
+    }
   }
   message("Please be patient, it may take long time to run.")
   
@@ -726,7 +734,6 @@ batchFindSignificantFeatures <- function(dromaset_object,
     # Increase memory limit for both backends
     old_size <- getOption("future.globals.maxSize")
     options(future.globals.maxSize = 2 * 1024^3)  # 2GB
-    on.exit(options(future.globals.maxSize = old_size), add = TRUE)
 
     if (.Platform$OS.type == "unix") {
       future::plan(future::multicore, workers = cores)
@@ -735,11 +742,31 @@ batchFindSignificantFeatures <- function(dromaset_object,
       future::plan(future::multisession, workers = cores)
       message(sprintf("Using multisession parallelization with %d cores (Windows)", cores))
     }
-    on.exit(future::plan(future::sequential), add = TRUE)
+
+    # Unified cleanup to ensure proper execution order
+    on.exit({
+      future::plan(future::sequential)
+      options(future.globals.maxSize = old_size)
+    }, add = TRUE)
     
-    # Task chunking: divide features into batches for better efficiency
+    # [OPTIMIZATION 4] Adaptive task chunking based on dataset size
     n_features <- length(feature2_list)
-    chunk_size <- max(1, ceiling(n_features / (cores * 4)))  # 4 tasks per core
+
+    # Warn if over-parallelization (more cores than features/100)
+    if (cores > n_features / 100) {
+      recommended_cores <- max(1, floor(n_features / 1000))
+      message(sprintf("Note: Using %d cores for %d features may cause overhead. Consider cores=%d for optimal performance.",
+                     cores, n_features, recommended_cores))
+    }
+
+    chunk_size <- if (n_features < 100) {
+      max(10, ceiling(n_features / cores))  # Small: minimal chunking
+    } else if (n_features < 1000) {
+      ceiling(n_features / (cores * 4))  # Medium: 4 tasks/core
+    } else {
+      # Large: 8 tasks/core with minimum chunk_size to avoid excessive scheduling overhead
+      max(50, min(200, ceiling(n_features / (cores * 8))))
+    }
     chunks <- split(seq_along(feature2_list), 
                    ceiling(seq_along(feature2_list) / chunk_size))
     
