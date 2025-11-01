@@ -26,6 +26,8 @@ if (!requireNamespace("dplyr", quietly = TRUE)) {
 #' @param data_type Character, filter by data type: "all" (default), "CellLine", "PDO", "PDC", or "PDX"
 #' @param connection Optional database connection object. If NULL, uses global connection
 #' @param use_gap_plots Logical, whether to use gap plots for large count differences
+#' @param reverse_molecular Logical, whether to reverse axes in molecular characteristics plot. Default FALSE
+#' @param only_overlapping Logical, whether to only show samples/drugs that appear in multiple projects in overlap plots. Default FALSE
 #' @return List of ggplot objects with statistical plots
 #' @export
 #' @examples
@@ -41,12 +43,20 @@ if (!requireNamespace("dplyr", quietly = TRUE)) {
 #'
 #' # Generate plots for cell line projects only
 #' stat_plots <- generateStatisticalPlots("all", data_type = "CellLine")
+#'
+#' # Generate plots with reversed molecular plot
+#' stat_plots <- generateStatisticalPlots("all", reverse_molecular = TRUE)
+#'
+#' # Generate overlap plots with only overlapping samples/drugs
+#' stat_plots <- generateStatisticalPlots("all", plot_types = "overlaps", only_overlapping = TRUE)
 #' }
 generateStatisticalPlots <- function(projects = "all",
                                    plot_types = "all",
                                    data_type = "all",
                                    connection = NULL,
-                                   use_gap_plots = TRUE) {
+                                   use_gap_plots = TRUE,
+                                   reverse_molecular = FALSE,
+                                   only_overlapping = FALSE) {
 
   # Get connection from global environment if not provided
   if (is.null(connection)) {
@@ -120,11 +130,11 @@ generateStatisticalPlots <- function(projects = "all",
   }
 
   if ("overlaps" %in% plot_types) {
-    plot_results$overlaps <- generateOverlapPlots(selected_projects, connection)
+    plot_results$overlaps <- generateOverlapPlots(selected_projects, connection, only_overlapping)
   }
 
   if ("molecular" %in% plot_types) {
-    plot_results$molecular <- generateCharacteristicsPlot(project_info)
+    plot_results$molecular <- generateCharacteristicsPlot(project_info, reverse = reverse_molecular)
   }
 
   if ("drug_moa" %in% plot_types && !is.null(drug_annotations)) {
@@ -320,8 +330,9 @@ generateCountPlots <- function(project_info, use_gap_plots = TRUE) {
 #' @description Creates UpSet plots showing overlaps between projects using database data
 #' @param selected_projects Character vector of project names
 #' @param connection Database connection object
+#' @param only_overlapping Logical, whether to only show samples/drugs that appear in multiple projects. Default FALSE
 #' @return List of UpSet plot objects
-generateOverlapPlots <- function(selected_projects, connection) {
+generateOverlapPlots <- function(selected_projects, connection, only_overlapping = FALSE) {
 
   # Create lists of drugs and samples for all datasets
   drug_list <- list()
@@ -347,6 +358,21 @@ generateOverlapPlots <- function(selected_projects, connection) {
     }, error = function(e) {
       warning("Could not get samples for project ", projects, ": ", e$message)
     })
+  }
+
+  # Filter to only show samples/drugs that appear in multiple projects
+  if (only_overlapping) {
+    if (length(sample_list) > 1) {
+      all_samples <- unlist(sample_list)
+      overlapping_samples <- names(table(all_samples))[table(all_samples) > 1]
+      sample_list <- lapply(sample_list, function(x) intersect(x, overlapping_samples))
+    }
+    
+    if (length(drug_list) > 1) {
+      all_drugs <- unlist(drug_list)
+      overlapping_drugs <- names(table(all_drugs))[table(all_drugs) > 1]
+      drug_list <- lapply(drug_list, function(x) intersect(x, overlapping_drugs))
+    }
   }
 
   # Create UpSet plots (requires UpSetR package)
@@ -393,8 +419,9 @@ generateOverlapPlots <- function(selected_projects, connection) {
 #'
 #' @description Creates a dot plot showing which data types (including drug and molecular) are available in each project
 #' @param project_info Data frame with project information from database
+#' @param reverse Logical, whether to reverse axes (projects on x-axis, features on y-axis). Default FALSE
 #' @return ggplot object showing data availability
-generateCharacteristicsPlot <- function(project_info) {
+generateCharacteristicsPlot <- function(project_info, reverse = FALSE) {
 
   # Extract data types for each project from data_types column
   plot_data <- data.frame(
@@ -489,30 +516,56 @@ generateCharacteristicsPlot <- function(project_info) {
   available_data <- plot_data[plot_data$Available, ]
   unavailable_data <- plot_data[!plot_data$Available, ]
 
-  # Create the plot
-  p_characteristics <- ggplot(plot_data, aes(x = Feature_Display, y = Project)) +
-    # Add unavailable points first (grey, no legend)
-    geom_point(data = unavailable_data, size = 2, color = "#CCCCCC", alpha = 0.8) +
-    # Add available points with colors (with legend)
-    geom_point(data = available_data, aes(color = Point_Color), size = 6, alpha = 0.8) +
-    scale_color_manual(values = dataset_colors,
-                      name = "Dataset Type",
-                      breaks = names(dataset_colors),
-                      labels = names(dataset_colors),
-                      na.value = "#CCCCCC") +
-    theme_bw() +
-    theme(
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      axis.text = element_text(size = 17, color = "black"),
-      panel.grid.major = element_line(color = "grey90"),
-      panel.grid.minor = element_blank(),
-      legend.position = "right",
-      legend.title = element_text(size = 14),
-      legend.text = element_text(size = 12),
-      panel.border = element_rect(color = "black", fill = NA, linewidth = 1)
-    ) +
-    labs(x = "", y = "") +
-    coord_fixed(ratio = 1)
+  # Create the plot with conditional axis mapping
+  if (reverse) {
+    p_characteristics <- ggplot(plot_data, aes(x = Project, y = Feature_Display)) +
+      # Add unavailable points first (grey, no legend)
+      geom_point(data = unavailable_data, size = 2, color = "#CCCCCC", alpha = 0.8) +
+      # Add available points with colors (with legend)
+      geom_point(data = available_data, aes(color = Point_Color), size = 6, alpha = 0.8) +
+      scale_color_manual(values = dataset_colors,
+                        name = "Dataset Type",
+                        breaks = names(dataset_colors),
+                        labels = names(dataset_colors),
+                        na.value = "#CCCCCC") +
+      theme_bw() +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(size = 17, color = "black"),
+        panel.grid.major = element_line(color = "grey90"),
+        panel.grid.minor = element_blank(),
+        legend.position = "right",
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 1)
+      ) +
+      labs(x = "", y = "") +
+      coord_fixed(ratio = 1)
+  } else {
+    p_characteristics <- ggplot(plot_data, aes(x = Feature_Display, y = Project)) +
+      # Add unavailable points first (grey, no legend)
+      geom_point(data = unavailable_data, size = 2, color = "#CCCCCC", alpha = 0.8) +
+      # Add available points with colors (with legend)
+      geom_point(data = available_data, aes(color = Point_Color), size = 6, alpha = 0.8) +
+      scale_color_manual(values = dataset_colors,
+                        name = "Dataset Type",
+                        breaks = names(dataset_colors),
+                        labels = names(dataset_colors),
+                        na.value = "#CCCCCC") +
+      theme_bw() +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(size = 17, color = "black"),
+        panel.grid.major = element_line(color = "grey90"),
+        panel.grid.minor = element_blank(),
+        legend.position = "right",
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 1)
+      ) +
+      labs(x = "", y = "") +
+      coord_fixed(ratio = 1)
+  }
 
   return(p_characteristics)
 }

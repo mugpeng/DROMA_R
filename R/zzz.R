@@ -25,7 +25,8 @@
     "grid",
     "RSQLite",
     "DBI",
-    "methods"
+    "methods",
+    "UpSetR"
   )
   
   packageStartupMessage("Loading DROMA.R (version ", 
