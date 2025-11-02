@@ -27,7 +27,7 @@ if (!requireNamespace("dplyr", quietly = TRUE)) {
 #' @param connection Optional database connection object. If NULL, uses global connection
 #' @param use_gap_plots Logical, whether to use gap plots for large count differences
 #' @param reverse_molecular Logical, whether to reverse axes in molecular characteristics plot. Default FALSE
-#' @param only_overlapping Logical, whether to only show samples/drugs that appear in multiple projects in overlap plots. Default FALSE
+#' @param only_overlapping Logical, whether to only show samples/drugs that appear in multiple projects and filter out projects with no overlapping samples/drugs in overlap plots. Default FALSE
 #' @return List of ggplot objects with statistical plots
 #' @export
 #' @examples
@@ -330,7 +330,7 @@ generateCountPlots <- function(project_info, use_gap_plots = TRUE) {
 #' @description Creates UpSet plots showing overlaps between projects using database data
 #' @param selected_projects Character vector of project names
 #' @param connection Database connection object
-#' @param only_overlapping Logical, whether to only show samples/drugs that appear in multiple projects. Default FALSE
+#' @param only_overlapping Logical, whether to only show samples/drugs that appear in multiple projects and filter out projects with no overlapping samples/drugs. Default FALSE
 #' @return List of UpSet plot objects
 generateOverlapPlots <- function(selected_projects, connection, only_overlapping = FALSE) {
 
@@ -360,18 +360,30 @@ generateOverlapPlots <- function(selected_projects, connection, only_overlapping
     })
   }
 
-  # Filter to only show samples/drugs that appear in multiple projects
+  # Filter to only show samples/drugs that appear in multiple projects and their projects
   if (only_overlapping) {
     if (length(sample_list) > 1) {
       all_samples <- unlist(sample_list)
       overlapping_samples <- names(table(all_samples))[table(all_samples) > 1]
+
+      # Filter samples
       sample_list <- lapply(sample_list, function(x) intersect(x, overlapping_samples))
+
+      # Filter projects that have no overlapping samples
+      valid_projects <- names(sample_list)[sapply(sample_list, length) > 0]
+      sample_list <- sample_list[valid_projects]
     }
-    
+
     if (length(drug_list) > 1) {
       all_drugs <- unlist(drug_list)
       overlapping_drugs <- names(table(all_drugs))[table(all_drugs) > 1]
       drug_list <- lapply(drug_list, function(x) intersect(x, overlapping_drugs))
+
+      # Filter projects that have no overlapping drugs (if they still exist after sample filtering)
+      if (length(drug_list) > 1) {
+        valid_projects <- names(drug_list)[sapply(drug_list, length) > 0]
+        drug_list <- drug_list[valid_projects]
+      }
     }
   }
 
@@ -386,7 +398,9 @@ generateOverlapPlots <- function(selected_projects, connection, only_overlapping
           UpSetR::fromList(sample_list),
           mainbar.y.label = "Sample Counts",
           text.scale = 2,
-          nsets = length(sample_list)
+          nsets = length(sample_list),
+          order.by = "freq",
+          decreasing = TRUE
         )
       }
 
@@ -395,7 +409,9 @@ generateOverlapPlots <- function(selected_projects, connection, only_overlapping
           UpSetR::fromList(drug_list),
           mainbar.y.label = "Drug Counts",
           text.scale = 2,
-          nsets = length(drug_list)
+          nsets = length(drug_list),
+          order.by = "freq",
+          decreasing = TRUE
         )
       }
 
@@ -660,9 +676,9 @@ generateDrugMOAPlot <- function(drug_annotations) {
         treemapify::geom_treemap() +
         treemapify::geom_treemap_text(
           aes(label = paste0(Target, "\n(", Frequency, ")")),
-          colour = "white", place = "centre",
+          colour = "black", place = "centre",
           reflow = TRUE, grow = FALSE, size = 12) +
-        scale_fill_gradient(low = "#56B1F7", high = "#1F3552") +
+        scale_fill_gradient(low = "#E8F5E9", high = "#C8E6C9") +
         theme_void() +
         theme(legend.position = "none",
               legend.title = element_text(size = 14),
@@ -743,27 +759,33 @@ generateTumorTypePlot <- function(sample_annotations) {
   # Group tumor types by system
   tumor_data$System <- case_when(
     grepl("lung|aerodigestive|nasopharyngeal", tumor_data$TumorType) ~ "Respiratory",
-    grepl("gastrointestinal|stomach|liver|pancreatic", tumor_data$TumorType) ~ "Digestive",
-    grepl("breast|ovarian|cervical|endometrial|uterine|vulvar", tumor_data$TumorType) ~ "Reproductive - Female",
+    grepl("gastrointestinal|stomach|liver|pancreatic|colon", tumor_data$TumorType) ~ "Digestive",
+    grepl("breast|ovarian|cervical|endometrial|uterine|vulvar|choriocarcinoma", tumor_data$TumorType) ~ "Reproductive - Female",
     grepl("prostate|testicular", tumor_data$TumorType) ~ "Reproductive - Male",
     grepl("haematopoietic|lymphoid", tumor_data$TumorType) ~ "Blood & Lymphatic",
-    grepl("nervous", tumor_data$TumorType) ~ "Nervous System",
-    grepl("skin", tumor_data$TumorType) ~ "Integumentary",
     grepl("kidney|bladder", tumor_data$TumorType) ~ "Urinary",
-    grepl("sarcoma", tumor_data$TumorType) ~ "Connective Tissue",
+    grepl("nervous system|retinoblastoma", tumor_data$TumorType) ~ "Nervous System",
     TRUE ~ "Other"
   )
+
+  # Set factor levels with systems sorted by frequency (descending), Other at the end
+  system_freq <- aggregate(Frequency ~ System, data = tumor_data, FUN = sum)
+  system_freq <- system_freq[order(-system_freq$Frequency), ]
+  system_levels <- c(system_freq$System[system_freq$System != "Other"],
+                     "Other")
+  tumor_data$System <- factor(tumor_data$System, levels = system_levels)
 
   # Shorten names for better display
   tumor_data$TumorType <- gsub(" cancer", "", tumor_data$TumorType)
 
   # Filter out very small frequencies if there are too many tumor types
-  if (nrow(tumor_data) > 20) {
-    tumor_data <- tumor_data[tumor_data$Frequency > 1, ]
-    if (nrow(tumor_data) > 20) {
-      tumor_data <- tumor_data[order(-tumor_data$Frequency)[1:20], ]
-    }
-  }
+  # if (nrow(tumor_data) > 20) {
+    # tumor_data <- tumor_data[tumor_data$Frequency > 1, ]
+    # if (nrow(tumor_data) > 20) {
+    #   tumor_data <- tumor_data[order(-tumor_data$Frequency)[1:20], ]
+    # }
+  # }
+  tumor_data <- tumor_data[!tumor_data$TumorType %in% "non-cancer",]
 
   # Create bubble plot
   tryCatch({
@@ -774,20 +796,26 @@ generateTumorTypePlot <- function(sample_annotations) {
         ggrepel::geom_text_repel(
           aes(label = paste0(TumorType, " (", Frequency, ")")),
           color = "black",
-          size = 3.6,
+          size = 4,
           box.padding = 0.7,
           segment.color = "grey50",
           max.overlaps = Inf
         ) +
         scale_size(range = c(3, 15)) +
         scale_color_brewer(palette = "Set3") +
+        # Expand x-axis limits to ensure proper viewport dimensions
+        scale_x_discrete(expand = expansion(mult = c(0.15, 0.15))) +
+        # Expand y-axis limits 
+        scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
         theme_bw() +
         theme(
+          axis.title.x = element_text(size = 17, color = "black"),  # Add explicit x-axis title theme
           axis.title.y = element_text(size = 17, color = "black"),
-          axis.text.x = element_text(angle = 60, hjust = 1),
-          axis.text = element_text(size = 17, color = "black"),
+          axis.text.x = element_text(angle = 60, hjust = 1, size = 14, color = "black"),  # Slightly smaller x-axis text
+          axis.text.y = element_text(size = 14, color = "black"),  # Explicit y-axis text size
           legend.position = "none",
-          plot.title = element_text(size = 17, color = "black", hjust = 0.5)
+          plot.title = element_text(size = 17, color = "black"),
+          plot.margin = margin(t = 12, r = 12, b = 12, l = 12, unit = "pt")  # Add plot margins
         ) +
         labs(
           title = "Tumor Type Distribution by System",

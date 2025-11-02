@@ -4,10 +4,12 @@
 \alias{generateCharacteristicsPlot}
 \title{Generate characteristics plot using database information}
 \usage{
-generateCharacteristicsPlot(project_info)
+generateCharacteristicsPlot(project_info, reverse = FALSE)
 }
 \arguments{
 \item{project_info}{Data frame with project information from database}
+
+\item{reverse}{Logical, whether to reverse axes (projects on x-axis, features on y-axis). Default FALSE}
 }
 \value{
 ggplot object showing data availability

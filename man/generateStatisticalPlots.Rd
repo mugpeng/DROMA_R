@@ -9,7 +9,9 @@ generateStatisticalPlots(
   plot_types = "all",
   data_type = "all",
   connection = NULL,
-  use_gap_plots = TRUE
+  use_gap_plots = TRUE,
+  reverse_molecular = FALSE,
+  only_overlapping = FALSE
 )
 }
 \arguments{
@@ -23,6 +25,10 @@ generateStatisticalPlots(
 \item{connection}{Optional database connection object. If NULL, uses global connection}
 
 \item{use_gap_plots}{Logical, whether to use gap plots for large count differences}
+
+\item{reverse_molecular}{Logical, whether to reverse axes in molecular characteristics plot. Default FALSE}
+
+\item{only_overlapping}{Logical, whether to only show samples/drugs that appear in multiple projects and filter out projects with no overlapping samples/drugs in overlap plots. Default FALSE}
 }
 \value{
 List of ggplot objects with statistical plots
@@ -44,5 +50,11 @@ stat_plots <- generateStatisticalPlots(c("gCSI", "CCLE"), plot_types = "counts")
 
 # Generate plots for cell line projects only
 stat_plots <- generateStatisticalPlots("all", data_type = "CellLine")
+
+# Generate plots with reversed molecular plot
+stat_plots <- generateStatisticalPlots("all", reverse_molecular = TRUE)
+
+# Generate overlap plots with only overlapping samples/drugs
+stat_plots <- generateStatisticalPlots("all", plot_types = "overlaps", only_overlapping = TRUE)
 }
 }

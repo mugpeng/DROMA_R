@@ -4,12 +4,14 @@
 \alias{generateOverlapPlots}
 \title{Generate overlap plots for samples and drugs from database}
 \usage{
-generateOverlapPlots(selected_projects, connection)
+generateOverlapPlots(selected_projects, connection, only_overlapping = FALSE)
 }
 \arguments{
 \item{selected_projects}{Character vector of project names}
 
 \item{connection}{Database connection object}
+
+\item{only_overlapping}{Logical, whether to only show samples/drugs that appear in multiple projects and filter out projects with no overlapping samples/drugs. Default FALSE}
 }
 \value{
 List of UpSet plot objects
