@@ -286,6 +286,7 @@ formatDrugTable <- function(drug_data, caption = "Drug sensitivity data - showin
 #' @param sample_annotations Optional dataframe containing sample annotations
 #' @param db_path Optional path to SQLite database for loading sample annotations if not provided and not in global environment
 #' @return A dataframe with drug sensitivity data
+#' @export
 #' @examples
 #' \dontrun{
 #' # Using DromaSet
@@ -341,21 +342,37 @@ getDrugSensitivityData <- function(dromaset_object,
 #' @param cont_column Name of the continuous column to use for x-axis
 #' @param value_column Name of the value column to use for y-axis (default: "value")
 #' @param value_label Label for the value variable (default: "Drug Sensitivity")
+#' @param title Plot title (optional, default: NULL for auto-generated)
 #' @return A ggplot2 object with the comparison plot
 #' @export
-plotContinuousComparison <- function(data, cont_column, value_column = "value", value_label = "Drug Sensitivity") {
+plotContinuousComparison <- function(data, cont_column, value_column = "value", value_label = "Drug Sensitivity", title = NULL) {
   # Create scatter plot with correlation information
+  # Determine y-axis label based on value_column
+  y_label <- if (value_column == "zscore_value") {
+    "Z-score Drug Sensitivity(Area Above Curve)"
+  } else {
+    "Drug Sensitivity(Area Above Curve)"
+  }
+
+  # Determine plot title
+  plot_title <- if (!is.null(title)) {
+    title
+  } else {
+    paste(value_label, "vs", cont_column)
+  }
+
   p <- ggscatter(data, x = cont_column, y = value_column, alpha = 0.2) +
     stat_cor(size = 6, method = "spearman") +
     stat_smooth(formula = y ~ x, method = "lm") +
     theme_bw() +
     theme(
-      axis.title = element_blank(),
       title = element_text(size = 15, face = "bold"),
-      axis.text = element_text(size = 12)
+      axis.text = element_text(size = 12),
+      axis.title = element_text(size = 12)
     ) +
-    ggtitle(paste(value_label, "vs", cont_column))
-
+    ggtitle(plot_title) +
+    xlab(cont_column) +
+    ylab(y_label)
 
   return(p)
 }
@@ -368,12 +385,27 @@ plotContinuousComparison <- function(data, cont_column, value_column = "value", 
 #' @param value_column Name of the value column to use for y-axis (default: "value")
 #' @param value_label Label for the value variable (default: "Drug Sensitivity")
 #' @param num_bins Number of bins to create from the continuous variable (default: 4)
+#' @param title Plot title (optional, default: NULL for auto-generated)
 #' @return A ggplot2 object with the grouped boxplot
 #' @export
-plotContinuousGroups <- function(data, cont_column, value_column = "value", value_label = "Drug Sensitivity", num_bins = 4) {
+plotContinuousGroups <- function(data, cont_column, value_column = "value", value_label = "Drug Sensitivity", num_bins = 4, title = NULL) {
   # Remove rows with NA in either column
   data <- data[!is.na(data[[cont_column]]) & !is.na(data[[value_column]]), ]
-  
+
+  # Determine y-axis label based on value_column
+  y_label <- if (value_column == "zscore_value") {
+    "Z-score Drug Sensitivity(Area Above Curve)"
+  } else {
+    "Drug Sensitivity(Area Above Curve)"
+  }
+
+  # Determine plot title
+  plot_title <- if (!is.null(title)) {
+    title
+  } else {
+    paste(value_label, "by", cont_column, "Group")
+  }
+
   # Create bins for the continuous variable
   cont_values <- data[[cont_column]]
 
@@ -408,14 +440,15 @@ plotContinuousGroups <- function(data, cont_column, value_column = "value", valu
                        label = "p.format") +
     theme_bw() +
     theme(
-      axis.title = element_blank(),
       title = element_text(size = 15, face = "bold"),
       axis.text = element_text(size = 12),
+      axis.title = element_text(size = 12),
       axis.text.x = element_text(angle = 45, hjust = 1),
       legend.position = "none"
     ) +
-    ggtitle(paste(value_label, "by", cont_column, "Group"))
-
+    ggtitle(plot_title) +
+    xlab(paste(cont_column, "Group")) +
+    ylab(y_label)
 
   return(p)
 }
@@ -427,12 +460,27 @@ plotContinuousGroups <- function(data, cont_column, value_column = "value", valu
 #' @param category_column Name of the categorical column to use for grouping
 #' @param value_column Name of the value column to use for y-axis (default: "value")
 #' @param value_label Label for the value variable (default: "Drug Sensitivity")
+#' @param title Plot title (optional, default: NULL for auto-generated)
 #' @return A ggplot2 object with the category comparison plot
 #' @export
-plotCategoryComparison <- function(data, category_column, value_column = "value", value_label = "Drug Sensitivity") {
+plotCategoryComparison <- function(data, category_column, value_column = "value", value_label = "Drug Sensitivity", title = NULL) {
   # Remove rows with NA in either column
   data <- data[!is.na(data[[category_column]]) & !is.na(data[[value_column]]), ]
-  
+
+  # Determine y-axis label based on value_column
+  y_label <- if (value_column == "zscore_value") {
+    "Z-score Drug Sensitivity(Area Above Curve)"
+  } else {
+    "Drug Sensitivity(Area Above Curve)"
+  }
+
+  # Determine plot title
+  plot_title <- if (!is.null(title)) {
+    title
+  } else {
+    paste(value_label, "by", category_column)
+  }
+
   # Count observations per category and filter out categories with too few samples
   category_counts <- table(data[[category_column]])
   valid_categories <- names(category_counts)[category_counts >= 3]
@@ -446,22 +494,43 @@ plotCategoryComparison <- function(data, category_column, value_column = "value"
 
   data_filtered <- data[data[[category_column]] %in% valid_categories, ]
 
+  # Calculate median for each category and sort by median value
+  category_medians <- tapply(data_filtered[[value_column]], 
+                             data_filtered[[category_column]], 
+                             median, na.rm = TRUE)
+  sorted_categories <- names(sort(category_medians))
+  
+  # Special handling for TumorType: put "non-cancer" at the end if it exists
+  if (category_column == "TumorType" && "non-cancer" %in% sorted_categories) {
+    # Reorder categories to put "non-cancer" last
+    sorted_categories <- c(sorted_categories[sorted_categories != "non-cancer"], "non-cancer")
+  }
+  
+  data_filtered[[category_column]] <- factor(data_filtered[[category_column]], levels = sorted_categories)
+
+  # Calculate overall median for reference line
+  overall_median <- median(data_filtered[[value_column]], na.rm = TRUE)
+
   # Create improved boxplot with consistent styling
   p <- ggboxplot(data_filtered, x = category_column, y = value_column,
                  fill = category_column,
                  palette = soft_palette_26,
                  add = "jitter",
                  add.params = list(alpha = 0.15)) +
+    geom_hline(yintercept = overall_median, linetype = "dashed",
+               color = "gray40", size = 0.8, alpha = 0.7) +
     theme_bw() +
     theme(
-      axis.title = element_blank(),
       title = element_text(size = 15, face = "bold"),
       axis.text = element_text(size = 12),
+      axis.title = element_text(size = 12),
       axis.text.x = element_text(angle = 45, hjust = 1),
       legend.position = "none"
     ) +
-    ggtitle(paste(value_label, "by", category_column))
-
+    coord_cartesian(ylim = c(NA, max(data_filtered[[value_column]], na.rm = TRUE) + max(data_filtered[[value_column]], na.rm = TRUE)/20)) +
+    ggtitle(plot_title) +
+    xlab(NULL) +
+    ylab(y_label)
 
   # Add statistical comparison with appropriate method
   if (length(valid_categories) >= 2) {
@@ -470,16 +539,16 @@ plotCategoryComparison <- function(data, category_column, value_column = "value"
     if (length(valid_categories) == 2) {
       # For two groups, use wilcoxon with clear label positioning
       p <- p + stat_compare_means(size = 6,
-                                  label.x = label_x_pos,
-                                  label.y = (max_y - max_y/8),
+                                  label.x.npc = "left",
+                                  label.y.npc = "top",
                                   label = "p.format")
     } else {
       # For more than two groups, use Kruskal-Wallis
       # Add global p-value at top
       p <- p + stat_compare_means(method = "kruskal.test",
                                   size = 6,
-                                  label.x = label_x_pos,
-                                  label.y = max_y + (max_y * 0.15),
+                                  label.x.npc = "left",
+                                  label.y.npc = "top",
                                   label = "p.format")
     }
   }
@@ -496,10 +565,11 @@ plotCategoryComparison <- function(data, category_column, value_column = "value"
 #' @param value_label Label for the value variable (default: "Drug Sensitivity")
 #' @param num_bins Number of bins to create from continuous variables (default: 4)
 #' @param show_groups_boxplot Logical, whether to show grouped boxplot for continuous variables
+#' @param title Plot title (optional, default: NULL for auto-generated)
 #' @return A ggplot2 object or grid with comparison plots
 #' @export
 createDrugComparisonPlot <- function(data, comparison_var, value_column = "value", value_label = "Drug Sensitivity",
-                                     num_bins = 4, show_groups_boxplot = TRUE) {
+                                     num_bins = 4, show_groups_boxplot = TRUE, title = NULL) {
   # Handle missing values in the comparison variable
   data <- data[!is.na(data[[comparison_var]]), ]
 
@@ -513,14 +583,15 @@ createDrugComparisonPlot <- function(data, comparison_var, value_column = "value
   if (is.numeric(data[[comparison_var]])) {
     # For continuous variables
     p1 <- plotContinuousComparison(data, cont_column = comparison_var,
-                                   value_column = value_column, value_label = value_label)
+                                   value_column = value_column, value_label = value_label,
+                                   title = title)
 
     # Also create a boxplot with bins if requested
     if (show_groups_boxplot) {
       # Create grouped boxplot
       p2 <- plotContinuousGroups(data, cont_column = comparison_var,
                                  value_column = value_column, value_label = value_label,
-                                 num_bins = num_bins)
+                                 num_bins = num_bins, title = title)
 
       # Return grid of both plots
       return(patchwork::wrap_plots(p1,p2, ncol = 2))
@@ -530,7 +601,8 @@ createDrugComparisonPlot <- function(data, comparison_var, value_column = "value
   } else {
     # For categorical variables
     return(plotCategoryComparison(data, category_column = comparison_var,
-                                  value_column = value_column, value_label = value_label))
+                                  value_column = value_column, value_label = value_label,
+                                  title = title))
   }
 }
 
@@ -619,10 +691,10 @@ plotDrugSensitivityRank <- function(dromaset_object,
   }
 
   # For MultiDromaSet, check if merge is appropriate
-  if (inherits(dromaset_object, "MultiDromaSet") && merge && !zscore) {
-    warning("Without z-score normalization (zscore=FALSE), merging data from different studies may not be appropriate. Consider setting zscore=TRUE. Setting merge=FALSE.")
-    merge <- FALSE
-  }
+  # if (inherits(dromaset_object, "MultiDromaSet") && merge && !zscore) {
+  #   warning("Without z-score normalization (zscore=FALSE), merging data from different studies may not be appropriate. Consider setting zscore=TRUE. Setting merge=FALSE.")
+  #   merge <- FALSE
+  # }
 
   # Get drug sensitivity data
   drug_data <- getDrugSensitivityData(

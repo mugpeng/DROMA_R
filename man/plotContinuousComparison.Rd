@@ -8,7 +8,8 @@ plotContinuousComparison(
   data,
   cont_column,
   value_column = "value",
-  value_label = "Drug Sensitivity"
+  value_label = "Drug Sensitivity",
+  title = NULL
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ plotContinuousComparison(
 \item{value_column}{Name of the value column to use for y-axis (default: "value")}
 
 \item{value_label}{Label for the value variable (default: "Drug Sensitivity")}
+
+\item{title}{Plot title (optional, default: NULL for auto-generated)}
 }
 \value{
 A ggplot2 object with the comparison plot

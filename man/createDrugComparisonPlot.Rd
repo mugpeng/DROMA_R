@@ -10,7 +10,8 @@ createDrugComparisonPlot(
   value_column = "value",
   value_label = "Drug Sensitivity",
   num_bins = 4,
-  show_groups_boxplot = TRUE
+  show_groups_boxplot = TRUE,
+  title = NULL
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ createDrugComparisonPlot(
 \item{num_bins}{Number of bins to create from continuous variables (default: 4)}
 
 \item{show_groups_boxplot}{Logical, whether to show grouped boxplot for continuous variables}
+
+\item{title}{Plot title (optional, default: NULL for auto-generated)}
 }
 \value{
 A ggplot2 object or grid with comparison plots

@@ -9,7 +9,8 @@ plotContinuousGroups(
   cont_column,
   value_column = "value",
   value_label = "Drug Sensitivity",
-  num_bins = 4
+  num_bins = 4,
+  title = NULL
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ plotContinuousGroups(
 \item{value_label}{Label for the value variable (default: "Drug Sensitivity")}
 
 \item{num_bins}{Number of bins to create from the continuous variable (default: 4)}
+
+\item{title}{Plot title (optional, default: NULL for auto-generated)}
 }
 \value{
 A ggplot2 object with the grouped boxplot
