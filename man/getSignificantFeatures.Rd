@@ -4,27 +4,38 @@
 \alias{getSignificantFeatures}
 \title{Get significant features from meta-analysis results}
 \usage{
-getSignificantFeatures(meta_df, es_t = 0.4, P_t = 0.01, n_datasets_t = NULL)
+getSignificantFeatures(
+  meta_df,
+  es_t = 0.4,
+  P_t = 0.01,
+  n_datasets_t = NULL,
+  use_p_value = FALSE
+)
 }
 \arguments{
-\item{meta_df}{Data frame containing meta-analysis results with columns: effect_size, q_value, n_datasets, and name}
+\item{meta_df}{Data frame containing meta-analysis results with columns: effect_size, q_value (or p_value), n_datasets, and name}
 
 \item{es_t}{Effect size threshold (default: 0.4)}
 
-\item{P_t}{Q-value threshold (default: 0.01)}
+\item{P_t}{Q-value or p-value threshold (default: 0.01)}
 
 \item{n_datasets_t}{Minimum number of datasets threshold (default: NULL for no threshold)}
+
+\item{use_p_value}{Logical, whether to use p_value column instead of q_value (default: FALSE)}
 }
 \value{
 Data frame with significant features only, including a "direction" column ("Up" or "Down")
 }
 \description{
-Filters meta-analysis results to identify significant features based on effect size, q-value, and optionally minimum number of datasets
+Filters meta-analysis results to identify significant features based on effect size, q-value or p-value, and optionally minimum number of datasets
 }
 \examples{
 \dontrun{
-# Get all significant features
+# Get all significant features using q-values
 sig_features <- getSignificantFeatures(meta_df)
+
+# Get all significant features using p-values
+sig_features <- getSignificantFeatures(meta_df, use_p_value = TRUE)
 
 # With custom thresholds
 sig_features <- getSignificantFeatures(meta_df, es_t = 0.5, P_t = 0.05)

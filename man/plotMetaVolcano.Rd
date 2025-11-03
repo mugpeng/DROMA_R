@@ -15,12 +15,13 @@ plotMetaVolcano(
   point_size = 2.5,
   point_alpha = 0.6,
   title = NULL,
-  custom_colors = NULL
+  custom_colors = NULL,
+  use_p_value = FALSE
 )
 }
 \arguments{
 \item{meta_df}{Data frame containing meta-analysis results with columns:
-effect_size, q_value, n_datasets, and name}
+effect_size, q_value (or p_value), n_datasets, and name}
 
 \item{es_t}{Effect size threshold to consider significant}
 
@@ -41,6 +42,8 @@ effect_size, q_value, n_datasets, and name}
 \item{title}{Plot title (NULL for no title)}
 
 \item{custom_colors}{Custom color vector for Up, NS, Down (NULL for defaults)}
+
+\item{use_p_value}{Logical, whether to use p_value column instead of q_value (default: FALSE)}
 }
 \value{
 ggplot object with volcano plot

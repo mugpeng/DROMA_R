@@ -221,7 +221,7 @@ plotMultipleGroupComparisons <- function(pairs_list,
 #' Create a volcano plot from meta-analysis results
 #'
 #' @param meta_df Data frame containing meta-analysis results with columns:
-#'                effect_size, q_value, n_datasets, and name
+#'                effect_size, q_value (or p_value), n_datasets, and name
 #' @param es_t Effect size threshold to consider significant
 #' @param P_t Q-value threshold to consider significant
 #' @param n_datasets_t Minimum number of datasets threshold (NULL for no threshold)
@@ -232,6 +232,7 @@ plotMultipleGroupComparisons <- function(pairs_list,
 #' @param point_alpha Alpha transparency of points
 #' @param title Plot title (NULL for no title)
 #' @param custom_colors Custom color vector for Up, NS, Down (NULL for defaults)
+#' @param use_p_value Logical, whether to use p_value column instead of q_value (default: FALSE)
 #' @return ggplot object with volcano plot
 #' @export
 plotMetaVolcano <- function(meta_df,
@@ -244,12 +245,15 @@ plotMetaVolcano <- function(meta_df,
                             point_size = 2.5,
                             point_alpha = 0.6,
                             title = NULL,
-                            custom_colors = NULL) {
+                            custom_colors = NULL,
+                            use_p_value = FALSE) {
 
   # Input validation
   if(!is.data.frame(meta_df)) stop("meta_df must be a data frame")
-  if(!all(c("effect_size", "q_value", "name", "n_datasets") %in% colnames(meta_df))) {
-    stop("meta_df must contain columns: effect_size, q_value, n_datasets, and name")
+  required_cols <- c("effect_size", "name", "n_datasets")
+  p_val_col <- if(use_p_value) "p_value" else "q_value"
+  if(!all(c(required_cols, p_val_col) %in% colnames(meta_df))) {
+    stop("meta_df must contain columns: effect_size, ", p_val_col, ", n_datasets, and name")
   }
 
   # Default colors
@@ -257,19 +261,22 @@ plotMetaVolcano <- function(meta_df,
     custom_colors <- c("Down" = "#44bce4", "NS" = "grey", "Up" = "#fc7474")
   }
 
+  # Determine which p-value column to use
+  p_val_col <- if(use_p_value) "p_value" else "q_value"
+
   # Group the points based on thresholds
   if(is.null(n_datasets_t)) {
     # No n_datasets threshold
     meta_df$group <- dplyr::case_when(
-      meta_df$effect_size > es_t & meta_df$q_value < P_t ~ "Up",
-      meta_df$effect_size < -es_t & meta_df$q_value < P_t ~ "Down",
+      meta_df$effect_size > es_t & meta_df[[p_val_col]] < P_t ~ "Up",
+      meta_df$effect_size < -es_t & meta_df[[p_val_col]] < P_t ~ "Down",
       TRUE ~ "NS"
     )
   } else {
     # With n_datasets threshold
     meta_df$group <- dplyr::case_when(
-      meta_df$effect_size > es_t & meta_df$q_value < P_t & meta_df$n_datasets >= n_datasets_t ~ "Up",
-      meta_df$effect_size < -es_t & meta_df$q_value < P_t & meta_df$n_datasets >= n_datasets_t ~ "Down",
+      meta_df$effect_size > es_t & meta_df[[p_val_col]] < P_t & meta_df$n_datasets >= n_datasets_t ~ "Up",
+      meta_df$effect_size < -es_t & meta_df[[p_val_col]] < P_t & meta_df$n_datasets >= n_datasets_t ~ "Down",
       TRUE ~ "NS"
     )
   }
@@ -291,7 +298,7 @@ plotMetaVolcano <- function(meta_df,
   # This means n_datasets=30 will have 3x the radius of n_datasets=10
   p <- ggplot(data = meta_df,
               aes(x = effect_size,
-                  y = -log10(q_value))) +
+                  y = -log10(.data[[p_val_col]]))) +
     geom_point(alpha = point_alpha,
                aes(color = group, size = n_datasets)) +
     scale_size(range = c(point_size * 0.5, point_size * 2), 
@@ -318,13 +325,13 @@ plotMetaVolcano <- function(meta_df,
       text = element_text(colour = "black"),
       axis.title.x = element_text(colour = "black")
     ) +
-    ylab("-log10(Qvalue)") +
+    ylab(if(use_p_value) "-log10(Pvalue)" else "-log10(Qvalue)") +
     xlab("Effect Size") +
     scale_color_manual(values = custom_colors, guide = "none") +
     geom_vline(xintercept = c(-es_t, es_t), lty = 4, col = "black", lwd = 0.5) +
     geom_hline(yintercept = -log10(P_t), lty = 4, col = "black", lwd = 0.5) +
     annotate("text", x = 0,
-             y = max(-log10(meta_df$q_value), na.rm = TRUE) * 0.9,
+             y = max(-log10(meta_df[[p_val_col]]), na.rm = TRUE) * 0.9,
              label = sig_text, hjust = 0.5, size = 5, fontface = "bold")
 
   # Add title if provided

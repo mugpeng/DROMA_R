@@ -359,17 +359,21 @@ getSampleMetadata <- function(dromaset_object, feature1_type, feature2_type) {
 
 #' Get significant features from meta-analysis results
 #'
-#' @description Filters meta-analysis results to identify significant features based on effect size, q-value, and optionally minimum number of datasets
-#' @param meta_df Data frame containing meta-analysis results with columns: effect_size, q_value, n_datasets, and name
+#' @description Filters meta-analysis results to identify significant features based on effect size, q-value or p-value, and optionally minimum number of datasets
+#' @param meta_df Data frame containing meta-analysis results with columns: effect_size, q_value (or p_value), n_datasets, and name
 #' @param es_t Effect size threshold (default: 0.4)
-#' @param P_t Q-value threshold (default: 0.01)
+#' @param P_t Q-value or p-value threshold (default: 0.01)
 #' @param n_datasets_t Minimum number of datasets threshold (default: NULL for no threshold)
+#' @param use_p_value Logical, whether to use p_value column instead of q_value (default: FALSE)
 #' @return Data frame with significant features only, including a "direction" column ("Up" or "Down")
 #' @export
 #' @examples
 #' \dontrun{
-#' # Get all significant features
+#' # Get all significant features using q-values
 #' sig_features <- getSignificantFeatures(meta_df)
+#'
+#' # Get all significant features using p-values
+#' sig_features <- getSignificantFeatures(meta_df, use_p_value = TRUE)
 #'
 #' # With custom thresholds
 #' sig_features <- getSignificantFeatures(meta_df, es_t = 0.5, P_t = 0.05)
@@ -381,19 +385,22 @@ getSignificantFeatures <- function(meta_df,
                                    es_t = 0.4,
                                    P_t = 0.01,
                                    n_datasets_t = NULL) {
+                                   use_p_value = FALSE) {
   # Input validation
   if(!is.data.frame(meta_df)) stop("meta_df must be a data frame")
-  if(!all(c("effect_size", "q_value", "name", "n_datasets") %in% colnames(meta_df))) {
-    stop("meta_df must contain columns: effect_size, q_value, n_datasets, and name")
+  required_cols <- c("effect_size", "name", "n_datasets")
+  p_val_col <- if(use_p_value) "p_value" else "q_value"
+  if(!all(c(required_cols, p_val_col) %in% colnames(meta_df))) {
+    stop("meta_df must contain columns: effect_size, ", p_val_col, ", n_datasets, and name")
   }
   # Transfrom to data.frame
   meta_df <- as.data.frame(meta_df)
   # Filter based on thresholds
   if(is.null(n_datasets_t)) {
-    sig_df <- meta_df[(abs(meta_df$effect_size) > es_t & meta_df$q_value < P_t), ]
+    sig_df <- meta_df[(abs(meta_df$effect_size) > es_t & meta_df[[p_val_col]] < P_t), ]
   } else {
-    sig_df <- meta_df[(abs(meta_df$effect_size) > es_t & 
-                       meta_df$q_value < P_t & 
+    sig_df <- meta_df[(abs(meta_df$effect_size) > es_t &
+                       meta_df[[p_val_col]] < P_t &
                        meta_df$n_datasets >= n_datasets_t), ]
   }
   

@@ -13,6 +13,7 @@
 #' @param merged_enabled Logical, whether to create a merged dataset from all studies
 #' @param meta_enabled Logical, whether to perform meta-analysis
 #' @param zscore Logical, whether to apply z-score normalization to treatment response and molecular profiles (default: TRUE). If FALSE, merged_enabled should be set to FALSE to avoid combining non-normalized data from different studies.
+#' @param data_type_anno Optional character string to add as annotation in plot titles (e.g., "Cell lines"). If provided, it will be appended to titles as "(annotation)"
 #' @return A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), meta-analysis results, and data
 #' @export
 #' @examples
@@ -31,7 +32,8 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
                                 overlap_only = FALSE,
                                 merged_enabled = TRUE,
                                 meta_enabled = TRUE,
-                                zscore = TRUE){
+                                zscore = TRUE,
+                                data_type_anno = NULL){
 
   # Validate input object
   if (!inherits(dromaset_object, c("DromaSet", "MultiDromaSet"))) {
@@ -49,6 +51,13 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
   # Warning if zscore is FALSE but merged_enabled is TRUE
   if (!zscore && merged_enabled) {
     warning("Without z-score normalization (zscore=FALSE), merging data from different studies may not be appropriate. Consider setting merged_enabled=FALSE.")
+  }
+  
+  # Create title suffix for data type annotation
+  title_suffix <- if (!is.null(data_type_anno) && nchar(data_type_anno) > 0) {
+    paste0(" (", data_type_anno, ")")
+  } else {
+    ""
   }
   
   # Determine if omics feature is continuous
@@ -103,7 +112,7 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
                                      single_pair$feature2,
                                      x_label = paste(feature_type, "expression"),
                                      y_label = "drug sensitivity(Area Above Curve)",
-                                     title = paste(feature_type, ":", select_features, "vs", select_drugs),
+                                     title = paste0(paste(feature_type, ":", select_features, "vs", select_drugs), title_suffix),
                                      method = "spearman")
     } else if (length(individual_pairs) > 1) {
       multi_plot <- plotMultipleCorrelations(individual_pairs,
@@ -121,7 +130,7 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
                                            merged_pair$feature2,
                                            x_label = paste(feature_type, "expression"),
                                            y_label = "drug sensitivity(Area Above Curve)",
-                                           title = paste(feature_type, ":", select_features, "vs", select_drugs),
+                                           title = paste0(paste(feature_type, ":", select_features, "vs", select_drugs), title_suffix),
                                            method = "spearman")
     }
 
@@ -156,7 +165,7 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
       single_pair <- individual_pairs[[1]]
       result$plot <- plotGroupComparison(single_pair$no, single_pair$yes,
                                         group_labels = c(paste("Without", select_features), paste("With", select_features)),
-                                        title = paste(feature_type, ":", select_features, "vs", select_drugs),
+                                        title = paste0(paste(feature_type, ":", select_features, "vs", select_drugs), title_suffix),
                                         y_label = "drug sensitivity(Area Above Curve)")
     } else if (length(individual_pairs) > 1) {
       multi_plot <- plotMultipleGroupComparisons(individual_pairs,
@@ -172,7 +181,7 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
     if (!is.null(merged_pair) && merged_enabled) {
       result$merged_plot <- plotGroupComparison(merged_pair$no, merged_pair$yes,
                                                 group_labels = c(paste("Without", select_features), paste("With", select_features)),
-                                                title = paste(feature_type, ":", select_features, "vs", select_drugs),
+                                                title = paste0(paste(feature_type, ":", select_features, "vs", select_drugs), title_suffix),
                                                 y_label = "drug sensitivity(Area Above Curve)")
     }
 
