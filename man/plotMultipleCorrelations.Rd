@@ -8,7 +8,8 @@ plotMultipleCorrelations(
   pairs_list,
   x_label = "Feature 1",
   y_label = "Feature 2",
-  ncol = 3
+  ncol = 3,
+  data_type_anno = NULL
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ plotMultipleCorrelations(
 \item{y_label}{Common y-axis label}
 
 \item{ncol}{Number of columns in the grid}
+
+\item{data_type_anno}{Optional character string to add as annotation in plot titles (e.g., "Cell lines"). If provided, it will be appended to titles as "(annotation)"}
 }
 \value{
 A combined plot with all correlations or NULL if no valid pairs

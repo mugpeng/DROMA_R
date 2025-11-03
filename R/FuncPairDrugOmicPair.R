@@ -117,7 +117,8 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
     } else if (length(individual_pairs) > 1) {
       multi_plot <- plotMultipleCorrelations(individual_pairs,
                                               x_label = paste0(select_features, " (", feature_type, ")"),
-                                              y_label = "Drug Response")
+                                              y_label = "Drug Response",
+                                              data_type_anno = data_type_anno)
       # Add common axis labels
       result$plot <- createPlotWithCommonAxes(multi_plot,
                                               x_title = paste(feature_type, "expression"),
@@ -171,7 +172,8 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
       multi_plot <- plotMultipleGroupComparisons(individual_pairs,
                                                 group_labels = c(paste("Without", select_features), paste("With", select_features)),
                                                 x_label = paste0(select_features, " (", feature_type, ")"),
-                                                y_label = "Drug Response")
+                                                y_label = "Drug Response",
+                                                data_type_anno = data_type_anno)
       # Add common axis label
       result$plot <- createPlotWithCommonAxes(multi_plot,
                                               y_title = "drug sensitivity(Area Above Curve)")

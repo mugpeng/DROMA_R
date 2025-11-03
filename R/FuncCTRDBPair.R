@@ -9,6 +9,7 @@
 #' @param auto_log Logical, whether to automatically detect and apply log transformation (default: TRUE)
 #' @param log_threshold Maximum value threshold to determine if data is already log-transformed (default: 50)
 #' @return Expression matrix with genes as rows and samples as columns, or NULL if retrieval fails
+#' @export
 #' @examples
 #' \dontrun{
 #' # Connect to CTRDB database
@@ -19,7 +20,7 @@
 #' }
 getPatientExpressionData <- function(patient_id,
                                     connection,
-                                    auto_log = FALSE,
+                                    auto_log = TRUE,
                                     log_threshold = 50) {
 
   # Validate inputs
@@ -58,11 +59,17 @@ getPatientExpressionData <- function(patient_id,
     if (auto_log && nrow(expr_matrix) > 0 && ncol(expr_matrix) > 0) {
       # Calculate statistics to determine if data is log-transformed
       max_value <- max(expr_matrix, na.rm = TRUE)
+      min_value <- min(expr_matrix, na.rm = TRUE)
       median_value <- median(expr_matrix, na.rm = TRUE)
 
-      # If max value exceeds threshold, likely not log-transformed
-      # Also check if median is suspiciously high (> 20 typically indicates non-log data)
-      if (max_value > log_threshold || median_value > 20) {
+      # If min value is negative, skip log transformation
+      if (min_value < 0) {
+        message("Expression data for patient ", patient_id,
+                " contains negative values (min = ", round(min_value, 2),
+                "). Skipping log transformation.")
+      } else if (max_value > log_threshold || median_value > 20) {
+        # If max value exceeds threshold, likely not log-transformed
+        # Also check if median is suspiciously high (> 20 typically indicates non-log data)
         message("Expression data for patient ", patient_id,
                 " appears to be non-log-transformed (max = ", round(max_value, 2),
                 ", median = ", round(median_value, 2),
@@ -238,7 +245,7 @@ analyzeClinicalDrugResponse <- function(select_omics,
       }
 
       # Get expression data using the reusable function
-      expr_data <- getPatientExpressionData(patient_id, connection, auto_log = FALSE)
+      expr_data <- getPatientExpressionData(patient_id, connection, auto_log = TRUE)
 
       if (is.null(expr_data) || nrow(expr_data) == 0) {
         warning("No expression data found for patient: ", patient_id)

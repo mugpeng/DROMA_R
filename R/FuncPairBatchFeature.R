@@ -384,7 +384,7 @@ getSampleMetadata <- function(dromaset_object, feature1_type, feature2_type) {
 getSignificantFeatures <- function(meta_df,
                                    es_t = 0.4,
                                    P_t = 0.01,
-                                   n_datasets_t = NULL) {
+                                   n_datasets_t = NULL,
                                    use_p_value = FALSE) {
   # Input validation
   if(!is.data.frame(meta_df)) stop("meta_df must be a data frame")

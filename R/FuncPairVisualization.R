@@ -87,11 +87,13 @@ plotGroupComparison <- function(no_values, yes_values,
 #' @param x_label Common x-axis label
 #' @param y_label Common y-axis label
 #' @param ncol Number of columns in the grid
+#' @param data_type_anno Optional character string to add as annotation in plot titles (e.g., "Cell lines"). If provided, it will be appended to titles as "(annotation)"
 #' @return A combined plot with all correlations or NULL if no valid pairs
 plotMultipleCorrelations <- function(pairs_list,
                                     x_label = "Feature 1",
                                     y_label = "Feature 2",
-                                    ncol = 3) {
+                                    ncol = 3,
+                                    data_type_anno = NULL) {
   # Initialize list to store plots
   p_list <- list()
 
@@ -131,9 +133,15 @@ plotMultipleCorrelations <- function(pairs_list,
 
       # Add overall title if we have multiple plots
       if (length(p_list) > 1) {
+        # Create title with optional data type annotation
+        title_suffix <- if (!is.null(data_type_anno) && nchar(data_type_anno) > 0) {
+          paste0(" (", data_type_anno, ")")
+        } else {
+          ""
+        }
         combined_plot <- combined_plot +
           patchwork::plot_annotation(
-            title = paste("Multiple Correlations:", x_label, "vs", y_label),
+            title = paste0("Multiple Correlations:", x_label, "vs", y_label, title_suffix),
             theme = theme(plot.title = element_text(size = 16, hjust = 0.5, face = "bold"))
           )
       }
@@ -156,12 +164,14 @@ plotMultipleCorrelations <- function(pairs_list,
 #' @param y_label Common y-axis label
 #' @param group_labels Labels for the two groups
 #' @param ncol Number of columns in the grid
+#' @param data_type_anno Optional character string to add as annotation in plot titles (e.g., "Cell lines"). If provided, it will be appended to titles as "(annotation)"
 #' @return A combined plot with all comparisons or NULL if no valid pairs
 plotMultipleGroupComparisons <- function(pairs_list,
                                         x_label = "Feature",
                                         y_label = "Value",
                                         group_labels = c("Without", "With"),
-                                        ncol = 3) {
+                                        ncol = 3,
+                                        data_type_anno = NULL) {
   # Initialize list to store plots
   p_list <- list()
 
@@ -201,9 +211,15 @@ plotMultipleGroupComparisons <- function(pairs_list,
 
       # Add overall title if we have multiple plots
       if (length(p_list) > 1) {
+        # Create title with optional data type annotation
+        title_suffix <- if (!is.null(data_type_anno) && nchar(data_type_anno) > 0) {
+          paste0(" (", data_type_anno, ")")
+        } else {
+          ""
+        }
         combined_plot <- combined_plot +
           patchwork::plot_annotation(
-            title = paste("Multiple Group Comparisons:", x_label, "vs", y_label),
+            title = paste0("Multiple Group Comparisons:", x_label, "vs", y_label, title_suffix),
             theme = theme(plot.title = element_text(size = 16, hjust = 0.5, face = "bold"))
           )
       }

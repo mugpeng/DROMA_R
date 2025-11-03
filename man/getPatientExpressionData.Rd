@@ -7,7 +7,7 @@
 getPatientExpressionData(
   patient_id,
   connection,
-  auto_log = FALSE,
+  auto_log = TRUE,
   log_threshold = 50
 )
 }
