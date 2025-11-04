@@ -2,7 +2,7 @@
 % Please edit documentation in R/FuncDrugFeatureAll.R
 \name{getAllDrugSensitivityData}
 \alias{getAllDrugSensitivityData}
-\title{Get All Drugs Sensitivity Data (Internal)}
+\title{Get All Drugs Sensitivity Data}
 \usage{
 getAllDrugSensitivityData(
   dromaset_object,
@@ -39,6 +39,5 @@ getAllDrugSensitivityData(
 A dataframe with drug sensitivity data for all drugs
 }
 \description{
-Internal function to get drug sensitivity data for all drugs from DromaSet or MultiDromaSet objects
+function to get drug sensitivity data for all drugs from DromaSet or MultiDromaSet objects
 }
-\keyword{internal}
