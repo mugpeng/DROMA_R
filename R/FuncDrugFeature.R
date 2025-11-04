@@ -431,10 +431,15 @@ plotContinuousGroups <- function(data, cont_column, value_column = "value", valu
   data[[group_column]] <- cont_bins
   data[[label_column]] <- factor(group_labels[data[[group_column]]], levels = group_labels)
 
+  # Calculate overall median for reference line
+  overall_median <- median(data[[value_column]], na.rm = TRUE)
+
   # Create boxplot with statistical test
   p <- ggboxplot(data, x = label_column, y = value_column,
                  fill = label_column, palette = soft_palette_26,
                  add = "jitter", add.params = list(alpha = 0.15)) +
+    geom_hline(yintercept = overall_median, linetype = "dashed",
+               color = "gray40", size = 0.8, alpha = 0.7) +
     stat_compare_means(size = 6, label.x = 0.8,
                        label.y = (max(data[[value_column]]) - max(data[[value_column]])/8),
                        label = "p.format") +
