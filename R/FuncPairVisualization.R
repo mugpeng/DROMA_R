@@ -243,6 +243,7 @@ plotMultipleGroupComparisons <- function(pairs_list,
 #' @param n_datasets_t Minimum number of datasets threshold (NULL for no threshold)
 #' @param label Whether to add labels to top points (TRUE/FALSE)
 #' @param top_label_each Number of top points in each direction to label
+#' @param custom_labels Character vector of gene names to label (overrides top_label_each if provided)
 #' @param label_size Size of text labels
 #' @param point_size Size of points
 #' @param point_alpha Alpha transparency of points
@@ -257,6 +258,7 @@ plotMetaVolcano <- function(meta_df,
                             n_datasets_t = NULL,
                             label = TRUE,
                             top_label_each = 5,
+                            custom_labels = NULL,
                             label_size = 5,
                             point_size = 2.5,
                             point_alpha = 0.6,
@@ -361,14 +363,20 @@ plotMetaVolcano <- function(meta_df,
 
     # Skip labeling if there are no significant points
     if(nrow(meta_df2) > 0) {
-      # Get top points to label, ensuring exact counts
-      ordered_indices <- order(meta_df2$effect_size)
-      n_low <- min(top_label_each, sum(meta_df2$group == "Down"))
-      n_high <- min(top_label_each, sum(meta_df2$group == "Up"))
-      low_indices <- head(ordered_indices, n_low)
-      high_indices <- tail(ordered_indices, n_high)
-      forlabel_names <- unique(c(meta_df2$name[low_indices], meta_df2$name[high_indices]))
-      forlabel_df <- meta_df2[meta_df2$name %in% forlabel_names,]
+      # Determine which genes to label
+      if(!is.null(custom_labels)) {
+        # Use custom labels if provided
+        forlabel_df <- meta_df2[meta_df2$name %in% custom_labels,]
+      } else {
+        # Get top points to label, ensuring exact counts
+        ordered_indices <- order(meta_df2$effect_size)
+        n_low <- min(top_label_each, sum(meta_df2$group == "Down"))
+        n_high <- min(top_label_each, sum(meta_df2$group == "Up"))
+        low_indices <- head(ordered_indices, n_low)
+        high_indices <- tail(ordered_indices, n_high)
+        forlabel_names <- unique(c(meta_df2$name[low_indices], meta_df2$name[high_indices]))
+        forlabel_df <- meta_df2[meta_df2$name %in% forlabel_names,]
+      }
 
       p <- p +
         geom_point(aes(size = n_datasets), shape = 1, data = forlabel_df, show.legend = FALSE) +
