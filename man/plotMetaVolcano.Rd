@@ -11,6 +11,7 @@ plotMetaVolcano(
   n_datasets_t = NULL,
   label = TRUE,
   top_label_each = 5,
+  custom_labels = NULL,
   label_size = 5,
   point_size = 2.5,
   point_alpha = 0.6,
@@ -32,6 +33,8 @@ effect_size, q_value (or p_value), n_datasets, and name}
 \item{label}{Whether to add labels to top points (TRUE/FALSE)}
 
 \item{top_label_each}{Number of top points in each direction to label}
+
+\item{custom_labels}{Character vector of gene names to label (overrides top_label_each if provided)}
 
 \item{label_size}{Size of text labels}
 

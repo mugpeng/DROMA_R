@@ -12,6 +12,7 @@ library(dplyr)
 
 # Note: Replace with your actual database path
 db_path <- "../Data/droma.sqlite"
+# db_path <- "/Users/peng/Desktop/Project/DROMA/Data/droma.sqlite"
 
 # Connect to DROMA database
 connectDROMADatabase(db_path)
@@ -35,8 +36,8 @@ cat("DromaSet objects created successfully!\n")
 
 # Example 1: Load drug data (Paclitaxel) from a single project
 cat("\nExample 1: Loading drug data for Paclitaxel from gCSI\n")
-paclitaxel_data <- loadTreatmentResponseNormalized(gCSI,
-                                         drugs = "Paclitaxel",
+paclitaxel_data <- loadTreatmentResponse(gCSI,
+                                         select_drugs = "Paclitaxel",
                                          return_data = TRUE)
 
 if (is.matrix(paclitaxel_data) && "Paclitaxel" %in% rownames(paclitaxel_data)) {
