@@ -92,6 +92,33 @@ getPatientExpressionData <- function(patient_id,
   return(expr_data)
 }
 
+#' Analyze clinical meta-analysis across datasets
+#'
+#' @description Performs meta-analysis on clinical drug response data across multiple datasets
+#' @param patient_data_list List of patient data from analyzeClinicalDrugResponse
+#' @return Meta-analysis results object or NULL if analysis couldn't be performed
+analyzeClinicalMeta <- function(patient_data_list) {
+  # Transform patient data to match expected format for metaCalcConDis
+  # Response = yes, Non_response = no
+  transformed_pairs <- lapply(patient_data_list, function(patient_data) {
+    list(
+      yes = patient_data$response,      # Response samples
+      no = patient_data$non_response    # Non-response samples
+    )
+  })
+  names(transformed_pairs) <- names(patient_data_list)
+
+  # Use existing meta-analysis function from FuncPairMetaAnalysis
+  meta_result <- tryCatch({
+    metaCalcConDis(transformed_pairs)
+  }, error = function(e) {
+    warning("Meta-analysis failed: ", e$message)
+    return(NULL)
+  })
+
+  return(meta_result)
+}
+
 #' @title Analyze Clinical Drug Response with Omics Data from CTRDB
 #' @description Performs analysis of clinical drug response associations with omics features using CTRDB data
 #' @param select_omics Character string specifying the omics feature name
@@ -392,32 +419,4 @@ analyzeClinicalDrugResponse <- function(select_omics,
   } else {
     return(result)
   }
-}
-
-#' Analyze clinical meta-analysis across datasets
-#'
-#' @description Performs meta-analysis on clinical drug response data across multiple datasets
-#' @param patient_data_list List of patient data from analyzeClinicalDrugResponse
-#' @return Meta-analysis results object or NULL if analysis couldn't be performed
-#' @export
-analyzeClinicalMeta <- function(patient_data_list) {
-  # Transform patient data to match expected format for metaCalcConDis
-  # Response = yes, Non_response = no
-  transformed_pairs <- lapply(patient_data_list, function(patient_data) {
-    list(
-      yes = patient_data$response,      # Response samples
-      no = patient_data$non_response    # Non-response samples
-    )
-  })
-  names(transformed_pairs) <- names(patient_data_list)
-
-  # Use existing meta-analysis function from FuncPairMetaAnalysis
-  meta_result <- tryCatch({
-    metaCalcConDis(transformed_pairs)
-  }, error = function(e) {
-    warning("Meta-analysis failed: ", e$message)
-    return(NULL)
-  })
-
-  return(meta_result)
 }

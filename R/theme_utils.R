@@ -6,7 +6,6 @@
 #' Soft color palette with 26 distinct colors
 #' 
 #' @description A palette of 26 soft, distinct colors for visualization
-#' @export
 soft_palette_26 <- c(
   "#8DD3C7", # Soft teal
   "#FFFFB3", # Soft yellow
