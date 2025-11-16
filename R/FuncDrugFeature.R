@@ -561,55 +561,6 @@ plotCategoryComparison <- function(data, category_column, value_column = "value"
   return(p)
 }
 
-#' Create drug comparison plot
-#'
-#' @description Creates appropriate comparison plots based on variable type
-#' @param data Data frame containing the variables to plot
-#' @param comparison_var Name of the variable to compare against drug sensitivity
-#' @param value_column Name of the value column to use for y-axis (default: "value")
-#' @param value_label Label for the value variable (default: "Drug Sensitivity")
-#' @param num_bins Number of bins to create from continuous variables (default: 4)
-#' @param show_groups_boxplot Logical, whether to show grouped boxplot for continuous variables
-#' @param title Plot title (optional, default: NULL for auto-generated)
-#' @return A ggplot2 object or grid with comparison plots
-#' @export
-createDrugComparisonPlot <- function(data, comparison_var, value_column = "value", value_label = "Drug Sensitivity",
-                                     num_bins = 4, show_groups_boxplot = TRUE, title = NULL) {
-  # Handle missing values in the comparison variable
-  data <- data[!is.na(data[[comparison_var]]), ]
-
-  if (nrow(data) == 0) {
-    return(ggplot() +
-             annotate("text", x = 0.5, y = 0.5, label = "No data available for this comparison") +
-             theme_void())
-  }
-
-  # Check if the comparison variable is numeric/continuous
-  if (is.numeric(data[[comparison_var]])) {
-    # For continuous variables
-    p1 <- plotContinuousComparison(data, cont_column = comparison_var,
-                                   value_column = value_column, value_label = value_label,
-                                   title = title)
-
-    # Also create a boxplot with bins if requested
-    if (show_groups_boxplot) {
-      # Create grouped boxplot
-      p2 <- plotContinuousGroups(data, cont_column = comparison_var,
-                                 value_column = value_column, value_label = value_label,
-                                 num_bins = num_bins, title = title)
-
-      # Return grid of both plots
-      return(patchwork::wrap_plots(p1,p2, ncol = 2))
-    }
-
-    return(p1)
-  } else {
-    # For categorical variables
-    return(plotCategoryComparison(data, category_column = comparison_var,
-                                  value_column = value_column, value_label = value_label,
-                                  title = title))
-  }
-}
 
 #' Create Drug Sensitivity Rank Plot
 #'
