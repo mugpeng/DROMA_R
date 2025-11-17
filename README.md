@@ -1,6 +1,6 @@
 # DROMA.R: Drug Omics Association Analysis Extension for DROMA.Set
 
-[![Website](https://img.shields.io/website?url=https%3A//droma01.github.io/)](https://droma01.github.io/)
+[![Website](https://img.shields.io/website?url=https%3A//droma01.github.io/DROMA/)](https://droma01.github.io/DROMA/)
 [![R](https://img.shields.io/badge/R-%3E%3D4.0.0-blue.svg)](https://www.r-project.org/)
 [![License: mpl-2-0](https://img.shields.io/badge/MPL-2.0-yellow.svg)](https://opensource.org/licenses/mpl-2-0)
 
@@ -17,7 +17,7 @@
 3. **Statistical Rigor**: Appropriate methods for continuous (Spearman) and discrete (Wilcoxon + Cliff's Delta) data
 4. **Flexible Analysis**: Supports both single dataset and multi-dataset meta-analysis workflows
 
-It is a part of [DROMA project](https://github.com/mugpeng/DROMA). Visit the [official DROMA website](https://droma01.github.io/) for comprehensive documentation and interactive examples.
+It is a part of [DROMA project](https://github.com/mugpeng/DROMA). Visit the [official DROMA website](https://droma01.github.io/DROMA/) for comprehensive documentation and interactive examples.
 
 ## Features
 
