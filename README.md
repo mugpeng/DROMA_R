@@ -78,23 +78,6 @@ multi_set <- createMultiDromaSetFromDatabase(
 )
 ```
 
-### 3. Load Data with Z-score Normalization
-
-```r
-# Load molecular profiles (automatically z-score normalized)
-mrna_data <- loadMolecularProfilesNormalized(
-  gCSI,
-  molecular_type = "mRNA",
-  features = "ABCB1"
-)
-
-# Load drug response data (automatically z-score normalized)
-drug_data <- loadTreatmentResponseNormalized(
-  gCSI,
-  drugs = "Paclitaxel"
-)
-```
-
 ### 4. Analyze Drug-Omics Associations
 
 ```r
@@ -142,10 +125,10 @@ print(volcano_plot)
 ## Core Functions by Module
 
 ### 🔧 Data Loading Module (Z-score Normalized by Default)
-- **`loadMolecularProfilesNormalized()`**: Load molecular profiles with automatic z-score normalization
-- **`loadTreatmentResponseNormalized()`**: Load drug response data with automatic z-score normalization
-- **`loadMultiProjectMolecularProfilesNormalized()`**: Load multi-project molecular profiles
-- **`loadMultiProjectTreatmentResponseNormalized()`**: Load multi-project drug response data
+- **`loadMolecularProfiles()`**: Load molecular profiles with automatic z-score normalization
+- **`loadTreatmentResponse()`**: Load drug response data with automatic z-score normalization
+- **`loadMultiProjectMolecularProfiles()`**: Load multi-project molecular profiles
+- **`loadMultiProjectTreatmentResponse()`**: Load multi-project drug response data
 - **`applyZscoreNormalization()`**: Apply z-score normalization to existing data
 - **`isZscoreNormalized()`**: Check if data has been z-score normalized
 
@@ -206,14 +189,14 @@ library(DROMA.R)
 gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
 
 # Load mRNA data with z-score normalization (default)
-mrna_normalized <- loadMolecularProfilesNormalized(
+mrna_normalized <- loadMolecularProfiles(
   gCSI,
   molecular_type = "mRNA",
   features = "ABCB1"
 )
 
 # Load without normalization
-mrna_raw <- loadMolecularProfilesNormalized(
+mrna_raw <- loadMolecularProfiles(
   gCSI,
   molecular_type = "mRNA",
   features = "ABCB1",
@@ -225,7 +208,7 @@ cat("Normalized:", isZscoreNormalized(mrna_normalized))
 cat("Raw:", isZscoreNormalized(mrna_raw))
 
 # Load drug data with normalization
-drug_normalized <- loadTreatmentResponseNormalized(
+drug_normalized <- loadTreatmentResponse(
   gCSI,
   drugs = "Paclitaxel"
 )
@@ -238,7 +221,7 @@ drug_normalized <- loadTreatmentResponseNormalized(
 multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"))
 
 # Load normalized data across projects
-multi_mrna <- loadMultiProjectMolecularProfilesNormalized(
+multi_mrna <- loadMultiProjectMolecularProfiles(
   multi_set,
   molecular_type = "mRNA",
   features = "ABCB1",
@@ -246,7 +229,7 @@ multi_mrna <- loadMultiProjectMolecularProfilesNormalized(
 )
 
 # Load normalized drug data across projects
-multi_drugs <- loadMultiProjectTreatmentResponseNormalized(
+multi_drugs <- loadMultiProjectTreatmentResponse(
   multi_set,
   drugs = "Paclitaxel",
   overlap_only = FALSE

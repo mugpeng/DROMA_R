@@ -83,7 +83,7 @@ if (is.data.frame(tp53_data) && "features" %in% colnames(tp53_data)) {
 
 # Example 4: Load drug data across multiple projects
 cat("\nExample 4: Loading Paclitaxel data across multiple projects\n")
-multi_paclitaxel <- loadMultiProjectTreatmentResponseNormalized(multi_set,
+multi_paclitaxel <- loadMultiProjectTreatmentResponse(multi_set,
                                                      drugs = "Paclitaxel")
 
 cat("Retrieved Paclitaxel data from", length(multi_paclitaxel), "projects:\n")
@@ -97,7 +97,7 @@ for (project_name in names(multi_paclitaxel)) {
 
 # Example 5: Load mRNA data across multiple projects
 cat("\nExample 5: Loading ABCB1 mRNA data across multiple projects\n")
-multi_abcb1 <- loadMultiProjectMolecularProfilesNormalized(multi_set,
+multi_abcb1 <- loadMultiProjectMolecularProfiles(multi_set,
                                                  molecular_type = "mRNA",
                                                  features = "ABCB1")
 
@@ -114,7 +114,7 @@ for (project_name in names(multi_abcb1)) {
 
 # Example 6: Get Paclitaxel data only for cell lines
 cat("\nExample 6: Loading Paclitaxel data only for cell lines\n")
-paclitaxel_cellline <- loadTreatmentResponseNormalized(gCSI,
+paclitaxel_cellline <- loadTreatmentResponse(gCSI,
                                             drugs = "Paclitaxel",
                                             data_type = "CellLine",
                                             return_data = TRUE)
@@ -184,7 +184,7 @@ if (!is.null(multi_drug_data)) {
 # Example 10: Handle non-existent features gracefully
 cat("\nExample 10: Handling non-existent features\n")
 tryCatch({
-  nonexistent_data <- loadTreatmentResponseNormalized(gCSI,
+  nonexistent_data <- loadTreatmentResponse(gCSI,
                                             drugs = "NonExistentDrug",
                                             return_data = TRUE)
 
@@ -212,6 +212,6 @@ cat("\nFeature selection examples completed!\n")
 cat("Key takeaways:\n")
 cat("1. Use createDromaSetFromDatabase() to create single project objects\n")
 cat("2. Use createMultiDromaSetFromDatabase() for multi-project analysis\n")
-cat("3. Use loadTreatmentResponseNormalized() for drug data\n")
+cat("3. Use loadTreatmentResponse() for drug data\n")
 cat("4. Use loadMolecularProfiles() for omics data\n")
 cat("5. Use DROMA.R functions like processDrugData() with DromaSet objects\n")

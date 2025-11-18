@@ -228,7 +228,6 @@ cat("\nDrug feature analysis examples completed!\n")
 cat("Key takeaways:\n")
 cat("1. Use processDrugData() with DromaSet objects for drug data processing\n")
 cat("2. Use getDrugSensitivityData() for comprehensive drug data retrieval\n")
-cat("3. Use loadMolecularProfilesNormalized() to get omics data for visualization\n")
 cat("4. Combine drug and omics data for correlation analysis\n")
 cat("5. Use MultiDromaSet for cross-project comparisons\n")
 

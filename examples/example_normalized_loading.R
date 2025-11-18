@@ -37,7 +37,7 @@ cat("DromaSet objects created successfully!\n\n")
 cat("Example 1: Loading mRNA data with z-score normalization (default)\n")
 
 # Load ABCB1 mRNA data with z-score normalization (default behavior)
-abcb1_normalized <- loadMolecularProfilesNormalized(
+abcb1_normalized <- loadMolecularProfiles(
   CCLE,
   molecular_type = "mRNA",
   features = "ABCB1"
@@ -59,7 +59,7 @@ if (!is.null(abcb1_normalized)) {
 cat("Example 2: Loading mRNA data without z-score normalization\n")
 
 # Load ABCB1 mRNA data without z-score normalization
-abcb1_raw <- loadMolecularProfilesNormalized(
+abcb1_raw <- loadMolecularProfiles(
   gCSI,
   molecular_type = "mRNA",
   features = "ABCB1",
@@ -108,7 +108,7 @@ if (!is.null(abcb1_normalized) && !is.null(abcb1_raw)) {
 cat("Example 4: Loading treatment response data with z-score normalization\n")
 
 # Load Paclitaxel drug data with z-score normalization (default)
-paclitaxel_normalized <- loadTreatmentResponseNormalized(
+paclitaxel_normalized <- loadTreatmentResponse(
   gCSI,
   drugs = "Paclitaxel"
 )
@@ -129,7 +129,7 @@ if (!is.null(paclitaxel_normalized)) {
 cat("Example 5: Loading multi-project data with z-score normalization\n")
 
 # Load ABCB1 mRNA data across multiple projects with normalization
-multi_abcb1_normalized <- loadMultiProjectMolecularProfilesNormalized(
+multi_abcb1_normalized <- loadMultiProjectMolecularProfiles(
   multi_set,
   molecular_type = "mRNA",
   features = "ABCB1",
@@ -158,7 +158,7 @@ if (!is.null(multi_abcb1_normalized) && length(multi_abcb1_normalized) > 0) {
 cat("Example 6: Loading multi-project treatment response with z-score normalization\n")
 
 # Load Paclitaxel data across multiple projects with normalization
-multi_paclitaxel_normalized <- loadMultiProjectTreatmentResponseNormalized(
+multi_paclitaxel_normalized <- loadMultiProjectTreatmentResponse(
   multi_set,
   drugs = "Paclitaxel",
   overlap_only = FALSE
@@ -186,7 +186,7 @@ if (!is.null(multi_paclitaxel_normalized) && length(multi_paclitaxel_normalized)
 cat("Example 7: Applying z-score normalization to existing data\n")
 
 # Load raw data first
-raw_mrna_data <- loadMolecularProfilesNormalized(
+raw_mrna_data <- loadMolecularProfiles(
   gCSI,
   molecular_type = "mRNA",
   features = c("ABCB1", "TP53", "BRCA1"),
@@ -216,7 +216,7 @@ if (!is.null(raw_mrna_data)) {
 cat("Example 8: Attempting normalization on discrete data (mutations)\n")
 
 # Try to load mutation data with normalization (should give warning)
-tp53_mutations <- loadMolecularProfilesNormalized(
+tp53_mutations <- loadMolecularProfiles(
   gCSI,
   molecular_type = "mutation_gene",
   features = "TP53",
@@ -239,7 +239,7 @@ cat("Example 9: Loading all mRNA features with z-score normalization\n")
 
 # Load all mRNA features (this might take time with large datasets)
 # In practice, you might want to limit this or use specific features
-all_mrna_normalized <- loadMolecularProfilesNormalized(
+all_mrna_normalized <- loadMolecularProfiles(
   gCSI,
   molecular_type = "mRNA",
   # features = NULL means load all features
@@ -277,8 +277,8 @@ if (!is.null(multi_abcb1_normalized) && !is.null(multi_paclitaxel_normalized)) {
 
 cat("Normalized data loading examples completed!\n")
 cat("Key takeaways:\n")
-cat("1. Use loadMolecularProfilesNormalized() for normalized molecular data\n")
-cat("2. Use loadTreatmentResponseNormalized() for normalized drug response data\n")
+cat("1. Use loadMolecularProfiles() for normalized molecular data\n")
+cat("2. Use loadTreatmentResponse() for normalized drug response data\n")
 cat("3. Use loadMultiProject*Normalized() for multi-project normalized data\n")
 cat("4. Set zscore=FALSE to disable normalization when needed\n")
 cat("5. Use isZscoreNormalized() to check if data has been normalized\n")
