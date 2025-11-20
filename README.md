@@ -162,10 +162,11 @@ print(volcano_plot)
 ### 🏥 Clinical Trial Database (CTRDB) Module
 - **`analyzeClinicalDrugResponse()`**: Analyze clinical drug response with omics data
 - **`analyzeStratifiedCTRDB()`**: Stratified analysis across different drugs
-- **`getPatientExpressionData()`**: Retrieve patient expression data from CTRDB
 - **`analyzeClinicalMeta()`**: Meta-analysis across clinical datasets
 - **`getClinicalSummary()`**: Summary statistics for clinical analysis
 - **`getStratifiedCTRDBSummary()`**: Summary for stratified CTRDB analysis
+
+> **Note**: `getPatientExpressionData()` has been moved to `DROMA.Set` package (CTRDB_SQLManager.R) for better separation of database operations and analysis functions.
 
 ### 🛠 Utility Functions
 - **`bright_palette_26`**: Pre-defined color palette for visualizations
