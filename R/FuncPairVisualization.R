@@ -442,6 +442,7 @@ createForestPlot <- function(meta_obj,
 #' @param x_title Common x-axis title (optional, only for correlation plots)
 #' @param y_title Common y-axis title
 #' @return A patchwork/ggplot object with common axis labels
+#' @export
 createPlotWithCommonAxes <- function(p, x_title = NULL, y_title = NULL) {
   # Check if plot object is valid
   if (is.null(p)) {
