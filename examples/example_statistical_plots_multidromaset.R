@@ -33,7 +33,7 @@ multi_set <- MultiDromaSet(
 # Generate all statistical plots
 cat("Generating comprehensive statistical plots...\n")
 all_plots <- generateStatisticalPlots(
-  project_names = "all",
+  projects = "all",
   plot_types = "all",
   use_gap_plots = TRUE
 )

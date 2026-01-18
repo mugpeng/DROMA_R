@@ -500,17 +500,17 @@ plotCategoryComparison <- function(data, category_column, value_column = "value"
   data_filtered <- data[data[[category_column]] %in% valid_categories, ]
 
   # Calculate median for each category and sort by median value
-  category_medians <- tapply(data_filtered[[value_column]], 
-                             data_filtered[[category_column]], 
+  category_medians <- tapply(data_filtered[[value_column]],
+                             data_filtered[[category_column]],
                              median, na.rm = TRUE)
   sorted_categories <- names(sort(category_medians))
-  
+
   # Special handling for TumorType: put "non-cancer" at the end if it exists
   if (category_column == "TumorType" && "non-cancer" %in% sorted_categories) {
     # Reorder categories to put "non-cancer" last
     sorted_categories <- c(sorted_categories[sorted_categories != "non-cancer"], "non-cancer")
   }
-  
+
   data_filtered[[category_column]] <- factor(data_filtered[[category_column]], levels = sorted_categories)
 
   # Calculate overall median for reference line
@@ -818,11 +818,11 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
   # Add highlighting circles and labels for highlighted samples
   if (length(highlight_samples) > 0) {
     highlighted_data <- drug_data[drug_data$highlighted, ]
-    
+
     # For numeric highlight, work with unique samples; otherwise use all highlighted data
     if (is_numeric_highlight) {
       n_unique_highlighted <- length(unique(highlighted_data$SampleID))
-      
+
       # Limit labeling to top 20 if too many highlighted samples
       if (n_unique_highlighted > 20) {
         # Sort by rank and take top 20 unique samples
@@ -830,7 +830,7 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
         unique_samples_to_label <- unique(highlighted_data$SampleID)[1:20]
         highlighted_data_to_label <- highlighted_data[highlighted_data$SampleID %in% unique_samples_to_label, ]
         highlighted_data_to_label <- highlighted_data_to_label[!duplicated(highlighted_data_to_label$SampleID), ]
-        
+
         # Warn user about limitation
         message("Note: ", n_unique_highlighted, " unique samples were highlighted, but only the top 20 will be labeled to avoid overcrowding.")
       } else {
@@ -844,7 +844,7 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
         # Sort by rank and take top 20
         highlighted_data <- highlighted_data[order(highlighted_data$rank), ]
         highlighted_data_to_label <- highlighted_data[1:20, ]
-        
+
         # Warn user about limitation
         message("Note: ", nrow(highlighted_data), " samples were highlighted, but only the top 20 will be labeled to avoid overcrowding.")
       } else {
@@ -852,7 +852,7 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
       }
       highlighted_data_for_circle <- highlighted_data
     }
-    
+
     # Create labels with project info if merged
     if (merge && "ProjectID" %in% colnames(highlighted_data_to_label)) {
       highlighted_data_to_label$label <- paste0(highlighted_data_to_label$SampleID, " (", highlighted_data_to_label$ProjectID, ")")
@@ -900,11 +900,11 @@ createSingleRankPlot <- function(drug_data, select_drugs, highlight, color, zsco
     x = "Rank (1 = Most Sensitive)",
     y = value_label
   )
-  
+
   if (!is.null(color_data) && color_title != "") {
     lab_list$color <- color_title
   }
-  
+
   p <- p +
     do.call(labs, lab_list) +
     theme_bw() +

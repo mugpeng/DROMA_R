@@ -218,8 +218,7 @@ getAndValidateFeatureList <- function(dromaset_object, feature_type, feature_nam
     if (inherits(dromaset_object, "DromaSet")) {
       # For DromaSet, use listDROMAFeatures
       tryCatch({
-        feature_list <- listDROMAFeatures(dromaset_object@name, feature_type,
-                        data_type = data_type, tumor_type = tumor_type)
+        feature_list <- listDROMAFeatures(dromaset_object@name, feature_type)
       }, error = function(e) {
         feature_list <<- NULL
       })
@@ -228,8 +227,7 @@ getAndValidateFeatureList <- function(dromaset_object, feature_type, feature_nam
       all_feature_lists <- list()
       for (projects in names(dromaset_object@DromaSets)) {
         tryCatch({
-          project_features <- listDROMAFeatures(projects, feature_type,
-                          data_type = data_type, tumor_type = tumor_type)
+          project_features <- listDROMAFeatures(projects, feature_type)
           if (length(project_features) > 0) {
             all_feature_lists[[projects]] <- project_features
           }
@@ -256,8 +254,9 @@ getAndValidateFeatureList <- function(dromaset_object, feature_type, feature_nam
     
     if (inherits(dromaset_object, "DromaSet")) {
       tryCatch({
-        all_available_features <- listDROMAFeatures(dromaset_object@name, feature_type,
-                        data_type = data_type, tumor_type = tumor_type)
+        # Note: listDROMAFeatures does not support data_type/tumor_type filtering
+        # Filtering by data_type/tumor_type will be done during data loading
+        all_available_features <- listDROMAFeatures(dromaset_object@name, feature_type)
       }, error = function(e) {
         # Silently continue on error
       })
@@ -266,8 +265,9 @@ getAndValidateFeatureList <- function(dromaset_object, feature_type, feature_nam
       all_feature_lists <- list()
       for (projects in names(dromaset_object@DromaSets)) {
         tryCatch({
-          project_features <- listDROMAFeatures(projects, feature_type,
-                          data_type = data_type, tumor_type = tumor_type)
+          # Note: listDROMAFeatures does not support data_type/tumor_type filtering
+          # Filtering by data_type/tumor_type will be done during data loading
+          project_features <- listDROMAFeatures(projects, feature_type)
           if (length(project_features) > 0) {
             all_feature_lists[[projects]] <- project_features
           }
