@@ -13,26 +13,26 @@ createDefaultProgressCallback <- function(show_progress = TRUE, update_interval 
     # Return a no-op function
     return(function(done, total, elapsed) {})
   }
-  
+
   # Initialize tracking variables in closure
   last_update_time <- 0
-  
+
   # Return the callback function
   function(done, total, elapsed) {
     # Only update if enough time has passed since last update
     if (elapsed - last_update_time < update_interval && done < total) {
       return(invisible(NULL))
     }
-    
+
     # Update last update time
     last_update_time <<- elapsed
-    
+
     # Calculate progress
     progress_pct <- (done / total) * 100
-    
+
     # Estimate remaining time
     time_remaining <- estimateTimeRemaining(done, total, elapsed)
-    
+
     # Format messages
     elapsed_str <- formatTime(elapsed)
     remaining_str <- if (is.finite(time_remaining)) {
@@ -40,7 +40,7 @@ createDefaultProgressCallback <- function(show_progress = TRUE, update_interval 
     } else {
       "calculating..."
     }
-    
+
     # Display progress
     if (done < total) {
       message(sprintf(
@@ -54,7 +54,7 @@ createDefaultProgressCallback <- function(show_progress = TRUE, update_interval 
         done, total, elapsed_str
       ))
     }
-    
+
     invisible(NULL)
   }
 }
@@ -175,16 +175,16 @@ processFeaturePair <- function(feature_idx, feature2_list, dromaset_object,
     }
 
     if(is.null(cal_meta_re)) return(NULL)
-    
+
     # Extract p_value and effect_size
     p_val <- cal_meta_re[["pval.random"]]
     eff_size <- cal_meta_re[["TE.random"]]
     n_datasets <- length(cal_meta_re[["studlab"]])
-    
+
     # Replace NA values: p_value -> 1, effect_size -> 0
     if(is.na(p_val)) p_val <- 1
     if(is.na(eff_size)) eff_size <- 0
-    
+
     results <- data.frame(
       p_value = p_val,
       effect_size = eff_size,
@@ -209,7 +209,7 @@ processFeaturePair <- function(feature_idx, feature2_list, dromaset_object,
 getAndValidateFeatureList <- function(dromaset_object, feature_type, feature_names = NULL,
                                       data_type = "all", tumor_type = "all") {
   feature_list <- NULL
-  
+
   # If specific feature names are provided, use them as the starting point
   if (!is.null(feature_names)) {
     feature_list <- unique(feature_names)
@@ -241,17 +241,17 @@ getAndValidateFeatureList <- function(dromaset_object, feature_type, feature_nam
       }
     }
   }
-  
+
   # Validate that we have a feature list
   if (is.null(feature_list) || length(feature_list) == 0) {
     stop("Could not retrieve feature list for feature_type: ", feature_type)
   }
-  
+
   # If specific feature names were provided, validate they exist
   if (!is.null(feature_names)) {
     # Get all available features for validation
     all_available_features <- NULL
-    
+
     if (inherits(dromaset_object, "DromaSet")) {
       tryCatch({
         # Note: listDROMAFeatures does not support data_type/tumor_type filtering
@@ -279,7 +279,7 @@ getAndValidateFeatureList <- function(dromaset_object, feature_type, feature_nam
         all_available_features <- unique(unlist(all_feature_lists))
       }
     }
-    
+
     # Check for invalid features
     if (!is.null(all_available_features)) {
       invalid_features <- feature_names[!feature_names %in% all_available_features]
@@ -289,13 +289,13 @@ getAndValidateFeatureList <- function(dromaset_object, feature_type, feature_nam
         # Keep only valid features
         feature_list <- feature_list[feature_list %in% all_available_features]
       }
-      
+
       if (length(feature_list) == 0) {
         stop("None of the specified features are available")
       }
     }
   }
-  
+
   return(feature_list)
 }
 
@@ -403,7 +403,7 @@ getSignificantFeatures <- function(meta_df,
                        meta_df[[p_val_col]] < P_t &
                        meta_df$n_datasets >= n_datasets_t), ]
   }
-  
+
   # Add direction column
   if(nrow(sig_df) > 0) {
     sig_df$direction <- ifelse(sig_df$effect_size > 0, "Up", "Down")
@@ -411,7 +411,7 @@ getSignificantFeatures <- function(meta_df,
     col_order <- c("name", "direction", setdiff(names(sig_df), c("name", "direction")))
     sig_df <- sig_df[, col_order]
   }
-  
+
   return(sig_df)
 }
 
@@ -438,23 +438,23 @@ getSignificantFeatures <- function(meta_df,
 getIntersectSignificantFeatures <- function(...) {
   # Get input data frames
   args <- list(...)
-  
+
   # If first argument is a list, use it
   if (length(args) == 1 && is.list(args[[1]]) && !is.data.frame(args[[1]])) {
     df_list <- args[[1]]
   } else {
     df_list <- args
   }
-  
+
   # Validate inputs
   if (length(df_list) < 2) {
     stop("At least 2 data frames are required for intersection")
   }
-  
+
   if (is.null(names(df_list)) || any(names(df_list) == "")) {
     stop("All input data frames must be named. Use named arguments or a named list.")
   }
-  
+
   # Validate each data frame has 'name' column
   for (i in seq_along(df_list)) {
     if (!is.data.frame(df_list[[i]])) {
@@ -464,62 +464,62 @@ getIntersectSignificantFeatures <- function(...) {
       stop(paste0("Data frame '", names(df_list)[i], "' must contain a 'name' column"))
     }
   }
-  
+
   # Find intersection of feature names
   common_names <- Reduce(intersect, lapply(df_list, function(df) df$name))
-  
+
   if (length(common_names) == 0) {
     warning("No common features found across all inputs")
     return(data.frame(name = character(0)))
   }
-  
+
   # Filter for consistent direction across all inputs
   if (all(sapply(df_list, function(df) "direction" %in% colnames(df)))) {
     consistent_names <- common_names[sapply(common_names, function(fname) {
       directions <- sapply(df_list, function(df) df$direction[df$name == fname])
       length(unique(directions)) == 1
     })]
-    
+
     if (length(consistent_names) < length(common_names)) {
       n_filtered <- length(common_names) - length(consistent_names)
       message(sprintf("Filtered out %d feature(s) with inconsistent directions", n_filtered))
     }
     common_names <- consistent_names
-    
+
     if (length(common_names) == 0) {
       warning("No features with consistent directions found across all inputs")
       return(data.frame(name = character(0)))
     }
   }
-  
+
   # Build result data frame
   result <- data.frame(name = common_names, stringsAsFactors = FALSE)
-  
+
   # Merge each data frame with suffixes
   for (i in seq_along(df_list)) {
     df_name <- names(df_list)[i]
     df <- df_list[[i]]
-    
+
     # Filter to common names only
     df_filtered <- df[df$name %in% common_names, ]
-    
+
     # Add suffix to all columns except 'name'
     colnames_to_rename <- setdiff(colnames(df_filtered), "name")
     for (col in colnames_to_rename) {
       colnames(df_filtered)[colnames(df_filtered) == col] <- paste0(col, "_", df_name)
     }
-    
+
     # Merge with result
     result <- merge(result, df_filtered, by = "name", all.x = TRUE)
   }
-  
+
   # Sort by name
   result <- result[order(result$name), ]
   rownames(result) <- NULL
-  
-  message(sprintf("Found %d common significant features across %d analyses", 
+
+  message(sprintf("Found %d common significant features across %d analyses",
                   nrow(result), length(df_list)))
-  
+
   return(result)
 }
 
@@ -548,10 +548,10 @@ getIntersectSignificantFeatures <- function(...) {
 #' @param tumor_type Filter by tumor type ("all" or specific tumor types)
 #' @param overlap_only For MultiDromaSet, whether to use only overlapping samples (default: FALSE)
 #' @param cores Number of CPU cores to use for parallel processing (uses future + furrr with task chunking for efficiency)
-#' @param show_progress Logical, whether to show progress updates (default: TRUE). 
+#' @param show_progress Logical, whether to show progress updates (default: TRUE).
 #'   Progress updates include: current count, percentage, elapsed time, and estimated time remaining.
 #'   Serial mode (cores=1): uses built-in progress tracker. Parallel mode (cores>1): uses progressr package if available.
-#' @param progress_callback Optional custom callback function for progress updates (serial mode only). 
+#' @param progress_callback Optional custom callback function for progress updates (serial mode only).
 #'   If NULL (default), uses built-in progress tracking. Function signature: function(done, total, elapsed_seconds)
 #' @param test_top_n Integer, number of top features to test (default: NULL for all features)
 #' @param preloaded Logical or NULL, whether to preload all feature2 data at once (default: NULL for auto).
@@ -578,18 +578,18 @@ getIntersectSignificantFeatures <- function(...) {
 #' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", test_top_n = 50)
 #'
 #' # Force preload for faster processing (recommended for >1000 continuous features)
-#' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", 
+#' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA",
 #'                                         preloaded = TRUE, cores = 8)
 #'
 #' # Force on-demand loading for memory efficiency (continuous features only)
-#' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", 
+#' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA",
 #'                                         preloaded = FALSE)
 #'
 #' # Auto mode (default): preloads when >1000 continuous features
 #' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA")
 #'
 #' # Discrete features always use preload mode (required)
-#' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mutation_gene", 
+#' results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mutation_gene",
 #'                                         cores = 8)
 #'
 #' # With progress tracking (serial mode, cores = 1)
@@ -820,10 +820,10 @@ batchFindSignificantFeatures <- function(dromaset_object,
                                         data_type, tumor_type, overlap_only, is_continuous2,
                                         return_all_samples = !is_continuous2)
     }
-    
+
     # [OPTIMIZATION 3] Pre-filter feature2 data to avoid repeated filtering in worker
     if (!is.null(preloaded_feas2)) {
-      preloaded_feas2 <- filterFeatureData(preloaded_feas2, min_samples = 3, 
+      preloaded_feas2 <- filterFeatureData(preloaded_feas2, min_samples = 3,
                                           is_discrete_with_all = !is_continuous2)
     }
     message("Preloading completed. Starting batch analysis...")
@@ -839,7 +839,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
       for (j in seq_along(preloaded_feas2)) {
         cache_key <- paste(names(selected_feas1)[i], names(preloaded_feas2)[j], sep = "||")
         sample_intersection_cache[[cache_key]] <- intersect(
-          names(selected_feas1[[i]]), 
+          names(selected_feas1[[i]]),
           colnames(preloaded_feas2[[j]])
         )
       }
@@ -865,7 +865,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
       preloaded_data = preloaded_feas2
     )
   }
-  
+
   # Wrap with suppress only if needed
   worker_function <- if (!verbose) {
     function(x) {
@@ -887,7 +887,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
     }
   }
   message("Please be patient, it may take long time to run.")
-  
+
   # Use parallel processing if cores > 1
   if (cores > 1) {
     # Warn if using on-demand loading without preload
@@ -895,7 +895,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
       message("Note: Parallel processing without preloaded data may have database contention.")
       message("Consider using preloaded=TRUE for better performance with cores>1")
     }
-    
+
     # Setup future plan: use multicore (memory-efficient) on Unix/Mac, multisession on Windows
     # Increase memory limit for both backends
     old_size <- getOption("future.globals.maxSize")
@@ -914,7 +914,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
       future::plan(future::sequential)
       options(future.globals.maxSize = old_size)
     }, add = TRUE)
-    
+
     # [OPTIMIZATION 4] Adaptive task chunking based on dataset size
     n_features <- length(feature2_list)
 
@@ -933,9 +933,9 @@ batchFindSignificantFeatures <- function(dromaset_object,
       # Large: 8 tasks/core with minimum chunk_size to avoid excessive scheduling overhead
       max(50, min(200, ceiling(n_features / (cores * 8))))
     }
-    chunks <- split(seq_along(feature2_list), 
+    chunks <- split(seq_along(feature2_list),
                    ceiling(seq_along(feature2_list) / chunk_size))
-    
+
     # Process chunks in parallel with progressr support
     if (show_progress && requireNamespace("progressr", quietly = TRUE)) {
       progressr::with_progress({
@@ -956,7 +956,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
         lapply(indices, worker_function)
       }, .options = furrr::furrr_options(seed = TRUE))
     }
-    
+
     # Flatten results
     cal_re_list <- unlist(chunk_results, recursive = FALSE)
   } else {
@@ -980,13 +980,13 @@ batchFindSignificantFeatures <- function(dromaset_object,
   # Log completion
   total_time <- difftime(Sys.time(), start_time, units = "secs")
   message(sprintf("Analysis completed in %s", formatTime(as.numeric(total_time))))
-  
+
   # Report filtered features if any
   n_filtered <- length(feature2_list) - nrow(cal_re_df)
   if (n_filtered > 0) {
     message(sprintf("Note: %d feature(s) were filtered out due to insufficient data or failed processing.", n_filtered))
   }
-  
+
   message(sprintf("Found %d significant associations out of %d valid features.",
                   sum(cal_re_df$q_value < 0.01), nrow(cal_re_df)))
 

@@ -12,8 +12,9 @@
 #' @param overlap_only For MultiDromaSet, whether to use only overlapping samples (default: FALSE)
 #' @param merged_enabled Logical, whether to create a merged dataset from all studies
 #' @param meta_enabled Logical, whether to perform meta-analysis
-#' @param zscore Logical, whether to apply z-score normalization to treatment response and molecular profiles (default: TRUE). If FALSE, merged_enabled should be set to FALSE to avoid combining non-normalized data from different studies.
+#' @param zscore Logical, whether to apply z-score normalization to molecular profiles (default: TRUE). Note: Drug sensitivity data always uses raw values regardless of this parameter. If FALSE, merged_enabled should be set to FALSE to avoid combining non-normalized data from different studies.
 #' @param data_type_anno Optional character string to add as annotation in plot titles (e.g., "Cell lines"). If provided, it will be appended to titles as "(annotation)"
+#' @param plot_ncol Number of columns for multi-plot layout (default: 3). When there are 4 plots, automatically uses 2 columns for a 2x2 layout.
 #' @return A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), meta-analysis results, and data
 #' @export
 #' @examples
@@ -33,7 +34,8 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
                                 merged_enabled = TRUE,
                                 meta_enabled = TRUE,
                                 zscore = TRUE,
-                                data_type_anno = NULL){
+                                data_type_anno = NULL,
+                                plot_ncol = 3){
 
   # Validate input object
   if (!inherits(dromaset_object, c("DromaSet", "MultiDromaSet"))) {
@@ -165,14 +167,17 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
       # When only one pair, use single plot method (like merged_plot)
       single_pair <- individual_pairs[[1]]
       result$plot <- plotGroupComparison(single_pair$no, single_pair$yes,
-                                        group_labels = c(paste("Without", select_features), paste("With", select_features)),
+                                        group_labels = c(paste("Without", select_features, "mut"), paste("With", select_features, "mut")),
                                         title = paste0(paste(feature_type, ":", select_features, "vs", select_drugs), title_suffix),
                                         y_label = "drug sensitivity(Area Above Curve)")
     } else if (length(individual_pairs) > 1) {
+      # Determine ncol: use 2 columns when there are 4 plots, otherwise use plot_ncol
+      ncol_value <- if (length(individual_pairs) == 4) 2 else plot_ncol
       multi_plot <- plotMultipleGroupComparisons(individual_pairs,
-                                                group_labels = c(paste("Without", select_features), paste("With", select_features)),
+                                                group_labels = c(paste("Without", select_features, "mut"), paste("With", select_features, "mut")),
                                                 x_label = paste0(select_features, " (", feature_type, ")"),
                                                 y_label = "Drug Response",
+                                                ncol = ncol_value,
                                                 data_type_anno = data_type_anno)
       # Add common axis label
       result$plot <- createPlotWithCommonAxes(multi_plot,
@@ -182,7 +187,7 @@ analyzeDrugOmicPair <- function(dromaset_object, feature_type, select_features,
     # Create plot for merged dataset if available
     if (!is.null(merged_pair) && merged_enabled) {
       result$merged_plot <- plotGroupComparison(merged_pair$no, merged_pair$yes,
-                                                group_labels = c(paste("Without", select_features), paste("With", select_features)),
+                                                group_labels = c(paste("Without", select_features, "mut"), paste("With", select_features, "mut")),
                                                 title = paste0(paste(feature_type, ":", select_features, "vs", select_drugs), title_suffix),
                                                 y_label = "drug sensitivity(Area Above Curve)")
     }

@@ -68,8 +68,9 @@ plotGroupComparison <- function(no_values, yes_values,
     theme_bw() +
     theme(
       title = element_text(size = 15, face = "bold"),
-      axis.text = element_text(size = 12),
+      axis.text = element_text(size = 11),
       axis.title = element_text(size = 12),
+      axis.text.x = element_text(angle = 15, hjust = 0.85),
       legend.position = "none"
     ) +
     coord_cartesian(ylim = c(NA, max(box_df$values) + max(box_df$values)/20)) +
@@ -203,8 +204,11 @@ plotMultipleGroupComparisons <- function(pairs_list,
     # Combine plots using patchwork if plots exist
   if (length(p_list) > 0) {
     if (requireNamespace("patchwork", quietly = TRUE)) {
+      # Determine ncol: use 2 columns when there are 4 plots, otherwise follow existing logic
       if (length(p_list) <= 3) {
         combined_plot <- patchwork::wrap_plots(p_list, ncol = length(p_list))
+      } else if (length(p_list) == 4) {
+        combined_plot <- patchwork::wrap_plots(p_list, ncol = 2)
       } else {
         combined_plot <- patchwork::wrap_plots(p_list, ncol = ncol)
       }

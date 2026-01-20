@@ -527,7 +527,7 @@ generateCharacteristicsPlot <- function(project_info, reverse = FALSE) {
   plot_data$Point_Color <- ifelse(plot_data$Available,
                                  as.character(plot_data$Dataset_Type),
                                  NA_character_)
-  
+
   # Filter data for available and unavailable points
   available_data <- plot_data[plot_data$Available, ]
   unavailable_data <- plot_data[!plot_data$Available, ]
@@ -805,7 +805,7 @@ generateTumorTypePlot <- function(sample_annotations) {
         scale_color_brewer(palette = "Set3") +
         # Expand x-axis limits to ensure proper viewport dimensions
         scale_x_discrete(expand = expansion(mult = c(0.15, 0.15))) +
-        # Expand y-axis limits 
+        # Expand y-axis limits
         scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
         theme_bw() +
         theme(
