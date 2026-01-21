@@ -40,11 +40,11 @@ batchFindSignificantFeatures(
 
 \item{cores}{Number of CPU cores to use for parallel processing (uses future + furrr with task chunking for efficiency)}
 
-\item{show_progress}{Logical, whether to show progress updates (default: TRUE). 
+\item{show_progress}{Logical, whether to show progress updates (default: TRUE).
 Progress updates include: current count, percentage, elapsed time, and estimated time remaining.
 Serial mode (cores=1): uses built-in progress tracker. Parallel mode (cores>1): uses progressr package if available.}
 
-\item{progress_callback}{Optional custom callback function for progress updates (serial mode only). 
+\item{progress_callback}{Optional custom callback function for progress updates (serial mode only).
 If NULL (default), uses built-in progress tracking. Function signature: function(done, total, elapsed_seconds)}
 
 \item{test_top_n}{Integer, number of top features to test (default: NULL for all features)}
@@ -92,18 +92,18 @@ results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA",
 results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", test_top_n = 50)
 
 # Force preload for faster processing (recommended for >1000 continuous features)
-results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", 
+results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA",
                                         preloaded = TRUE, cores = 8)
 
 # Force on-demand loading for memory efficiency (continuous features only)
-results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA", 
+results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA",
                                         preloaded = FALSE)
 
 # Auto mode (default): preloads when >1000 continuous features
 results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mRNA")
 
 # Discrete features always use preload mode (required)
-results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mutation_gene", 
+results <- batchFindSignificantFeatures(multi_set, "drug", "Paclitaxel", "mutation_gene",
                                         cores = 8)
 
 # With progress tracking (serial mode, cores = 1)

@@ -15,7 +15,8 @@ analyzeDrugOmicPair(
   merged_enabled = TRUE,
   meta_enabled = TRUE,
   zscore = TRUE,
-  data_type_anno = NULL
+  data_type_anno = NULL,
+  plot_ncol = 3
 )
 }
 \arguments{
@@ -37,9 +38,11 @@ analyzeDrugOmicPair(
 
 \item{meta_enabled}{Logical, whether to perform meta-analysis}
 
-\item{zscore}{Logical, whether to apply z-score normalization to treatment response and molecular profiles (default: TRUE). If FALSE, merged_enabled should be set to FALSE to avoid combining non-normalized data from different studies.}
+\item{zscore}{Logical, whether to apply z-score normalization to molecular profiles (default: TRUE). Note: Drug sensitivity data always uses raw values regardless of this parameter. If FALSE, merged_enabled should be set to FALSE to avoid combining non-normalized data from different studies.}
 
 \item{data_type_anno}{Optional character string to add as annotation in plot titles (e.g., "Cell lines"). If provided, it will be appended to titles as "(annotation)"}
+
+\item{plot_ncol}{Number of columns for multi-plot layout (default: 3). When there are 4 plots, automatically uses 2 columns for a 2x2 layout.}
 }
 \value{
 A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), meta-analysis results, and data

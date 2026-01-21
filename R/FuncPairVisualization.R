@@ -81,6 +81,7 @@ plotGroupComparison <- function(no_values, yes_values,
   return(p)
 }
 
+
 #' Plot multiple correlation plots in a grid
 #'
 #' @description Creates and combines multiple correlation plots
