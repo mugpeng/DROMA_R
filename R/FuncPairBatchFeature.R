@@ -417,9 +417,16 @@ getSignificantFeatures <- function(meta_df,
 
 #' Get intersection of significant features across multiple analyses
 #'
-#' @description Identifies features that are significant across multiple meta-analysis results and merges their statistics
+#' @description Identifies features that are significant across multiple meta-analysis results and merges their statistics.
+#' When all inputs have a direction column, only features with consistent direction (all Up or all Down) are retained.
 #' @param ... Named data frames from getSignificantFeatures(), or a named list of such data frames.
 #'   Names will be used as suffixes for columns (e.g., effect_size_drug1, effect_size_drug2)
+#' @param direction_cols Character vector or named list specifying the direction column name for each input.
+#'   Used to align direction when inputs use different column names (e.g. first table uses "direction_cell").
+#'   - NULL (default): use "direction" for all inputs
+#'   - Character of length 1: use this column name for all inputs
+#'   - Character of length n: use direction_cols[i] for the i-th input
+#'   - Named vector/list: use direction_cols[[name]] for the input named 'name'
 #' @return Data frame with intersecting features and their statistics from each analysis (columns suffixed by input names)
 #' @export
 #' @examples
@@ -431,11 +438,15 @@ getSignificantFeatures <- function(meta_df,
 #' # Find common significant features (using named arguments)
 #' common <- getIntersectSignificantFeatures(drug1 = sig_drug1, drug2 = sig_drug2)
 #'
+#' # First table uses "direction_cell", second uses "direction"
+#' common <- getIntersectSignificantFeatures(cell = sig_cell, pdo = sig_pdo,
+#'   direction_cols = c(cell = "direction_cell", pdo = "direction"))
+#'
 #' # Or using a named list
 #' sig_list <- list(Paclitaxel = sig_drug1, Gemcitabine = sig_drug2, Cisplatin = sig_drug3)
 #' common <- getIntersectSignificantFeatures(sig_list)
 #' }
-getIntersectSignificantFeatures <- function(...) {
+getIntersectSignificantFeatures <- function(..., direction_cols = NULL) {
   # Get input data frames
   args <- list(...)
 
@@ -465,6 +476,22 @@ getIntersectSignificantFeatures <- function(...) {
     }
   }
 
+  # Resolve direction column name for each input
+  dir_cols <- if (is.null(direction_cols)) {
+    rep("direction", length(df_list))
+  } else if (length(direction_cols) == 1) {
+    rep(direction_cols[1], length(df_list))
+  } else if (!is.null(names(direction_cols)) && all(names(direction_cols) != "")) {
+    vapply(names(df_list), function(nm) {
+      if (nm %in% names(direction_cols)) direction_cols[[nm]] else "direction"
+    }, character(1))
+  } else if (length(direction_cols) == length(df_list)) {
+    as.character(direction_cols)
+  } else {
+    stop("direction_cols must be NULL, length 1, length equal to number of inputs, or a named vector/list")
+  }
+  names(dir_cols) <- names(df_list)
+
   # Find intersection of feature names
   common_names <- Reduce(intersect, lapply(df_list, function(df) df$name))
 
@@ -473,12 +500,19 @@ getIntersectSignificantFeatures <- function(...) {
     return(data.frame(name = character(0)))
   }
 
-  # Filter for consistent direction across all inputs
-  if (all(sapply(df_list, function(df) "direction" %in% colnames(df)))) {
-    consistent_names <- common_names[sapply(common_names, function(fname) {
-      directions <- sapply(df_list, function(df) df$direction[df$name == fname])
-      length(unique(directions)) == 1
-    })]
+  # Filter for consistent direction across all inputs (using resolved direction columns)
+  has_dir <- vapply(seq_along(df_list), function(i) {
+    dir_cols[i] %in% colnames(df_list[[i]])
+  }, logical(1))
+  if (all(has_dir)) {
+    consistent_names <- common_names[vapply(common_names, function(fname) {
+      directions <- vapply(seq_along(df_list), function(i) {
+        dc <- dir_cols[i]
+        vals <- df_list[[i]][[dc]][df_list[[i]]$name == fname]
+        if (length(vals) == 0) NA_character_ else vals[1]
+      }, character(1))
+      length(unique(na.omit(directions))) == 1 && !any(is.na(directions))
+    }, logical(1))]
 
     if (length(consistent_names) < length(common_names)) {
       n_filtered <- length(common_names) - length(consistent_names)

@@ -328,3 +328,90 @@ analyzeClinicalDrugResponse <- function(select_omics,
     return(result)
   }
 }
+
+#' Batch analysis of clinical drug response for multiple omics features
+#'
+#' @description For each omics feature, runs analyzeClinicalDrugResponse against a drug,
+#'   extracts meta-analysis results, and returns a data frame in the same format as batchFindSignificantFeatures.
+#' @param select_omics Character vector of omics feature names (e.g., gene symbols)
+#' @param select_drugs Character string specifying the drug name
+#' @param data_type Filter by data type ("all", "CellLine", "PDO", "PDC", "PDX")
+#' @param tumor_type Filter by tumor type ("all" or specific tumor types)
+#' @param cores Number of CPU cores (default: 1). Parallelization not implemented; kept for API consistency.
+#' @return Data frame with p_value, effect_size, n_datasets, name, q_value. For multi-dataset cases, meta-analysis is used; for single-dataset cases, Wilcoxon test and Cliff's Delta are used (consistent with metaCalcConDis).
+#' @export
+#' @examples
+#' \dontrun{
+#' connectCTRDatabase("path/to/ctrdb.sqlite")
+#' results <- batchFindClinicalSigResponse(
+#'   select_omics = c("EPB41L4B", "FAM83H", "PLEKHA1"),
+#'   select_drugs = "Bortezomib"
+#' )
+#' }
+batchFindClinicalSigResponse <- function(select_omics,
+                                        select_drugs,
+                                        data_type = "all",
+                                        tumor_type = "all",
+                                        cores = 1) {
+  if (is.null(select_omics) || length(select_omics) == 0) {
+    stop("select_omics must be a non-empty character vector")
+  }
+  if (is.null(select_drugs) || select_drugs == "") {
+    stop("select_drugs must be specified")
+  }
+
+  cal_re_list <- lapply(select_omics, function(gene) {
+    res <- tryCatch(
+      analyzeClinicalDrugResponse(
+        select_omics = gene,
+        select_drugs = select_drugs,
+        data_type = data_type,
+        tumor_type = tumor_type
+      ),
+      error = function(e) NULL
+    )
+    if (is.null(res) || is.null(res$data) || length(res$data) == 0) return(NULL)
+
+    if (!is.null(res$meta)) {
+      meta <- res$meta
+      p_val <- meta[["pval.random"]]
+      eff_size <- meta[["TE.random"]]
+      n_datasets <- length(meta[["studlab"]])
+    } else {
+      # Single dataset: use Wilcoxon + Cliff's Delta (consistent with metaCalcConDis)
+      dat <- res$data[[1]]
+      resp <- dat$response
+      non_resp <- dat$non_response
+      if (length(resp) < 2 || length(non_resp) < 2) return(NULL)
+      wilcox_re <- tryCatch(
+        suppressWarnings(stats::wilcox.test(resp, non_resp)),
+        error = function(e) NULL
+      )
+      cliff_re <- tryCatch(
+        suppressWarnings(effsize::cliff.delta(resp, non_resp)),
+        error = function(e) NULL
+      )
+      if (is.null(wilcox_re) || is.null(cliff_re)) return(NULL)
+      p_val <- wilcox_re$p.value
+      eff_size <- cliff_re$estimate
+      n_datasets <- 1L
+    }
+    if (is.na(p_val)) p_val <- 1
+    if (is.na(eff_size)) eff_size <- 0
+    data.frame(p_value = p_val, effect_size = eff_size, n_datasets = n_datasets)
+  })
+
+  valid <- !sapply(cal_re_list, is.null)
+  fea_names <- select_omics[valid]
+  cal_re_list <- cal_re_list[valid]
+
+  if (length(cal_re_list) == 0) {
+    return(data.frame(p_value = numeric(0), effect_size = numeric(0),
+                      n_datasets = integer(0), name = character(0), q_value = numeric(0)))
+  }
+
+  cal_re_df <- do.call(rbind, cal_re_list)
+  cal_re_df$name <- fea_names
+  cal_re_df$q_value <- p.adjust(cal_re_df$p_value, method = "BH")
+  cal_re_df
+}

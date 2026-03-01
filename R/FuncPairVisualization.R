@@ -143,7 +143,7 @@ plotMultipleCorrelations <- function(pairs_list,
         }
         combined_plot <- combined_plot +
           patchwork::plot_annotation(
-            title = paste0("Multiple Correlations:", x_label, "vs", y_label, title_suffix),
+            title = paste0("Multiple Correlations: ", x_label, " vs ", y_label, title_suffix),
             theme = theme(plot.title = element_text(size = 16, hjust = 0.5, face = "bold"))
           )
       }
@@ -224,7 +224,7 @@ plotMultipleGroupComparisons <- function(pairs_list,
         }
         combined_plot <- combined_plot +
           patchwork::plot_annotation(
-            title = paste0("Multiple Group Comparisons:", x_label, "vs", y_label, title_suffix),
+            title = paste0("Multiple Group Comparisons: ", x_label, " vs ", y_label, title_suffix),
             theme = theme(plot.title = element_text(size = 16, hjust = 0.5, face = "bold"))
           )
       }
