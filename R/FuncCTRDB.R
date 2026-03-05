@@ -266,7 +266,7 @@ analyzeClinicalDrugResponse <- function(select_omics,
       result$plot <- plotGroupComparison(
         transformed_pairs[[1]]$no,
         transformed_pairs[[1]]$yes,
-        group_labels = c("Non_response", "Response"),
+        group_labels = c("Non response", "Response"),
         title = names(transformed_pairs)[1],
         y_label = if(zscore) paste0(select_omics, " Expression (z-score)") else paste(select_omics, "Expression")
       )
@@ -274,7 +274,7 @@ analyzeClinicalDrugResponse <- function(select_omics,
       # Multiple plots case
       multi_plot <- plotMultipleGroupComparisons(
         transformed_pairs,
-        group_labels = c("Non_response", "Response"),
+        group_labels = c("Non response", "Response"),
         x_label = select_omics,
         y_label = if(zscore) "Expression (z-score)" else "Expression"
       )
@@ -304,7 +304,7 @@ analyzeClinicalDrugResponse <- function(select_omics,
     result$merged_plot <- plotGroupComparison(
       all_non_response,
       all_response,
-      group_labels = c("Non_response", "Response"),
+      group_labels = c("Non response", "Response"),
       title = paste("Merged:", select_omics, "vs", select_drugs),
       y_label = if(zscore) paste0(select_omics, " Expression (z-score)") else paste(select_omics, "Expression")
     )

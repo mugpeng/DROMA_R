@@ -246,6 +246,7 @@ plotMultipleGroupComparisons <- function(pairs_list,
 #' @param es_t Effect size threshold to consider significant
 #' @param P_t Q-value threshold to consider significant
 #' @param n_datasets_t Minimum number of datasets threshold (NULL for no threshold)
+#' @param size_col Column name to use for point size (e.g., "n_datasets"). NULL for fixed size.
 #' @param label Whether to add labels to top points (TRUE/FALSE)
 #' @param top_label_each Number of top points in each direction to label
 #' @param custom_labels Character vector of gene names to label (overrides top_label_each if provided)
@@ -261,6 +262,7 @@ plotMetaVolcano <- function(meta_df,
                             es_t = .4,
                             P_t = .01,
                             n_datasets_t = NULL,
+                            size_col = "n_datasets",
                             label = TRUE,
                             top_label_each = 5,
                             custom_labels = NULL,
@@ -273,10 +275,13 @@ plotMetaVolcano <- function(meta_df,
 
   # Input validation
   if(!is.data.frame(meta_df)) stop("meta_df must be a data frame")
-  required_cols <- c("effect_size", "name", "n_datasets")
+  required_cols <- c("effect_size", "name")
   p_val_col <- if(use_p_value) "p_value" else "q_value"
-  if(!all(c(required_cols, p_val_col) %in% colnames(meta_df))) {
-    stop("meta_df must contain columns: effect_size, ", p_val_col, ", n_datasets, and name")
+  required_cols <- c(required_cols, p_val_col)
+  if(!is.null(n_datasets_t)) required_cols <- c(required_cols, "n_datasets")
+  if(!is.null(size_col)) required_cols <- c(required_cols, size_col)
+  if(!all(required_cols %in% colnames(meta_df))) {
+    stop("meta_df must contain columns: ", paste(required_cols, collapse = ", "))
   }
 
   # Default colors
@@ -312,31 +317,48 @@ plotMetaVolcano <- function(meta_df,
     "Total: ", nrow(meta_df)
   )
 
-  # Get min and max for legend breaks
-  min_datasets <- min(meta_df$n_datasets)
-  max_datasets <- max(meta_df$n_datasets)
-  
+  # Build aesthetic mapping and point layer based on size_col
+  # Use abs() for size when size_col has negative values
+  if (is.null(size_col)) {
+    aes_base <- aes(x = effect_size, y = -log10(.data[[p_val_col]]), color = group)
+    use_abs_size <- FALSE
+  } else {
+    sz_vals <- meta_df[[size_col]]
+    use_abs_size <- any(sz_vals < 0, na.rm = TRUE)
+    aes_base <- aes(x = effect_size, y = -log10(.data[[p_val_col]]), color = group,
+                    size = if (use_abs_size) abs(.data[[size_col]]) else .data[[size_col]])
+    # For scale_size we need the effective values (abs when negative exists)
+    sz_vals <- if (use_abs_size) abs(sz_vals) else sz_vals
+  }
+
   # Basic volcano plot
-  # Using scale_size makes the radius proportional to n_datasets
-  # This means n_datasets=30 will have 3x the radius of n_datasets=10
-  p <- ggplot(data = meta_df,
-              aes(x = effect_size,
-                  y = -log10(.data[[p_val_col]]))) +
-    geom_point(alpha = point_alpha,
-               aes(color = group, size = n_datasets)) +
-    scale_size(range = c(point_size * 0.5, point_size * 2), 
-               name = "N Datasets",
-               breaks = function(x) {
-                 # Generate nice breaks for the legend
-                 if(max_datasets - min_datasets <= 5) {
-                   return(seq(min_datasets, max_datasets, by = 1))
-                 } else {
-                   pretty_breaks <- pretty(c(min_datasets, max_datasets), n = 4)
-                   return(pretty_breaks[pretty_breaks >= min_datasets & 
-                                       pretty_breaks <= max_datasets])
-                 }
-               }) +
-    theme_bw() +
+  p <- ggplot(data = meta_df, aes_base)
+  if (is.null(size_col)) {
+    p <- p + geom_point(alpha = point_alpha, size = point_size)
+  } else {
+    min_sz <- min(sz_vals, na.rm = TRUE)
+    max_sz <- max(sz_vals, na.rm = TRUE)
+    range_sz <- max_sz - min_sz
+    # Legend breaks: different logic for [0,1] fraction vs integer-like vs large range
+    if (max_sz <= 1 || (range_sz < 1 && max_sz <= 1)) {
+      # Fraction/proportion range (e.g. I2, correlation): use pretty decimal breaks
+      size_breaks <- pretty(c(min_sz, max_sz), n = 5)
+      size_breaks <- size_breaks[size_breaks >= min_sz & size_breaks <= max_sz]
+      if (length(size_breaks) < 2) {
+        size_breaks <- unique(c(min_sz, max_sz))
+      }
+    } else if (range_sz <= 5 && all(sz_vals == floor(sz_vals), na.rm = TRUE)) {
+      # Small integer range (e.g. n_datasets): use integer seq
+      size_breaks <- seq(min_sz, max_sz, by = 1)
+    } else {
+      # Large or mixed range: use pretty()
+      size_breaks <- pretty(c(min_sz, max_sz), n = 4)
+      size_breaks <- size_breaks[size_breaks >= min_sz & size_breaks <= max_sz]
+    }
+    p <- p + geom_point(alpha = point_alpha) +
+      scale_size(range = c(point_size * 0.5, point_size * 2), name = size_col, breaks = size_breaks)
+  }
+  p <- p + theme_bw() +
     theme(
       title = element_text(size = 15, face = "bold"),
       axis.title = element_text(size = 15, colour = "black"),
@@ -384,7 +406,10 @@ plotMetaVolcano <- function(meta_df,
       }
 
       p <- p +
-        geom_point(aes(size = n_datasets), shape = 1, data = forlabel_df, show.legend = FALSE) +
+        (if (is.null(size_col))
+          geom_point(shape = 1, size = point_size, data = forlabel_df, show.legend = FALSE)
+        else
+          geom_point(aes(size = if (use_abs_size) abs(.data[[size_col]]) else .data[[size_col]]), shape = 1, data = forlabel_df, show.legend = FALSE)) +
         ggrepel::geom_text_repel(
           data = forlabel_df,
           aes(label = name),

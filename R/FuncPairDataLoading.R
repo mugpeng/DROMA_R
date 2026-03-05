@@ -242,11 +242,16 @@ filterFeatureData <- function(feature_data, min_samples = 3, is_discrete_with_al
         return(NULL)
       }
       return(dataset)
+    } else if (is.matrix(dataset)) {
+      # Batch preloaded matrix (features × samples): NA handling is done per-feature
+      # during extraction; only check that the dataset has enough sample columns
+      if (ncol(dataset) < min_samples) {
+        return(NULL)
+      }
+      return(dataset)
     } else {
-      # Handle continuous data or simple discrete data
-      # Remove NA values
+      # Single-feature vector: remove NA values then check sample count
       dataset <- na.omit(dataset)
-      # Check if the dataset has minimum samples after NA removal
       if (length(dataset) < min_samples) {
         return(NULL)
       } else {
