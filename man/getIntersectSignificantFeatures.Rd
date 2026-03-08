@@ -4,17 +4,25 @@
 \alias{getIntersectSignificantFeatures}
 \title{Get intersection of significant features across multiple analyses}
 \usage{
-getIntersectSignificantFeatures(...)
+getIntersectSignificantFeatures(..., direction_cols = NULL)
 }
 \arguments{
 \item{...}{Named data frames from getSignificantFeatures(), or a named list of such data frames.
 Names will be used as suffixes for columns (e.g., effect_size_drug1, effect_size_drug2)}
+
+\item{direction_cols}{Character vector or named list specifying the direction column name for each input.
+Used to align direction when inputs use different column names (e.g. first table uses "direction_cell").
+- NULL (default): use "direction" for all inputs
+- Character of length 1: use this column name for all inputs
+- Character of length n: use direction_cols[i] for the i-th input
+- Named vector/list: use direction_cols[[name]] for the input named 'name'}
 }
 \value{
 Data frame with intersecting features and their statistics from each analysis (columns suffixed by input names)
 }
 \description{
-Identifies features that are significant across multiple meta-analysis results and merges their statistics
+Identifies features that are significant across multiple meta-analysis results and merges their statistics.
+When all inputs have a direction column, only features with consistent direction (all Up or all Down) are retained.
 }
 \examples{
 \dontrun{
@@ -24,6 +32,10 @@ sig_drug2 <- getSignificantFeatures(meta_df2)
 
 # Find common significant features (using named arguments)
 common <- getIntersectSignificantFeatures(drug1 = sig_drug1, drug2 = sig_drug2)
+
+# First table uses "direction_cell", second uses "direction"
+common <- getIntersectSignificantFeatures(cell = sig_cell, pdo = sig_pdo,
+  direction_cols = c(cell = "direction_cell", pdo = "direction"))
 
 # Or using a named list
 sig_list <- list(Paclitaxel = sig_drug1, Gemcitabine = sig_drug2, Cisplatin = sig_drug3)

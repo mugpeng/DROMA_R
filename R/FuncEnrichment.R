@@ -546,7 +546,7 @@ plotEnrichDotplot <- function(enrich_result,
     ggplot2::scale_size_continuous(name = size_label, range = c(3, 8)) +
     ggplot2::theme_bw() +
     ggplot2::theme(
-      title = ggplot2::element_text(size = 15, face = "bold"),
+      title = ggplot2::element_text(size = 12, face = "bold"),
       axis.text = ggplot2::element_text(size = 12),
       axis.title = ggplot2::element_text(size = 12),
       axis.text.y = ggplot2::element_text(size = 11),
@@ -702,7 +702,7 @@ plotEnrichBarplot <- function(enrich_result,
                                 trans = "log10") +
     ggplot2::theme_bw() +
     ggplot2::theme(
-      title = ggplot2::element_text(size = 15, face = "bold"),
+      title = ggplot2::element_text(size = 12, face = "bold"),
       axis.text = ggplot2::element_text(size = 12),
       axis.title = ggplot2::element_text(size = 12),
       axis.text.y = ggplot2::element_text(size = 11),

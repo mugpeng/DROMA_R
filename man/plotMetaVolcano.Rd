@@ -9,6 +9,7 @@ plotMetaVolcano(
   es_t = 0.4,
   P_t = 0.01,
   n_datasets_t = NULL,
+  size_col = "n_datasets",
   label = TRUE,
   top_label_each = 5,
   custom_labels = NULL,
@@ -29,6 +30,8 @@ effect_size, q_value (or p_value), n_datasets, and name}
 \item{P_t}{Q-value threshold to consider significant}
 
 \item{n_datasets_t}{Minimum number of datasets threshold (NULL for no threshold)}
+
+\item{size_col}{Column name to use for point size (e.g., "n_datasets"). NULL for fixed size.}
 
 \item{label}{Whether to add labels to top points (TRUE/FALSE)}
 
