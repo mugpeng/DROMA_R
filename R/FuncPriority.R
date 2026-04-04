@@ -35,6 +35,10 @@
   out
 }
 
+.hasPrioritySourceRecord <- function(p_value, effect_size, n_datasets, q_value) {
+  !is.na(p_value) | !is.na(effect_size) | !is.na(n_datasets) | !is.na(q_value)
+}
+
 .scorePriorityPComponent <- function(p_value, p_floor = 1e-300) {
   out <- pmin(-log10(pmax(p_value, p_floor)), 10) / 10
   out[is.na(out)] <- 0
@@ -89,6 +93,8 @@
 #' @param cell_sig Significant candidate table derived from \code{cell_raw}.
 #' @param pdopdx_sig Significant candidate table derived from \code{pdopdx_raw}.
 #' @param clinical_sig Significant candidate table derived from \code{clinical_raw}.
+#' @param require_sig_in_all_available Logical, whether to retain only
+#'   candidates that are significant in every source where they have a record.
 #' @return A ranked data frame containing per-source statistics, component
 #'   scores, and \code{PriorityScore}.
 #' @export
@@ -98,7 +104,8 @@ buildPriorityTable <- function(candidate_names,
                                clinical_raw,
                                cell_sig,
                                pdopdx_sig,
-                               clinical_sig) {
+                               clinical_sig,
+                               require_sig_in_all_available = TRUE) {
   candidate_names <- unique(candidate_names)
   if (length(candidate_names) == 0) {
     return(data.frame(name = character(0), stringsAsFactors = FALSE))
@@ -124,10 +131,28 @@ buildPriorityTable <- function(candidate_names,
     all.x = TRUE
   )
 
-  out$selected_cellsets <- out$name %in% cell_sig$name
-  out$selected_pdopdx <- out$name %in% pdopdx_sig$name
-  out$selected_clinical <- out$name %in% clinical_sig$name
-  out$n_selected_sources <- rowSums(cbind(out$selected_cellsets, out$selected_pdopdx, out$selected_clinical))
+  out$available_cellsets <- .hasPrioritySourceRecord(out$p_cell, out$es_cell, out$n_ds_cell, out$q_cell)
+  out$available_pdopdx <- .hasPrioritySourceRecord(out$p_pdopdx, out$es_pdopdx, out$n_ds_pdopdx, out$q_pdopdx)
+  out$available_clinical <- .hasPrioritySourceRecord(out$p_clin, out$es_clin, out$n_ds_clin, out$q_clin)
+
+  out$selected_cellsets <- ifelse(out$available_cellsets, out$name %in% cell_sig$name, NA)
+  out$selected_pdopdx <- ifelse(out$available_pdopdx, out$name %in% pdopdx_sig$name, NA)
+  out$selected_clinical <- ifelse(out$available_clinical, out$name %in% clinical_sig$name, NA)
+
+  out$n_available_sources <- rowSums(cbind(out$available_cellsets, out$available_pdopdx, out$available_clinical), na.rm = TRUE)
+  out$n_selected_sources <- rowSums(cbind(
+    ifelse(is.na(out$selected_cellsets), FALSE, out$selected_cellsets),
+    ifelse(is.na(out$selected_pdopdx), FALSE, out$selected_pdopdx),
+    ifelse(is.na(out$selected_clinical), FALSE, out$selected_clinical)
+  ))
+
+  if (isTRUE(require_sig_in_all_available)) {
+    keep_idx <- out$n_available_sources > 0 & out$n_selected_sources == out$n_available_sources
+    out <- out[keep_idx, , drop = FALSE]
+    if (nrow(out) == 0) {
+      return(out)
+    }
+  }
 
   out$P_cell <- .scorePriorityPComponent(out$p_cell)
   out$E_cell <- .scorePriorityEffectComponent(out$es_cell)
