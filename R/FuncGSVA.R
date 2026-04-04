@@ -151,6 +151,119 @@ getGeneSetByName <- function(gene_set_name, gmt_file = NULL) {
   return(gene_sets[[gene_set_name]])
 }
 
+.prepareGSVAGeneSets <- function(gene_sets, gmt_file = NULL) {
+  all_available_gene_sets <- tryCatch({
+    getAvailableGeneSets(gmt_file = gmt_file, return_full_list = TRUE)
+  }, error = function(e) {
+    NULL
+  })
+  available_gene_set_names <- if (!is.null(all_available_gene_sets)) names(all_available_gene_sets) else character(0)
+
+  if (is.character(gene_sets) && length(gene_sets) == 1) {
+    if (gene_sets %in% available_gene_set_names) {
+      gene_sets <- all_available_gene_sets[gene_sets]
+    } else {
+      warning("'", gene_sets, "' is not a predefined gene set name. Treating as a single gene.")
+      gene_sets <- list(custom_gene_set = gene_sets)
+    }
+  } else if (is.character(gene_sets) && length(gene_sets) > 1) {
+    matching_names <- gene_sets %in% available_gene_set_names
+
+    if (all(matching_names)) {
+      gene_sets <- all_available_gene_sets[gene_sets]
+    } else if (any(matching_names)) {
+      unrecognized <- gene_sets[!matching_names]
+      warning("The following are not predefined gene set names and will be ignored: ",
+              paste(unrecognized, collapse = ", "))
+      gene_sets <- all_available_gene_sets[gene_sets[matching_names]]
+    } else {
+      message("No predefined gene set names matched. Treating input as a custom gene list for a single gene set.")
+      gene_sets <- list(custom_gene_set = gene_sets)
+    }
+  } else if (is.list(gene_sets)) {
+    if (is.null(names(gene_sets))) {
+      names(gene_sets) <- paste0("gene_set_", seq_along(gene_sets))
+    }
+  } else {
+    stop("gene_sets must be a character vector, a named list, or a predefined gene set name")
+  }
+
+  if (length(gene_sets) == 0) {
+    stop("No valid gene sets provided")
+  }
+
+  gene_sets
+}
+
+.calculateMatrixGSVA <- function(expr_data, gene_sets, method, min_size, max_size, ..., verbose_value = FALSE) {
+  expr_data <- as.matrix(expr_data)
+
+  if (any(is.na(expr_data))) {
+    expr_data[is.na(expr_data)] <- 0
+  }
+
+  available_genes <- rownames(expr_data)
+  filtered_gene_sets <- lapply(gene_sets, function(gs) {
+    intersect(gs, available_genes)
+  })
+  gene_set_sizes <- sapply(filtered_gene_sets, length)
+  valid_gene_sets <- filtered_gene_sets[gene_set_sizes >= min_size & gene_set_sizes <= max_size]
+
+  if (length(valid_gene_sets) == 0) {
+    return(NULL)
+  }
+
+  dots <- list(...)
+
+  if (method == "gsva") {
+    kcdf_value <- if ("kcdf" %in% names(dots)) dots$kcdf else "Gaussian"
+    tau_value <- if ("tau" %in% names(dots)) dots$tau else 1
+    maxDiff_value <- if ("maxDiff" %in% names(dots)) dots$maxDiff else TRUE
+    absRanking_value <- if ("absRanking" %in% names(dots)) dots$absRanking else FALSE
+
+    gsva_param <- GSVA::gsvaParam(
+      expr_data,
+      valid_gene_sets,
+      kcdf = kcdf_value,
+      tau = tau_value,
+      maxDiff = maxDiff_value,
+      absRanking = absRanking_value,
+      minSize = min_size,
+      maxSize = max_size
+    )
+  } else if (method == "ssgsea") {
+    alpha_value <- if ("alpha" %in% names(dots)) dots$alpha else 0.25
+    normalize_value <- if ("normalize" %in% names(dots)) dots$normalize else TRUE
+
+    gsva_param <- GSVA::ssgseaParam(
+      expr_data,
+      valid_gene_sets,
+      alpha = alpha_value,
+      normalize = normalize_value,
+      minSize = min_size,
+      maxSize = max_size
+    )
+  } else if (method == "zscore") {
+    gsva_param <- GSVA::zscoreParam(
+      expr_data,
+      valid_gene_sets,
+      minSize = min_size,
+      maxSize = max_size
+    )
+  } else if (method == "plage") {
+    gsva_param <- GSVA::plageParam(
+      expr_data,
+      valid_gene_sets,
+      minSize = min_size,
+      maxSize = max_size
+    )
+  } else {
+    stop("Unknown method: ", method)
+  }
+
+  as.matrix(GSVA::gsva(gsva_param, verbose = verbose_value))
+}
+
 #' Calculate GSVA scores for gene sets
 #'
 #' @description Main function for calculating gene set enrichment scores using GSVA methods
@@ -209,102 +322,7 @@ calculateGSVAScores <- function(dromaset_object, gene_sets,
   # Validate method
   method <- match.arg(method)
   
-  # Process gene_sets input
-  # Load all available gene sets from GMT file for name lookup
-  all_available_gene_sets <- tryCatch({
-    getAvailableGeneSets(gmt_file = gmt_file, return_full_list = TRUE)
-  }, error = function(e) {
-    NULL
-  })
-  available_gene_set_names <- if (!is.null(all_available_gene_sets)) names(all_available_gene_sets) else character(0)
-  
-  if (is.character(gene_sets) && length(gene_sets) == 1) {
-    # Single character string - could be a predefined gene set name
-    if (gene_sets %in% available_gene_set_names) {
-      # It's a predefined gene set name
-      gene_sets <- all_available_gene_sets[gene_sets]
-    } else {
-      # Treat as a single gene (not recommended but allowed)
-      warning("'", gene_sets, "' is not a predefined gene set name. Treating as a single gene.")
-      gene_sets <- list(custom_gene_set = gene_sets)
-    }
-  } else if (is.character(gene_sets) && length(gene_sets) > 1) {
-    # Character vector - check if these are predefined gene set names
-    matching_names <- gene_sets %in% available_gene_set_names
-    
-    if (all(matching_names)) {
-      # All are predefined gene set names - retrieve their gene lists
-      gene_sets <- all_available_gene_sets[gene_sets]
-    } else if (any(matching_names)) {
-      # Some match, some don't - warn about unrecognized names and use only matching ones
-      unrecognized <- gene_sets[!matching_names]
-      warning("The following are not predefined gene set names and will be ignored: ",
-              paste(unrecognized, collapse = ", "))
-      gene_sets <- all_available_gene_sets[gene_sets[matching_names]]
-    } else {
-      # None match - treat as a custom gene list (genes for a single gene set)
-      message("No predefined gene set names matched. Treating input as a custom gene list for a single gene set.")
-      gene_sets <- list(custom_gene_set = gene_sets)
-    }
-  } else if (is.list(gene_sets)) {
-    # Already a list - use as is
-    if (is.null(names(gene_sets))) {
-      names(gene_sets) <- paste0("gene_set_", seq_along(gene_sets))
-    }
-  } else {
-    stop("gene_sets must be a character vector, a named list, or a predefined gene set name")
-  }
-  
-  if (length(gene_sets) == 0) {
-    stop("No valid gene sets provided")
-  }
-  
-  # Helper function to create GSVA parameter object based on method
-  createGSVAParam <- function(expr_data, valid_gene_sets, method, min_size, max_size, ...) {
-    # Extract method-specific parameters from ...
-    dots <- list(...)
-    
-    # Create parameter object based on method
-    if (method == "gsva") {
-      # Default kcdf for continuous expression data (mRNA is typically log-transformed)
-      kcdf_value <- if ("kcdf" %in% names(dots)) dots$kcdf else "Gaussian"
-      tau_value <- if ("tau" %in% names(dots)) dots$tau else 1
-      maxDiff_value <- if ("maxDiff" %in% names(dots)) dots$maxDiff else TRUE
-      absRanking_value <- if ("absRanking" %in% names(dots)) dots$absRanking else FALSE
-      
-      param_obj <- GSVA::gsvaParam(expr_data, valid_gene_sets,
-                                   kcdf = kcdf_value,
-                                   tau = tau_value,
-                                   maxDiff = maxDiff_value,
-                                   absRanking = absRanking_value,
-                                   minSize = min_size,
-                                   maxSize = max_size)
-      
-    } else if (method == "ssgsea") {
-      alpha_value <- if ("alpha" %in% names(dots)) dots$alpha else 0.25
-      normalize_value <- if ("normalize" %in% names(dots)) dots$normalize else TRUE
-      param_obj <- GSVA::ssgseaParam(expr_data, valid_gene_sets,
-                                     alpha = alpha_value,
-                                     normalize = normalize_value,
-                                     minSize = min_size,
-                                     maxSize = max_size)
-      
-    } else if (method == "zscore") {
-      param_obj <- GSVA::zscoreParam(expr_data, valid_gene_sets,
-                                     minSize = min_size,
-                                     maxSize = max_size)
-      
-    } else if (method == "plage") {
-      param_obj <- GSVA::plageParam(expr_data, valid_gene_sets,
-                                   minSize = min_size,
-                                   maxSize = max_size)
-      
-    } else {
-      stop("Unknown method: ", method)
-    }
-    
-    return(param_obj)
-  }
+  gene_sets <- .prepareGSVAGeneSets(gene_sets, gmt_file = gmt_file)
   
   # Load mRNA expression data
   if (inherits(dromaset_object, "DromaSet")) {
@@ -330,24 +348,20 @@ calculateGSVAScores <- function(dromaset_object, gene_sets,
       expr_data[is.na(expr_data)] <- 0
     }
     
-    # Filter gene sets to only include genes present in expression data
-    available_genes <- rownames(expr_data)
-    filtered_gene_sets <- lapply(gene_sets, function(gs) {
-      intersect(gs, available_genes)
-    })
-    
-    # Remove gene sets with insufficient genes
-    gene_set_sizes <- sapply(filtered_gene_sets, length)
-    valid_gene_sets <- filtered_gene_sets[gene_set_sizes >= min_size & gene_set_sizes <= max_size]
-    
-    if (length(valid_gene_sets) == 0) {
+    verbose_value <- if ("verbose" %in% names(list(...))) list(...)$verbose else FALSE
+    gsva_result <- .calculateMatrixGSVA(
+      expr_data = expr_data,
+      gene_sets = gene_sets,
+      method = method,
+      min_size = min_size,
+      max_size = max_size,
+      verbose_value = verbose_value,
+      ...
+    )
+
+    if (is.null(gsva_result)) {
       stop("No valid gene sets found after filtering. Check min_size and max_size parameters.")
     }
-    
-    # Calculate GSVA scores using new API
-    gsva_param <- createGSVAParam(expr_data, valid_gene_sets, method, min_size, max_size, ...)
-    verbose_value <- if ("verbose" %in% names(list(...))) list(...)$verbose else FALSE
-    gsva_result <- GSVA::gsva(gsva_param, verbose = verbose_value)
     
     result <- list()
     result[[dromaset_object@name]] <- gsva_result
@@ -385,25 +399,21 @@ calculateGSVAScores <- function(dromaset_object, gene_sets,
         expr_data[is.na(expr_data)] <- 0
       }
       
-      # Filter gene sets to only include genes present in expression data
-      available_genes <- rownames(expr_data)
-      filtered_gene_sets <- lapply(gene_sets, function(gs) {
-        intersect(gs, available_genes)
-      })
-      
-      # Remove gene sets with insufficient genes
-      gene_set_sizes <- sapply(filtered_gene_sets, length)
-      valid_gene_sets <- filtered_gene_sets[gene_set_sizes >= min_size & gene_set_sizes <= max_size]
-      
-      if (length(valid_gene_sets) == 0) {
+      verbose_value <- if ("verbose" %in% names(list(...))) list(...)$verbose else FALSE
+      gsva_result <- .calculateMatrixGSVA(
+        expr_data = expr_data,
+        gene_sets = gene_sets,
+        method = method,
+        min_size = min_size,
+        max_size = max_size,
+        verbose_value = verbose_value,
+        ...
+      )
+
+      if (is.null(gsva_result)) {
         warning("Skipping dataset ", dataset_name, ": no valid gene sets after filtering")
         next
       }
-      
-      # Calculate GSVA scores using new API
-      gsva_param <- createGSVAParam(expr_data, valid_gene_sets, method, min_size, max_size, ...)
-      verbose_value <- if ("verbose" %in% names(list(...))) list(...)$verbose else FALSE
-      gsva_result <- GSVA::gsva(gsva_param, verbose = verbose_value)
       
       result[[dataset_name]] <- gsva_result
     }
@@ -978,6 +988,334 @@ batchAnalyzePathwaysWithFeature <- function(dromaset_object, gsva_scores, featur
   results_df <- results_df[order(results_df$p_value), ]
   
   return(results_df)
+}
+
+#' Batch analysis of clinical drug response for multiple pathways
+#'
+#' @description Calculates patient-level GSVA scores from CTRDB expression data
+#'   and tests pathway associations with clinical drug response using the same
+#'   response-group and meta-analysis logic as \code{batchFindClinicalSigResponse()}.
+#' @param select_pathways Character vector of pathway names to evaluate.
+#' @param select_drugs Character string specifying the drug name.
+#' @param gene_sets Optional named list of gene sets, or predefined gene set
+#'   names accepted by \code{calculateGSVAScores()}.
+#' @param method GSVA method to use: "gsva" (default), "ssgsea", "zscore", or "plage".
+#' @param data_type Filter by data type ("all", "CellLine", "PDO", "PDC", "PDX").
+#' @param tumor_type Filter by tumor type ("all" or specific tumor types).
+#' @param min_size Minimum number of genes required per pathway in each patient.
+#' @param max_size Maximum number of genes allowed per pathway.
+#' @param gmt_file Optional GMT file path for predefined pathway names.
+#' @param cores Number of CPU cores (kept for API consistency; not used).
+#' @param zscore Logical, whether to z-score pathway scores within each patient.
+#' @param show_progress Logical, whether to print progress messages.
+#' @param ... Additional parameters passed to GSVA.
+#' @return Data frame with \code{p_value}, \code{effect_size}, \code{n_datasets},
+#'   \code{name}, and \code{q_value}.
+#' @export
+batchFindClinicalPathwaySigResponse <- function(select_pathways,
+                                                select_drugs,
+                                                gene_sets = select_pathways,
+                                                method = c("gsva", "ssgsea", "zscore", "plage"),
+                                                data_type = "all",
+                                                tumor_type = "all",
+                                                min_size = 5,
+                                                max_size = Inf,
+                                                gmt_file = NULL,
+                                                cores = 1,
+                                                zscore = TRUE,
+                                                show_progress = TRUE,
+                                                ...) {
+  if (is.null(select_pathways) || length(select_pathways) == 0) {
+    stop("select_pathways must be a non-empty character vector")
+  }
+  if (is.null(select_drugs) || select_drugs == "") {
+    stop("select_drugs must be specified")
+  }
+  if (!requireNamespace("GSVA", quietly = TRUE)) {
+    stop("GSVA package is required. Please install it using: BiocManager::install('GSVA')")
+  }
+
+  method <- match.arg(method)
+  gene_sets <- .prepareGSVAGeneSets(gene_sets, gmt_file = gmt_file)
+  missing_pathways <- setdiff(select_pathways, names(gene_sets))
+  if (length(missing_pathways) > 0) {
+    warning("The following pathways were not found in gene_sets and will be ignored: ",
+            paste(missing_pathways, collapse = ", "))
+  }
+
+  gene_sets <- gene_sets[intersect(select_pathways, names(gene_sets))]
+  select_pathways <- names(gene_sets)
+  if (length(select_pathways) == 0) {
+    return(data.frame(
+      p_value = numeric(0),
+      effect_size = numeric(0),
+      n_datasets = integer(0),
+      name = character(0),
+      q_value = numeric(0),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  if (!exists("ctrdb_connection", envir = .GlobalEnv)) {
+    stop("No CTRDB database connection found. Connect first with connectCTRDatabase()")
+  }
+  connection <- get("ctrdb_connection", envir = .GlobalEnv)
+
+  sample_anno <- tryCatch({
+    getDROMAAnnotation("sample")
+  }, error = function(e) {
+    stop("Failed to load sample annotations from DROMA: ", e$message)
+  })
+
+  if (is.null(sample_anno) || nrow(sample_anno) == 0) {
+    stop("No sample annotations found in database")
+  }
+  if (!"CliUsedDrug" %in% colnames(sample_anno)) {
+    stop("CliUsedDrug column not found in sample annotations")
+  }
+
+  drug_samples <- sample_anno[!is.na(sample_anno$CliUsedDrug) &
+                               grepl(select_drugs, sample_anno$CliUsedDrug, ignore.case = TRUE), ]
+  if (nrow(drug_samples) == 0) {
+    stop("No samples found with drug: ", select_drugs)
+  }
+
+  if ("ProjectID" %in% colnames(drug_samples)) {
+    ctrdb_samples <- drug_samples[drug_samples$ProjectID == "CTRDB", ]
+  } else {
+    stop("ProjectID column not found in sample annotations")
+  }
+  if (nrow(ctrdb_samples) == 0) {
+    stop("No CTRDB samples found with drug: ", select_drugs)
+  }
+
+  if (!is.null(data_type) && data_type != "all") {
+    if ("DataType" %in% colnames(ctrdb_samples)) {
+      ctrdb_samples <- ctrdb_samples[ctrdb_samples$DataType == data_type, ]
+      if (nrow(ctrdb_samples) == 0) {
+        stop("No samples found with data type: ", data_type)
+      }
+    } else {
+      warning("DataType column not found. Skipping data type filter.")
+    }
+  }
+
+  if (!is.null(tumor_type) && tumor_type != "all") {
+    if ("TumorType" %in% colnames(ctrdb_samples)) {
+      tumor_pattern <- paste0("^", tumor_type, "$", collapse = "|")
+      ctrdb_samples <- ctrdb_samples[grepl(tumor_pattern, ctrdb_samples$TumorType, ignore.case = TRUE), ]
+      if (nrow(ctrdb_samples) == 0) {
+        stop("No samples found with tumor type: ", tumor_type)
+      }
+    } else {
+      warning("TumorType column not found. Skipping tumor type filter.")
+    }
+  }
+
+  if (!"PatientID" %in% colnames(ctrdb_samples)) {
+    stop("PatientID column not found in sample annotations")
+  }
+
+  unique_datasets <- unique(ctrdb_samples$PatientID)
+  unique_datasets <- unique_datasets[!is.na(unique_datasets)]
+  if (length(unique_datasets) == 0) {
+    stop("No valid PatientIDs found")
+  }
+
+  message("Found ", length(unique_datasets), " datasets with drug ", select_drugs)
+
+  patient_context <- list()
+  total_datasets <- length(unique_datasets)
+
+  for (i in seq_along(unique_datasets)) {
+    patient_id <- unique_datasets[i]
+
+    if (show_progress && (i %% 10 == 0 || i == 1 || i == total_datasets)) {
+      message(sprintf("Processing clinical GSVA dataset %d/%d: %s", i, total_datasets, patient_id))
+    }
+
+    tryCatch({
+      patient_samples <- ctrdb_samples[ctrdb_samples$PatientID == patient_id, ]
+
+      if (!"SampleID" %in% colnames(patient_samples) ||
+          !"Response" %in% colnames(patient_samples)) {
+        warning("Missing SampleID or Response columns for patient: ", patient_id)
+        next
+      }
+
+      expr_data <- getPatientExpressionData(patient_id, connection, auto_log = TRUE)
+      if (is.null(expr_data) || nrow(expr_data) == 0) {
+        warning("No expression data found for patient: ", patient_id)
+        next
+      }
+
+      common_samples <- intersect(patient_samples$SampleID, colnames(expr_data))
+      if (length(common_samples) < 3) {
+        warning("Insufficient samples for patient: ", patient_id, " (", length(common_samples), " samples)")
+        next
+      }
+
+      patient_meta <- patient_samples[patient_samples$SampleID %in% common_samples, ]
+      expr_subset <- expr_data[, common_samples, drop = FALSE]
+      pathway_scores <- .calculateMatrixGSVA(
+        expr_data = expr_subset,
+        gene_sets = gene_sets,
+        method = method,
+        min_size = min_size,
+        max_size = max_size,
+        verbose_value = FALSE,
+        ...
+      )
+
+      if (is.null(pathway_scores) || nrow(pathway_scores) == 0) {
+        next
+      }
+
+      patient_context[[patient_id]] <- list(
+        pathway_scores = pathway_scores,
+        patient_meta = patient_meta,
+        common_samples = common_samples
+      )
+    }, error = function(e) {
+      warning("Error processing patient ", patient_id, ": ", e$message)
+    })
+  }
+
+  if (length(patient_context) == 0) {
+    return(data.frame(
+      p_value = numeric(0),
+      effect_size = numeric(0),
+      n_datasets = integer(0),
+      name = character(0),
+      q_value = numeric(0),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  message("Successfully processed ", length(patient_context), " datasets")
+
+  cal_re_list <- lapply(select_pathways, function(pathway_name) {
+    patient_data_list <- list()
+
+    for (patient_id in names(patient_context)) {
+      ctx <- patient_context[[patient_id]]
+      if (!pathway_name %in% rownames(ctx$pathway_scores)) {
+        next
+      }
+
+      pathway_result <- tryCatch({
+        pathway_values <- as.numeric(ctx$pathway_scores[pathway_name, ctx$common_samples])
+        names(pathway_values) <- ctx$common_samples
+
+        if (zscore) {
+          mean_value <- mean(pathway_values, na.rm = TRUE)
+          sd_value <- stats::sd(pathway_values, na.rm = TRUE)
+          if (sd_value > 0) {
+            pathway_values <- (pathway_values - mean_value) / sd_value
+          }
+        }
+
+        response_groups <- split(
+          pathway_values,
+          ctx$patient_meta$Response[match(names(pathway_values), ctx$patient_meta$SampleID)]
+        )
+
+        if (!"Response" %in% names(response_groups) || !"Non_response" %in% names(response_groups)) {
+          return(NULL)
+        }
+
+        response_values <- response_groups$Response
+        non_response_values <- response_groups$Non_response
+
+        if (length(response_values) < 2 || length(non_response_values) < 2) {
+          return(NULL)
+        }
+
+        list(
+          response = response_values,
+          non_response = non_response_values,
+          metadata = ctx$patient_meta
+        )
+      }, error = function(e) NULL)
+
+      if (!is.null(pathway_result)) {
+        patient_data_list[[patient_id]] <- pathway_result
+      }
+    }
+
+    if (length(patient_data_list) == 0) {
+      return(NULL)
+    }
+
+    if (length(patient_data_list) > 1) {
+      meta <- analyzeClinicalMeta(patient_data_list)
+      if (is.null(meta)) {
+        return(NULL)
+      }
+      p_val <- meta[["pval.random"]]
+      eff_size <- meta[["TE.random"]]
+      n_datasets <- length(meta[["studlab"]])
+    } else {
+      dat <- patient_data_list[[1]]
+      resp <- dat$response
+      non_resp <- dat$non_response
+
+      if (length(resp) < 2 || length(non_resp) < 2) {
+        return(NULL)
+      }
+
+      wilcox_re <- tryCatch(
+        suppressWarnings(stats::wilcox.test(resp, non_resp)),
+        error = function(e) NULL
+      )
+      cliff_re <- tryCatch(
+        suppressWarnings(effsize::cliff.delta(resp, non_resp)),
+        error = function(e) NULL
+      )
+
+      if (is.null(wilcox_re) || is.null(cliff_re)) {
+        return(NULL)
+      }
+
+      p_val <- wilcox_re$p.value
+      eff_size <- cliff_re$estimate
+      n_datasets <- 1L
+    }
+
+    if (is.na(p_val)) {
+      p_val <- 1
+    }
+    if (is.na(eff_size)) {
+      eff_size <- 0
+    }
+
+    data.frame(
+      p_value = p_val,
+      effect_size = eff_size,
+      n_datasets = n_datasets,
+      name = pathway_name,
+      stringsAsFactors = FALSE
+    )
+  })
+
+  valid <- !sapply(cal_re_list, is.null)
+  cal_re_list <- cal_re_list[valid]
+
+  if (length(cal_re_list) == 0) {
+    return(data.frame(
+      p_value = numeric(0),
+      effect_size = numeric(0),
+      n_datasets = integer(0),
+      name = character(0),
+      q_value = numeric(0),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  cal_re_df <- do.call(rbind, cal_re_list)
+  rownames(cal_re_df) <- NULL
+  cal_re_df$q_value <- p.adjust(cal_re_df$p_value, method = "BH")
+  cal_re_df[order(cal_re_df$p_value), , drop = FALSE]
 }
 
 #' Batch analyze a single pathway (gene list) across multiple features

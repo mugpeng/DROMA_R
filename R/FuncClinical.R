@@ -360,26 +360,172 @@ batchFindClinicalSigResponse <- function(select_omics,
     stop("select_drugs must be specified")
   }
 
-  cal_re_list <- lapply(select_omics, function(gene) {
-    res <- tryCatch(
-      analyzeClinicalDrugResponse(
-        select_omics = gene,
-        select_drugs = select_drugs,
-        data_type = data_type,
-        tumor_type = tumor_type
-      ),
-      error = function(e) NULL
-    )
-    if (is.null(res) || is.null(res$data) || length(res$data) == 0) return(NULL)
+  # Match analyzeClinicalDrugResponse() logic, but preload patient-level
+  # metadata and expression matrices once for all genes.
+  if (!exists("ctrdb_connection", envir = .GlobalEnv)) {
+    stop("No CTRDB database connection found. Connect first with connectCTRDatabase()")
+  }
+  connection <- get("ctrdb_connection", envir = .GlobalEnv)
 
-    if (!is.null(res$meta)) {
-      meta <- res$meta
+  sample_anno <- tryCatch({
+    getDROMAAnnotation("sample")
+  }, error = function(e) {
+    stop("Failed to load sample annotations from DROMA: ", e$message)
+  })
+
+  if (is.null(sample_anno) || nrow(sample_anno) == 0) {
+    stop("No sample annotations found in database")
+  }
+  if (!"CliUsedDrug" %in% colnames(sample_anno)) {
+    stop("CliUsedDrug column not found in sample annotations")
+  }
+
+  drug_samples <- sample_anno[!is.na(sample_anno$CliUsedDrug) &
+                               grepl(select_drugs, sample_anno$CliUsedDrug, ignore.case = TRUE), ]
+  if (nrow(drug_samples) == 0) {
+    stop("No samples found with drug: ", select_drugs)
+  }
+
+  if ("ProjectID" %in% colnames(drug_samples)) {
+    ctrdb_samples <- drug_samples[drug_samples$ProjectID == "CTRDB", ]
+  } else {
+    stop("ProjectID column not found in sample annotations")
+  }
+  if (nrow(ctrdb_samples) == 0) {
+    stop("No CTRDB samples found with drug: ", select_drugs)
+  }
+
+  if (!is.null(data_type) && data_type != "all") {
+    if ("DataType" %in% colnames(ctrdb_samples)) {
+      ctrdb_samples <- ctrdb_samples[ctrdb_samples$DataType == data_type, ]
+      if (nrow(ctrdb_samples) == 0) {
+        stop("No samples found with data type: ", data_type)
+      }
+    } else {
+      warning("DataType column not found. Skipping data type filter.")
+    }
+  }
+
+  if (!is.null(tumor_type) && tumor_type != "all") {
+    if ("TumorType" %in% colnames(ctrdb_samples)) {
+      tumor_pattern <- paste0("^", tumor_type, "$", collapse = "|")
+      ctrdb_samples <- ctrdb_samples[grepl(tumor_pattern, ctrdb_samples$TumorType, ignore.case = TRUE), ]
+      if (nrow(ctrdb_samples) == 0) {
+        stop("No samples found with tumor type: ", tumor_type)
+      }
+    } else {
+      warning("TumorType column not found. Skipping tumor type filter.")
+    }
+  }
+
+  if (!"PatientID" %in% colnames(ctrdb_samples)) {
+    stop("PatientID column not found in sample annotations")
+  }
+
+  unique_datasets <- unique(ctrdb_samples$PatientID)
+  unique_datasets <- unique_datasets[!is.na(unique_datasets)]
+  if (length(unique_datasets) == 0) {
+    stop("No valid PatientIDs found")
+  }
+
+  message("Found ", length(unique_datasets), " datasets with drug ", select_drugs)
+
+  patient_context <- list()
+  for (patient_id in unique_datasets) {
+    tryCatch({
+      patient_samples <- ctrdb_samples[ctrdb_samples$PatientID == patient_id, ]
+
+      if (!"SampleID" %in% colnames(patient_samples) ||
+          !"Response" %in% colnames(patient_samples)) {
+        warning("Missing SampleID or Response columns for patient: ", patient_id)
+        next
+      }
+
+      expr_data <- getPatientExpressionData(patient_id, connection, auto_log = TRUE)
+      if (is.null(expr_data) || nrow(expr_data) == 0) {
+        warning("No expression data found for patient: ", patient_id)
+        next
+      }
+
+      common_samples <- intersect(patient_samples$SampleID, colnames(expr_data))
+      if (length(common_samples) < 3) {
+        warning("Insufficient samples for patient: ", patient_id, " (", length(common_samples), " samples)")
+        next
+      }
+
+      patient_meta <- patient_samples[patient_samples$SampleID %in% common_samples, ]
+
+      patient_context[[patient_id]] <- list(
+        expr_data = expr_data,
+        patient_meta = patient_meta,
+        common_samples = common_samples
+      )
+    }, error = function(e) {
+      warning("Error processing patient ", patient_id, ": ", e$message)
+    })
+  }
+
+  if (length(patient_context) == 0) {
+    return(data.frame(p_value = numeric(0), effect_size = numeric(0),
+                      n_datasets = integer(0), name = character(0), q_value = numeric(0)))
+  }
+
+  message("Successfully processed ", length(patient_context), " datasets")
+
+  cal_re_list <- lapply(select_omics, function(gene) {
+    patient_data_list <- list()
+
+    for (patient_id in names(patient_context)) {
+      ctx <- patient_context[[patient_id]]
+
+      gene_result <- tryCatch({
+        expr_values <- as.numeric(ctx$expr_data[gene, ctx$common_samples])
+        names(expr_values) <- ctx$common_samples
+
+        mean_expr <- mean(expr_values, na.rm = TRUE)
+        sd_expr <- sd(expr_values, na.rm = TRUE)
+        if (sd_expr > 0) {
+          expr_values <- (expr_values - mean_expr) / sd_expr
+        }
+
+        response_groups <- split(
+          expr_values,
+          ctx$patient_meta$Response[match(names(expr_values), ctx$patient_meta$SampleID)]
+        )
+
+        if (!"Response" %in% names(response_groups) || !"Non_response" %in% names(response_groups)) {
+          return(NULL)
+        }
+
+        response_values <- response_groups$Response
+        non_response_values <- response_groups$Non_response
+
+        if (length(response_values) < 2 || length(non_response_values) < 2) {
+          return(NULL)
+        }
+
+        list(
+          response = response_values,
+          non_response = non_response_values,
+          metadata = ctx$patient_meta
+        )
+      }, error = function(e) NULL)
+
+      if (!is.null(gene_result)) {
+        patient_data_list[[patient_id]] <- gene_result
+      }
+    }
+
+    if (length(patient_data_list) == 0) return(NULL)
+
+    if (length(patient_data_list) > 1) {
+      meta <- analyzeClinicalMeta(patient_data_list)
+      if (is.null(meta)) return(NULL)
       p_val <- meta[["pval.random"]]
       eff_size <- meta[["TE.random"]]
       n_datasets <- length(meta[["studlab"]])
     } else {
-      # Single dataset: use Wilcoxon + Cliff's Delta (consistent with metaCalcConDis)
-      dat <- res$data[[1]]
+      dat <- patient_data_list[[1]]
       resp <- dat$response
       non_resp <- dat$non_response
       if (length(resp) < 2 || length(non_resp) < 2) return(NULL)
@@ -396,6 +542,7 @@ batchFindClinicalSigResponse <- function(select_omics,
       eff_size <- cliff_re$estimate
       n_datasets <- 1L
     }
+
     if (is.na(p_val)) p_val <- 1
     if (is.na(eff_size)) eff_size <- 0
     data.frame(p_value = p_val, effect_size = eff_size, n_datasets = n_datasets)

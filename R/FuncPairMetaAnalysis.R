@@ -48,7 +48,7 @@ metaCalcConCon <- function(selected_pair) {
 
   cal_meta_re <- tryCatch(
     suppressWarnings({
-      metagen(TE = z, seTE = se_z, studlab = study, data = cal_re, sm = "Z",
+      meta::metagen(TE = z, seTE = se_z, studlab = study, data = cal_re, sm = "Z",
               control = list(maxiter = 2000,
                              stepadj = 0.1,
                              threshold = 0.000001)
@@ -84,7 +84,7 @@ metaCalcConDis <- function(selected_pair) {
     # This ensures that when feature presence (e.g., mutation) increases values,
     # the effect size is positive
     cliff_delta <- tryCatch(
-      suppressWarnings(cliff.delta(yes_drugs, no_drugs)),
+      suppressWarnings(effsize::cliff.delta(yes_drugs, no_drugs)),
       error = function(x) { return(NULL) }
     )
     if (is.null(cliff_delta)) return(NULL)
@@ -110,7 +110,7 @@ metaCalcConDis <- function(selected_pair) {
 
   cal_meta_re <- tryCatch(
     suppressWarnings({
-      metagen(TE = effect,
+      meta::metagen(TE = effect,
               seTE = se,
               studlab = study,
               data = cal_re,
@@ -182,7 +182,7 @@ metaCalcDisDis <- function(selected_pair) {
   # Perform meta-analysis using random effects model
   cal_meta_re <- tryCatch(
     suppressWarnings({
-      metagen(TE = log_or,
+      meta::metagen(TE = log_or,
               seTE = se,
               studlab = study,
               data = cal_re,
