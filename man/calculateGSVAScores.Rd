@@ -38,7 +38,11 @@ or a character string naming a predefined gene set}
 
 \item{gmt_file}{Optional path to GMT file if using predefined gene set names}
 
-\item{...}{Additional parameters passed to GSVA::gsva()}
+\item{...}{Additional parameters: passed to \code{GSVA::gsva()} after building the
+parameter object (e.g. \code{BPPARAM = BiocParallel::MulticoreParam(workers = 4)} for
+parallel gene sets). Arguments consumed when building \code{gsvaParam}/\code{ssgseaParam}
+(\code{kcdf}, \code{tau}, \code{maxDiff}, \code{absRanking}, \code{alpha}, \code{normalize})
+are not forwarded.}
 }
 \value{
 A list containing GSVA scores (gene sets x samples matrix) for each dataset

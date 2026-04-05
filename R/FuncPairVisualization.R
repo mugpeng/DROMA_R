@@ -513,3 +513,289 @@ createPlotWithCommonAxes <- function(p, x_title = NULL, y_title = NULL) {
   
   return(p)
 }
+
+#' Prepare merged priority table for visualization
+#'
+#' @description Merges gene and pathway priority tables, annotates candidate type,
+#'   adds shortened labels, and derives summary columns used by plotting helpers.
+#' @param gene_priority Data frame produced by \code{buildPriorityTable()} for genes.
+#' @param pathway_priority Data frame produced by \code{buildPriorityTable()} for pathways.
+#' @param top_n Optional integer. If provided, keep only the top N candidates by
+#'   \code{PriorityScore} after merging.
+#' @param pathway_prefix Prefix to strip from pathway names for display.
+#' @return A merged and annotated data frame ready for plotting.
+#' @export
+preparePriorityVisualizationData <- function(gene_priority,
+                                             pathway_priority,
+                                             top_n = NULL,
+                                             pathway_prefix = "^HALLMARK_") {
+  gene_priority <- as.data.frame(gene_priority)
+  pathway_priority <- as.data.frame(pathway_priority)
+
+  if (!"name" %in% colnames(gene_priority) || !"PriorityScore" %in% colnames(gene_priority)) {
+    stop("gene_priority must contain at least 'name' and 'PriorityScore' columns")
+  }
+  if (!"name" %in% colnames(pathway_priority) || !"PriorityScore" %in% colnames(pathway_priority)) {
+    stop("pathway_priority must contain at least 'name' and 'PriorityScore' columns")
+  }
+
+  gene_priority$candidate_class <- "Gene"
+  pathway_priority$candidate_class <- "Pathway"
+
+  merged_priority <- rbind(pathway_priority, gene_priority)
+  merged_priority <- merged_priority[order(-merged_priority$PriorityScore, merged_priority$name), , drop = FALSE]
+  rownames(merged_priority) <- NULL
+
+  if (!is.null(top_n)) {
+    top_n <- min(as.integer(top_n), nrow(merged_priority))
+    merged_priority <- utils::head(merged_priority, top_n)
+  }
+
+  merged_priority$display_name <- ifelse(
+    merged_priority$candidate_class == "Pathway",
+    gsub(pathway_prefix, "", merged_priority$name),
+    merged_priority$name
+  )
+  merged_priority$display_name <- gsub("_", " ", merged_priority$display_name)
+  merged_priority$display_name <- ifelse(
+    nchar(merged_priority$display_name) > 34,
+    paste0(substr(merged_priority$display_name, 1, 31), "..."),
+    merged_priority$display_name
+  )
+
+  merged_priority$rank <- seq_len(nrow(merged_priority))
+  merged_priority$n_selected_sources <- if ("n_selected_sources" %in% colnames(merged_priority)) {
+    merged_priority$n_selected_sources
+  } else {
+    rowSums(cbind(
+      if ("selected_cellsets" %in% colnames(merged_priority)) ifelse(is.na(merged_priority$selected_cellsets), FALSE, merged_priority$selected_cellsets) else FALSE,
+      if ("selected_pdopdx" %in% colnames(merged_priority)) ifelse(is.na(merged_priority$selected_pdopdx), FALSE, merged_priority$selected_pdopdx) else FALSE,
+      if ("selected_clinical" %in% colnames(merged_priority)) ifelse(is.na(merged_priority$selected_clinical), FALSE, merged_priority$selected_clinical) else FALSE
+    ))
+  }
+  merged_priority$S_preclinical <- rowMeans(cbind(
+    if ("S_cellsets" %in% colnames(merged_priority)) merged_priority$S_cellsets else NA_real_,
+    if ("S_pdopdx" %in% colnames(merged_priority)) merged_priority$S_pdopdx else NA_real_
+  ), na.rm = TRUE)
+  merged_priority$S_preclinical[!is.finite(merged_priority$S_preclinical)] <- 0
+
+  merged_priority$direction_pattern <- apply(
+    cbind(
+      if ("dir_cell" %in% colnames(merged_priority)) merged_priority$dir_cell else NA_character_,
+      if ("dir_pdopdx" %in% colnames(merged_priority)) merged_priority$dir_pdopdx else NA_character_,
+      if ("dir_clin" %in% colnames(merged_priority)) merged_priority$dir_clin else NA_character_
+    ),
+    1,
+    function(x) paste(ifelse(is.na(x) | x == "", "NA", x), collapse = " / ")
+  )
+
+  merged_priority$display_name <- factor(
+    merged_priority$display_name,
+    levels = rev(merged_priority$display_name)
+  )
+
+  merged_priority
+}
+
+#' Plot top priority candidates as grouped horizontal bars
+#'
+#' @param priority_df Data frame prepared by \code{preparePriorityVisualizationData()}.
+#' @param title Plot title.
+#' @return A ggplot2 object.
+#' @export
+plotPriorityTopBar <- function(priority_df,
+                               title = "Top prioritized candidates") {
+  priority_df <- as.data.frame(priority_df)
+  required_cols <- c("display_name", "PriorityScore", "candidate_class", "n_selected_sources")
+  if (!all(required_cols %in% colnames(priority_df))) {
+    stop("priority_df must contain columns: ", paste(required_cols, collapse = ", "))
+  }
+
+  ggplot2::ggplot(
+    priority_df,
+    ggplot2::aes(x = PriorityScore, y = display_name, fill = candidate_class)
+  ) +
+    ggplot2::geom_col(width = 0.72, alpha = 0.92) +
+    ggplot2::geom_point(
+      ggplot2::aes(shape = factor(n_selected_sources)),
+      x = 0.02,
+      size = 2.6,
+      stroke = 0.6,
+      fill = "white",
+      color = "#2F2A24"
+    ) +
+    ggplot2::scale_fill_manual(values = c("Gene" = "#E98371", "Pathway" = "#66A9C9")) +
+    ggplot2::scale_shape_manual(values = c("1" = 21, "2" = 22, "3" = 24), name = "Selected sources") +
+    ggplot2::labs(
+      title = title,
+      x = "Priority score",
+      y = NULL,
+      fill = "Candidate class"
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      axis.text = ggplot2::element_text(size = 11, color = "black"),
+      axis.title = ggplot2::element_text(size = 12, color = "black"),
+      legend.title = ggplot2::element_text(size = 11, face = "bold"),
+      legend.text = ggplot2::element_text(size = 10),
+      panel.grid.minor = ggplot2::element_blank()
+    )
+}
+
+#' Plot decomposed priority evidence as stacked bars
+#'
+#' @param priority_df Data frame prepared by \code{preparePriorityVisualizationData()}.
+#' @param title Plot title.
+#' @return A ggplot2 object.
+#' @export
+plotPriorityEvidenceStacked <- function(priority_df,
+                                        title = "Priority score decomposition") {
+  priority_df <- as.data.frame(priority_df)
+  required_cols <- c("display_name", "S_cellsets", "S_pdopdx", "S_clinical", "S_direction_adj")
+  if (!all(required_cols %in% colnames(priority_df))) {
+    stop("priority_df must contain columns: ", paste(required_cols, collapse = ", "))
+  }
+
+  stacked_df <- rbind(
+    data.frame(display_name = priority_df$display_name, component = "Cell sets", value = 0.25 * priority_df$S_cellsets),
+    data.frame(display_name = priority_df$display_name, component = "PDO/PDX", value = 0.30 * priority_df$S_pdopdx),
+    data.frame(display_name = priority_df$display_name, component = "Clinical", value = 0.35 * priority_df$S_clinical),
+    data.frame(display_name = priority_df$display_name, component = "Direction", value = 0.10 * priority_df$S_direction_adj)
+  )
+  stacked_df$component <- factor(
+    stacked_df$component,
+    levels = c("Cell sets", "PDO/PDX", "Clinical", "Direction")
+  )
+
+  ggplot2::ggplot(
+    stacked_df,
+    ggplot2::aes(x = value, y = display_name, fill = component)
+  ) +
+    ggplot2::geom_col(width = 0.72) +
+    ggplot2::scale_fill_manual(
+      values = c(
+        "Cell sets" = "#D8B365",
+        "PDO/PDX" = "#80B1D3",
+        "Clinical" = "#FB8072",
+        "Direction" = "#B3B3B3"
+      )
+    ) +
+    ggplot2::labs(
+      title = title,
+      x = "Weighted contribution to priority score",
+      y = NULL,
+      fill = "Evidence component"
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      axis.text = ggplot2::element_text(size = 11, color = "black"),
+      axis.title = ggplot2::element_text(size = 12, color = "black"),
+      legend.title = ggplot2::element_text(size = 11, face = "bold"),
+      legend.text = ggplot2::element_text(size = 10),
+      panel.grid.minor = ggplot2::element_blank()
+    )
+}
+
+#' Plot multi-source evidence heatmap for prioritized candidates
+#'
+#' @param priority_df Data frame prepared by \code{preparePriorityVisualizationData()}.
+#' @param title Plot title.
+#' @return A ggplot2 object.
+#' @export
+plotPriorityEvidenceHeatmap <- function(priority_df,
+                                        title = "Evidence heatmap across sources") {
+  priority_df <- as.data.frame(priority_df)
+  required_cols <- c("display_name", "S_cellsets", "S_pdopdx", "S_clinical", "dir_cell", "dir_pdopdx", "dir_clin")
+  if (!all(required_cols %in% colnames(priority_df))) {
+    stop("priority_df must contain columns: ", paste(required_cols, collapse = ", "))
+  }
+
+  heatmap_df <- rbind(
+    data.frame(display_name = priority_df$display_name, source = "Cell sets", score = priority_df$S_cellsets, direction = priority_df$dir_cell),
+    data.frame(display_name = priority_df$display_name, source = "PDO/PDX", score = priority_df$S_pdopdx, direction = priority_df$dir_pdopdx),
+    data.frame(display_name = priority_df$display_name, source = "Clinical", score = priority_df$S_clinical, direction = priority_df$dir_clin)
+  )
+  heatmap_df$source <- factor(heatmap_df$source, levels = c("Cell sets", "PDO/PDX", "Clinical"))
+  heatmap_df$direction_symbol <- dplyr::case_when(
+    heatmap_df$direction == "Up" ~ "U",
+    heatmap_df$direction == "Down" ~ "D",
+    TRUE ~ "."
+  )
+
+  ggplot2::ggplot(
+    heatmap_df,
+    ggplot2::aes(x = source, y = display_name, fill = score)
+  ) +
+    ggplot2::geom_tile(color = "white", linewidth = 0.5) +
+    ggplot2::geom_text(ggplot2::aes(label = direction_symbol), size = 4.8, color = "#1F1F1F") +
+    ggplot2::scale_fill_gradient(low = "#F6F1E8", high = "#C65D53", limits = c(0, 1), name = "Source score") +
+    ggplot2::labs(
+      title = title,
+      x = NULL,
+      y = NULL
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      axis.text = ggplot2::element_text(size = 11, color = "black"),
+      axis.title = ggplot2::element_text(size = 12, color = "black"),
+      legend.title = ggplot2::element_text(size = 11, face = "bold"),
+      legend.text = ggplot2::element_text(size = 10),
+      panel.grid = ggplot2::element_blank()
+    )
+}
+
+#' Plot clinical versus preclinical evidence as a bubble chart
+#'
+#' @param priority_df Data frame prepared by \code{preparePriorityVisualizationData()}.
+#' @param title Plot title.
+#' @return A ggplot2 object.
+#' @export
+plotPriorityClinicalPreclinicalBubble <- function(priority_df,
+                                                  title = "Clinical vs preclinical support") {
+  priority_df <- as.data.frame(priority_df)
+  required_cols <- c("display_name", "S_preclinical", "S_clinical", "PriorityScore", "candidate_class", "n_selected_sources")
+  if (!all(required_cols %in% colnames(priority_df))) {
+    stop("priority_df must contain columns: ", paste(required_cols, collapse = ", "))
+  }
+
+  ggplot2::ggplot(
+    priority_df,
+    ggplot2::aes(
+      x = S_preclinical,
+      y = S_clinical,
+      size = PriorityScore,
+      fill = candidate_class,
+      alpha = n_selected_sources
+    )
+  ) +
+    ggplot2::geom_point(shape = 21, color = "#2F2A24", stroke = 0.4) +
+    ggrepel::geom_text_repel(
+      ggplot2::aes(label = as.character(display_name)),
+      size = 3.5,
+      color = "black",
+      box.padding = 0.45,
+      point.padding = 0.25,
+      max.overlaps = 50
+    ) +
+    ggplot2::scale_fill_manual(values = c("Gene" = "#E98371", "Pathway" = "#66A9C9")) +
+    ggplot2::scale_size_continuous(range = c(3, 10), name = "Priority score") +
+    ggplot2::scale_alpha_continuous(range = c(0.65, 1), guide = "none") +
+    ggplot2::labs(
+      title = title,
+      x = "Mean preclinical evidence score",
+      y = "Clinical evidence score",
+      fill = "Candidate class"
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      axis.text = ggplot2::element_text(size = 11, color = "black"),
+      axis.title = ggplot2::element_text(size = 12, color = "black"),
+      legend.title = ggplot2::element_text(size = 11, face = "bold"),
+      legend.text = ggplot2::element_text(size = 10),
+      panel.grid.minor = ggplot2::element_blank()
+    )
+}

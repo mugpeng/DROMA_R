@@ -214,8 +214,10 @@ getGeneSetByName <- function(gene_set_name, gmt_file = NULL) {
   }
 
   dots <- list(...)
+  param_arg_names <- character(0)
 
   if (method == "gsva") {
+    param_arg_names <- c("kcdf", "tau", "maxDiff", "absRanking")
     kcdf_value <- if ("kcdf" %in% names(dots)) dots$kcdf else "Gaussian"
     tau_value <- if ("tau" %in% names(dots)) dots$tau else 1
     maxDiff_value <- if ("maxDiff" %in% names(dots)) dots$maxDiff else TRUE
@@ -232,6 +234,7 @@ getGeneSetByName <- function(gene_set_name, gmt_file = NULL) {
       maxSize = max_size
     )
   } else if (method == "ssgsea") {
+    param_arg_names <- c("alpha", "normalize")
     alpha_value <- if ("alpha" %in% names(dots)) dots$alpha else 0.25
     normalize_value <- if ("normalize" %in% names(dots)) dots$normalize else TRUE
 
@@ -261,7 +264,22 @@ getGeneSetByName <- function(gene_set_name, gmt_file = NULL) {
     stop("Unknown method: ", method)
   }
 
-  as.matrix(GSVA::gsva(gsva_param, verbose = verbose_value))
+  drop_from_gsva_call <- c(param_arg_names, "verbose")
+  gsva_extra_args <- if (length(dots) == 0L) {
+    list()
+  } else {
+    dn <- names(dots)
+    if (is.null(dn)) {
+      dots
+    } else {
+      keep <- !(dn %in% drop_from_gsva_call)
+      keep[is.na(keep)] <- TRUE
+      dots[keep]
+    }
+  }
+
+  gsva_call_args <- c(list(gsva_param), list(verbose = verbose_value), gsva_extra_args)
+  as.matrix(do.call(GSVA::gsva, gsva_call_args))
 }
 
 #' Calculate GSVA scores for gene sets
@@ -278,7 +296,11 @@ getGeneSetByName <- function(gene_set_name, gmt_file = NULL) {
 #' @param min_size Minimum number of genes in a gene set that must be present in the expression data (default: 5)
 #' @param max_size Maximum number of genes in a gene set (default: Inf)
 #' @param gmt_file Optional path to GMT file if using predefined gene set names
-#' @param ... Additional parameters passed to GSVA::gsva()
+#' @param ... Additional parameters: passed to \code{GSVA::gsva()} after building the
+#'   parameter object (e.g. \code{BPPARAM = BiocParallel::MulticoreParam(workers = 4)} for
+#'   parallel gene sets). Arguments consumed when building \code{gsvaParam}/\code{ssgseaParam}
+#'   (\code{kcdf}, \code{tau}, \code{maxDiff}, \code{absRanking}, \code{alpha}, \code{normalize})
+#'   are not forwarded.
 #' @return A list containing GSVA scores (gene sets x samples matrix) for each dataset
 #' @export
 #' @examples
@@ -756,6 +778,8 @@ analyzeGSVAAssociation <- function(dromaset_object, gsva_scores, select_gene_set
 #' @param data_type Filter by data type ("all", "CellLine", "PDO", "PDC", "PDX")
 #' @param tumor_type Filter by tumor type ("all" or specific tumor types)
 #' @param overlap_only For MultiDromaSet, whether to use only overlapping samples (default: FALSE)
+#' @param cores Number of CPU cores to use for parallel processing (default: 1).
+#'              Uses future + furrr with task chunking for efficiency when cores > 1
 #' @param zscore Logical, whether to apply z-score normalization (default: TRUE)
 #' @param show_progress Logical, whether to show progress messages (default: TRUE)
 #' @return A data frame with columns: name (gene set name), p_value, effect_size, n_datasets, q_value
@@ -768,7 +792,8 @@ analyzeGSVAAssociation <- function(dromaset_object, gsva_scores, select_gene_set
 #' gsva_scores <- calculateGSVAScores(gCSI, all_gene_sets, method = "gsva")
 #'
 #' # Batch analyze associations with a drug
-#' results <- batchAnalyzePathwaysWithFeature(gCSI, gsva_scores, "Bortezomib", feature_type = "drug")
+#' results <- batchAnalyzePathwaysWithFeature(gCSI, gsva_scores, "Bortezomib",
+#'                                           feature_type = "drug", cores = 4)
 #'
 #' # Batch analyze associations with a gene expression
 #' results <- batchAnalyzePathwaysWithFeature(gCSI, gsva_scores, "TP53", feature_type = "mRNA")
@@ -781,6 +806,7 @@ batchAnalyzePathwaysWithFeature <- function(dromaset_object, gsva_scores, featur
                                             gene_set_names = NULL,
                                             data_type = "all", tumor_type = "all",
                                             overlap_only = FALSE,
+                                            cores = 1,
                                             zscore = TRUE,
                                             show_progress = TRUE) {
   
@@ -795,6 +821,13 @@ batchAnalyzePathwaysWithFeature <- function(dromaset_object, gsva_scores, featur
   if (!feature_type %in% valid_feature_types) {
     stop(paste0("Invalid feature_type. Please choose from: ",
                 paste(valid_feature_types, collapse = ", ")))
+  }
+
+  max_cores <- ifelse(requireNamespace("parallel", quietly = TRUE),
+                      parallel::detectCores() - 1,
+                      1)
+  if (!is.numeric(cores) || length(cores) != 1 || cores < 1 || cores != as.integer(cores) || cores > max_cores) {
+    stop(paste0("cores must be a positive integer between 1 and ", max_cores))
   }
   
   # Determine if feature is continuous or discrete
@@ -836,133 +869,177 @@ batchAnalyzePathwaysWithFeature <- function(dromaset_object, gsva_scores, featur
     stop("No sufficient data found for the specified feature: ", feature_name)
   }
   
-  # Initialize results
-  results_list <- list()
   total_sets <- length(gene_set_names)
-  
-  # Process each gene set
-  for (i in seq_along(gene_set_names)) {
-    gene_set_name <- gene_set_names[i]
-    
-    if (show_progress && (i %% 10 == 0 || i == 1 || i == total_sets)) {
-      message(sprintf("Processing gene set %d/%d: %s", i, total_sets, gene_set_name))
-    }
-    
-    # Extract GSVA scores for this gene set
-    gsva_data <- lapply(gsva_scores, function(score_mat) {
-      if (gene_set_name %in% rownames(score_mat)) {
-        score_vec <- as.numeric(score_mat[gene_set_name, ])
-        names(score_vec) <- colnames(score_mat)
-        return(score_vec[!is.na(score_vec)])
-      }
-      return(NULL)
-    })
-    
-    # Remove NULL entries
-    gsva_data <- gsva_data[!sapply(gsva_data, is.null)]
-    
-    if (length(gsva_data) == 0) {
-      next
-    }
-    
-    # Pair GSVA scores with feature data based on feature type
+  start_time <- Sys.time()
+
+  processGeneSet <- function(idx) {
+    gene_set_name <- gene_set_names[idx]
+
     tryCatch({
-      if (is_continuous) {
-        # Continuous feature: use correlation
-        myPairs <- pairContinuousFeatures(gsva_data, feature_data, merged = FALSE)
-        
-        if (is.null(myPairs) || length(myPairs) == 0) {
-          next
+      gsva_data <- lapply(gsva_scores, function(score_mat) {
+        if (gene_set_name %in% rownames(score_mat)) {
+          score_vec <- as.numeric(score_mat[gene_set_name, ])
+          names(score_vec) <- colnames(score_mat)
+          return(score_vec[!is.na(score_vec)])
         }
-        
-        # Perform meta-analysis or single correlation
+        return(NULL)
+      })
+      gsva_data <- gsva_data[!sapply(gsva_data, is.null)]
+
+      if (length(gsva_data) == 0) {
+        return(NULL)
+      }
+
+      if (is_continuous) {
+        myPairs <- pairContinuousFeatures(gsva_data, feature_data, merged = FALSE)
+
+        if (is.null(myPairs) || length(myPairs) == 0) {
+          return(NULL)
+        }
+
         if (length(myPairs) > 1) {
           meta_result <- metaCalcConCon(myPairs)
-          
+
           if (!is.null(meta_result)) {
             p_val <- meta_result[["pval.random"]]
             eff_size <- meta_result[["TE.random"]]
             n_datasets <- length(meta_result[["studlab"]])
-            
-            # Replace NA values
+
             if (is.na(p_val)) p_val <- 1
             if (is.na(eff_size)) eff_size <- 0
-            
-            results_list[[gene_set_name]] <- data.frame(
+
+            return(data.frame(
               name = gene_set_name,
               p_value = p_val,
               effect_size = eff_size,
               n_datasets = n_datasets,
               stringsAsFactors = FALSE
-            )
+            ))
           }
         } else {
-          # Single dataset - calculate correlation directly
           single_pair <- myPairs[[1]]
           if (length(single_pair$feature1) >= 3 && length(single_pair$feature2) >= 3) {
             cor_test <- cor.test(single_pair$feature1, single_pair$feature2, method = "spearman")
-            
-            results_list[[gene_set_name]] <- data.frame(
+
+            return(data.frame(
               name = gene_set_name,
               p_value = cor_test$p.value,
               effect_size = cor_test$estimate,
               n_datasets = 1,
               stringsAsFactors = FALSE
-            )
+            ))
           }
         }
       } else {
-        # Discrete feature: use group comparison
-        # For discrete: feature groups (discrete) vs GSVA scores (continuous)
         myPairs <- pairDiscreteFeatures(feature_data, gsva_data, merged = FALSE)
-        
+
         if (is.null(myPairs) || length(myPairs) == 0) {
-          next
+          return(NULL)
         }
-        
-        # Perform meta-analysis or single comparison
+
         if (length(myPairs) > 1) {
           meta_result <- metaCalcConDis(myPairs)
-          
+
           if (!is.null(meta_result)) {
             p_val <- meta_result[["pval.random"]]
             eff_size <- meta_result[["TE.random"]]
             n_datasets <- length(meta_result[["studlab"]])
-            
-            # Replace NA values
+
             if (is.na(p_val)) p_val <- 1
             if (is.na(eff_size)) eff_size <- 0
-            
-            results_list[[gene_set_name]] <- data.frame(
+
+            return(data.frame(
               name = gene_set_name,
               p_value = p_val,
               effect_size = eff_size,
               n_datasets = n_datasets,
               stringsAsFactors = FALSE
-            )
+            ))
           }
         } else {
-          # Single dataset - calculate group comparison directly
           single_pair <- myPairs[[1]]
           if (length(single_pair$no) >= 3 && length(single_pair$yes) >= 3) {
             wilcox_test <- wilcox.test(single_pair$no, single_pair$yes)
-            # Effect size: difference in medians / pooled SD (approximate)
             pooled_sd <- sd(c(single_pair$no, single_pair$yes))
             effect_size <- (median(single_pair$yes) - median(single_pair$no)) / pooled_sd
-            
-            results_list[[gene_set_name]] <- data.frame(
+
+            return(data.frame(
               name = gene_set_name,
               p_value = wilcox_test$p.value,
               effect_size = effect_size,
               n_datasets = 1,
               stringsAsFactors = FALSE
-            )
+            ))
           }
         }
       }
-    }, error = function(e) {
-      # Silently skip on error
+
       NULL
+    }, error = function(e) {
+      NULL
+    })
+  }
+
+  if (cores > 1) {
+    old_size <- getOption("future.globals.maxSize")
+    options(future.globals.maxSize = 2 * 1024^3)
+
+    if (.Platform$OS.type == "unix") {
+      future::plan(future::multicore, workers = cores)
+      if (show_progress) {
+        message(sprintf("Using fork-based parallelization with %d cores", cores))
+      }
+    } else {
+      future::plan(future::multisession, workers = cores)
+      if (show_progress) {
+        message(sprintf("Using multisession parallelization with %d cores", cores))
+      }
+    }
+
+    on.exit({
+      future::plan(future::sequential)
+      options(future.globals.maxSize = old_size)
+    }, add = TRUE)
+
+    chunk_size <- if (total_sets < 100) {
+      max(10, ceiling(total_sets / cores))
+    } else if (total_sets < 1000) {
+      ceiling(total_sets / (cores * 4))
+    } else {
+      max(50, min(200, ceiling(total_sets / (cores * 8))))
+    }
+    chunks <- split(seq_along(gene_set_names),
+                    ceiling(seq_along(gene_set_names) / chunk_size))
+
+    if (show_progress && requireNamespace("progressr", quietly = TRUE)) {
+      progressr::with_progress({
+        p <- progressr::progressor(steps = total_sets)
+        chunk_results <- furrr::future_map(chunks, function(indices) {
+          lapply(indices, function(idx) {
+            result <- processGeneSet(idx)
+            p()
+            result
+          })
+        }, .options = furrr::furrr_options(seed = TRUE))
+      })
+    } else {
+      if (show_progress) {
+        message("Note: Install 'progressr' for progress tracking: install.packages('progressr')")
+      }
+      chunk_results <- furrr::future_map(chunks, function(indices) {
+        lapply(indices, processGeneSet)
+      }, .options = furrr::furrr_options(seed = TRUE))
+    }
+
+    results_list <- unlist(chunk_results, recursive = FALSE)
+  } else {
+    results_list <- lapply(seq_along(gene_set_names), function(i) {
+      gene_set_name <- gene_set_names[i]
+      if (show_progress && (i %% 10 == 0 || i == 1 || i == total_sets)) {
+        elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+        message(sprintf("Processing gene set %d/%d: %s (%.1fs elapsed)", i, total_sets, gene_set_name, elapsed))
+      }
+      processGeneSet(i)
     })
   }
   
@@ -986,6 +1063,11 @@ batchAnalyzePathwaysWithFeature <- function(dromaset_object, gsva_scores, featur
   
   # Sort by p-value
   results_df <- results_df[order(results_df$p_value), ]
+
+  if (show_progress) {
+    total_time <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+    message(sprintf("Analysis completed in %.1f seconds", total_time))
+  }
   
   return(results_df)
 }
