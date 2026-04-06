@@ -187,3 +187,146 @@ buildPriorityTable <- function(candidate_names,
   rownames(out) <- NULL
   out
 }
+
+#' Prepare merged priority table for visualization
+#'
+#' @description Merges gene and pathway priority tables, annotates candidate type,
+#'   strips common pathway prefixes, and derives summary columns used by
+#'   visualization helpers.
+#' @param gene_priority Data frame produced by \code{buildPriorityTable()} for genes.
+#' @param pathway_priority Data frame produced by \code{buildPriorityTable()} for pathways.
+#' @param top_n Optional integer. If provided, keep only the top N candidates by
+#'   \code{PriorityScore} after merging.
+#' @param pathway_prefix Regular expression prefix to strip from pathway names for display.
+#' @return A merged and annotated data frame ready for plotting.
+#' @export
+preparePriorityVisualizationData <- function(gene_priority,
+                                             pathway_priority,
+                                             top_n = NULL,
+                                             pathway_prefix = "^(HALLMARK_|GOBP_|KEGG_)") {
+  gene_priority <- as.data.frame(gene_priority)
+  pathway_priority <- as.data.frame(pathway_priority)
+
+  if (!"name" %in% colnames(gene_priority) || !"PriorityScore" %in% colnames(gene_priority)) {
+    stop("gene_priority must contain at least 'name' and 'PriorityScore' columns")
+  }
+  if (!"name" %in% colnames(pathway_priority) || !"PriorityScore" %in% colnames(pathway_priority)) {
+    stop("pathway_priority must contain at least 'name' and 'PriorityScore' columns")
+  }
+
+  gene_priority$candidate_class <- "Gene"
+  pathway_priority$candidate_class <- "Pathway"
+
+  merged_priority <- rbind(pathway_priority, gene_priority)
+  merged_priority <- merged_priority[order(-merged_priority$PriorityScore, merged_priority$name), , drop = FALSE]
+  rownames(merged_priority) <- NULL
+
+  if (!is.null(top_n)) {
+    top_n <- min(as.integer(top_n), nrow(merged_priority))
+    merged_priority <- utils::head(merged_priority, top_n)
+  }
+
+  merged_priority$display_name <- ifelse(
+    merged_priority$candidate_class == "Pathway",
+    gsub(pathway_prefix, "", merged_priority$name),
+    merged_priority$name
+  )
+  merged_priority$rank <- seq_len(nrow(merged_priority))
+  merged_priority$n_selected_sources <- if ("n_selected_sources" %in% colnames(merged_priority)) {
+    merged_priority$n_selected_sources
+  } else {
+    rowSums(cbind(
+      if ("selected_cellsets" %in% colnames(merged_priority)) ifelse(is.na(merged_priority$selected_cellsets), FALSE, merged_priority$selected_cellsets) else FALSE,
+      if ("selected_pdopdx" %in% colnames(merged_priority)) ifelse(is.na(merged_priority$selected_pdopdx), FALSE, merged_priority$selected_pdopdx) else FALSE,
+      if ("selected_clinical" %in% colnames(merged_priority)) ifelse(is.na(merged_priority$selected_clinical), FALSE, merged_priority$selected_clinical) else FALSE
+    ))
+  }
+  merged_priority$S_preclinical <- rowMeans(cbind(
+    if ("S_cellsets" %in% colnames(merged_priority)) merged_priority$S_cellsets else NA_real_,
+    if ("S_pdopdx" %in% colnames(merged_priority)) merged_priority$S_pdopdx else NA_real_
+  ), na.rm = TRUE)
+  merged_priority$S_preclinical[!is.finite(merged_priority$S_preclinical)] <- 0
+
+  merged_priority$dir_cell_selected <- if ("selected_cellsets" %in% colnames(merged_priority) &&
+                                           "dir_cell" %in% colnames(merged_priority)) {
+    ifelse(!is.na(merged_priority$selected_cellsets) & merged_priority$selected_cellsets, merged_priority$dir_cell, NA_character_)
+  } else {
+    NA_character_
+  }
+  merged_priority$dir_pdopdx_selected <- if ("selected_pdopdx" %in% colnames(merged_priority) &&
+                                             "dir_pdopdx" %in% colnames(merged_priority)) {
+    ifelse(!is.na(merged_priority$selected_pdopdx) & merged_priority$selected_pdopdx, merged_priority$dir_pdopdx, NA_character_)
+  } else {
+    NA_character_
+  }
+  merged_priority$dir_clin_selected <- if ("selected_clinical" %in% colnames(merged_priority) &&
+                                           "dir_clin" %in% colnames(merged_priority)) {
+    ifelse(!is.na(merged_priority$selected_clinical) & merged_priority$selected_clinical, merged_priority$dir_clin, NA_character_)
+  } else {
+    NA_character_
+  }
+
+  merged_priority$direction_pattern <- apply(
+    cbind(
+      merged_priority$dir_cell_selected,
+      merged_priority$dir_pdopdx_selected,
+      merged_priority$dir_clin_selected
+    ),
+    1,
+    function(x) paste(ifelse(is.na(x) | x == "", "NA", x), collapse = " / ")
+  )
+
+  merged_priority$direction_support_n <- rowSums(cbind(
+    !is.na(merged_priority$dir_cell_selected),
+    !is.na(merged_priority$dir_pdopdx_selected),
+    !is.na(merged_priority$dir_clin_selected)
+  ))
+
+  merged_priority$direction_pattern_short <- apply(
+    cbind(
+      merged_priority$dir_cell_selected,
+      merged_priority$dir_pdopdx_selected,
+      merged_priority$dir_clin_selected
+    ),
+    1,
+    function(x) {
+      source_codes <- c("C", "P", "L")
+      valid <- !is.na(x) & x != ""
+      if (!any(valid)) {
+        return("NA")
+      }
+      dir_codes <- ifelse(x[valid] == "Up", "+", ifelse(x[valid] == "Down", "-", "?"))
+      paste0(source_codes[valid], dir_codes, collapse = " ")
+    }
+  )
+
+  merged_priority$direction_consensus <- apply(
+    cbind(
+      merged_priority$dir_cell_selected,
+      merged_priority$dir_pdopdx_selected,
+      merged_priority$dir_clin_selected
+    ),
+    1,
+    function(x) {
+      dirs <- x[!is.na(x) & x != ""]
+      if (length(dirs) == 0) {
+        return("NA")
+      }
+      if (length(unique(dirs)) == 1) {
+        return(dirs[1])
+      }
+      tab <- sort(table(dirs), decreasing = TRUE)
+      if (length(tab) > 1 && tab[1] == tab[2]) {
+        return("Mixed")
+      }
+      names(tab)[1]
+    }
+  )
+
+  merged_priority$display_name <- factor(
+    merged_priority$display_name,
+    levels = rev(merged_priority$display_name)
+  )
+
+  merged_priority
+}

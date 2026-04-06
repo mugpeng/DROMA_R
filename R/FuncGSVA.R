@@ -1089,7 +1089,9 @@ batchAnalyzePathwaysWithFeature <- function(dromaset_object, gsva_scores, featur
 #' @param gmt_file Optional GMT file path for predefined pathway names.
 #' @param cores Number of CPU cores (kept for API consistency; not used).
 #' @param zscore Logical, whether to z-score pathway scores within each patient.
-#' @param show_progress Logical, whether to print progress messages.
+#' @param show_progress Logical, whether to show progress updates (default: TRUE).
+#'   Uses the same progress callback style as other batch functions, including
+#'   processed count, elapsed time, and ETA.
 #' @param ... Additional parameters passed to GSVA.
 #' @return Data frame with \code{p_value}, \code{effect_size}, \code{n_datasets},
 #'   \code{name}, and \code{q_value}.
@@ -1118,6 +1120,9 @@ batchFindClinicalPathwaySigResponse <- function(select_pathways,
   }
 
   method <- match.arg(method)
+  if (!is.logical(show_progress) || length(show_progress) != 1) {
+    stop("show_progress must be TRUE or FALSE")
+  }
   gene_sets <- .prepareGSVAGeneSets(gene_sets, gmt_file = gmt_file)
   missing_pathways <- setdiff(select_pathways, names(gene_sets))
   if (length(missing_pathways) > 0) {
@@ -1208,10 +1213,14 @@ batchFindClinicalPathwaySigResponse <- function(select_pathways,
 
   patient_context <- list()
   total_datasets <- length(unique_datasets)
+  patient_progress <- createDefaultProgressCallback(
+    show_progress = show_progress,
+    update_interval = 10
+  )
+  patient_start_time <- Sys.time()
 
   for (i in seq_along(unique_datasets)) {
     patient_id <- unique_datasets[i]
-
     if (show_progress && (i %% 10 == 0 || i == 1 || i == total_datasets)) {
       message(sprintf("Processing clinical GSVA dataset %d/%d: %s", i, total_datasets, patient_id))
     }
@@ -1261,6 +1270,9 @@ batchFindClinicalPathwaySigResponse <- function(select_pathways,
     }, error = function(e) {
       warning("Error processing patient ", patient_id, ": ", e$message)
     })
+
+    patient_elapsed <- as.numeric(difftime(Sys.time(), patient_start_time, units = "secs"))
+    patient_progress(i, total_datasets, patient_elapsed)
   }
 
   if (length(patient_context) == 0) {
@@ -1276,7 +1288,23 @@ batchFindClinicalPathwaySigResponse <- function(select_pathways,
 
   message("Successfully processed ", length(patient_context), " datasets")
 
-  cal_re_list <- lapply(select_pathways, function(pathway_name) {
+  total_pathways <- length(select_pathways)
+  pathway_progress <- createDefaultProgressCallback(
+    show_progress = show_progress,
+    update_interval = 10
+  )
+  pathway_start_time <- Sys.time()
+
+  cal_re_list <- lapply(seq_along(select_pathways), function(i) {
+    pathway_name <- select_pathways[i]
+    if (show_progress && (i %% 10 == 0 || i == 1 || i == total_pathways)) {
+      message(sprintf("Scoring pathway %d/%d: %s", i, total_pathways, pathway_name))
+    }
+    on.exit({
+      pathway_elapsed <- as.numeric(difftime(Sys.time(), pathway_start_time, units = "secs"))
+      pathway_progress(i, total_pathways, pathway_elapsed)
+    }, add = TRUE)
+
     patient_data_list <- list()
 
     for (patient_id in names(patient_context)) {
@@ -1371,13 +1399,14 @@ batchFindClinicalPathwaySigResponse <- function(select_pathways,
       eff_size <- 0
     }
 
-    data.frame(
+    out <- data.frame(
       p_value = p_val,
       effect_size = eff_size,
       n_datasets = n_datasets,
       name = pathway_name,
       stringsAsFactors = FALSE
     )
+    out
   })
 
   valid <- !sapply(cal_re_list, is.null)
