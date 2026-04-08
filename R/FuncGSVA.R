@@ -448,6 +448,225 @@ calculateGSVAScores <- function(dromaset_object, gene_sets,
   return(result)
 }
 
+#' Prepare a dataset-level GSVA heatmap matrix
+#'
+#' @description Aggregates sample-level GSVA scores into a pathway-by-dataset matrix
+#'              for heatmap visualization.
+#' @param gsva_scores GSVA scores from \code{calculateGSVAScores()}. Can be a matrix for
+#'   a single dataset or a named list of matrices for multiple datasets.
+#' @param gene_set_names Optional character vector of pathway names to keep. If \code{NULL},
+#'   all available pathways are used.
+#' @param dataset_names Optional character vector of dataset names to keep. If \code{NULL},
+#'   all datasets are used.
+#' @param aggregate_fun Aggregation method across samples within each dataset: \code{"mean"}
+#'   or \code{"median"}.
+#' @param scale_rows Logical, whether to z-score each pathway across datasets.
+#' @param clean_names Logical, whether to remove the \code{HALLMARK_} prefix and replace
+#'   underscores with spaces in row names.
+#' @param remove_prefix Regular expression removed from pathway names when
+#'   \code{clean_names = TRUE}.
+#' @param top_n Optional integer. If provided and \code{gene_set_names} is \code{NULL},
+#'   keeps the top pathways ranked by cross-dataset variability.
+#' @return A numeric matrix with pathways in rows and datasets in columns.
+#' @export
+prepareGSVAHeatmapMatrix <- function(gsva_scores,
+                                     gene_set_names = NULL,
+                                     dataset_names = NULL,
+                                     aggregate_fun = c("mean", "median"),
+                                     scale_rows = TRUE,
+                                     clean_names = TRUE,
+                                     remove_prefix = "^HALLMARK_",
+                                     top_n = NULL) {
+  aggregate_fun <- match.arg(aggregate_fun)
+
+  if (is.matrix(gsva_scores)) {
+    gsva_scores <- list(dataset_1 = gsva_scores)
+  }
+
+  if (!is.list(gsva_scores) || length(gsva_scores) == 0) {
+    stop("gsva_scores must be a matrix or a non-empty list of matrices")
+  }
+
+  if (is.null(names(gsva_scores)) || any(names(gsva_scores) == "")) {
+    names(gsva_scores) <- paste0("dataset_", seq_along(gsva_scores))
+  }
+
+  if (!is.null(dataset_names)) {
+    keep_datasets <- intersect(dataset_names, names(gsva_scores))
+    if (length(keep_datasets) == 0) {
+      stop("None of the requested dataset_names were found in gsva_scores")
+    }
+    gsva_scores <- gsva_scores[keep_datasets]
+  }
+
+  valid_scores <- Filter(function(x) is.matrix(x) && nrow(x) > 0 && ncol(x) > 0, gsva_scores)
+  if (length(valid_scores) == 0) {
+    stop("No valid GSVA score matrices found after filtering")
+  }
+
+  all_gene_sets <- unique(unlist(lapply(valid_scores, rownames), use.names = FALSE))
+  if (length(all_gene_sets) == 0) {
+    stop("No pathway names found in gsva_scores rownames")
+  }
+
+  if (!is.null(gene_set_names)) {
+    all_gene_sets <- intersect(gene_set_names, all_gene_sets)
+    if (length(all_gene_sets) == 0) {
+      stop("None of the requested gene_set_names were found in gsva_scores")
+    }
+  }
+
+  summary_mat <- matrix(
+    NA_real_,
+    nrow = length(all_gene_sets),
+    ncol = length(valid_scores),
+    dimnames = list(all_gene_sets, names(valid_scores))
+  )
+
+  agg_fn <- if (aggregate_fun == "mean") base::mean else stats::median
+
+  for (dataset_name in names(valid_scores)) {
+    dataset_mat <- valid_scores[[dataset_name]]
+    overlap_gene_sets <- intersect(all_gene_sets, rownames(dataset_mat))
+    if (length(overlap_gene_sets) == 0) {
+      next
+    }
+    dataset_values <- apply(
+      dataset_mat[overlap_gene_sets, , drop = FALSE],
+      1,
+      function(x) agg_fn(x, na.rm = TRUE)
+    )
+    summary_mat[overlap_gene_sets, dataset_name] <- dataset_values
+  }
+
+  keep_rows <- rowSums(!is.na(summary_mat)) > 0
+  summary_mat <- summary_mat[keep_rows, , drop = FALSE]
+  if (nrow(summary_mat) == 0) {
+    stop("No pathways retained after aggregating GSVA scores")
+  }
+
+  if (!is.null(top_n) && is.null(gene_set_names) && nrow(summary_mat) > top_n) {
+    row_sd <- apply(summary_mat, 1, function(x) stats::sd(x, na.rm = TRUE))
+    row_sd[is.na(row_sd)] <- -Inf
+    summary_mat <- summary_mat[order(row_sd, decreasing = TRUE), , drop = FALSE]
+    summary_mat <- summary_mat[seq_len(top_n), , drop = FALSE]
+  }
+
+  if (scale_rows) {
+    original_row_names <- rownames(summary_mat)
+    summary_mat <- t(apply(summary_mat, 1, function(x) {
+      if (all(is.na(x))) {
+        return(rep(NA_real_, length(x)))
+      }
+      row_sd <- stats::sd(x, na.rm = TRUE)
+      if (is.na(row_sd) || row_sd == 0) {
+        out <- x
+        out[!is.na(out)] <- 0
+        return(out)
+      }
+      as.numeric(scale(x))
+    }))
+    rownames(summary_mat) <- original_row_names
+    colnames(summary_mat) <- names(valid_scores)
+  }
+
+  if (clean_names) {
+    clean_row_names <- gsub(remove_prefix, "", rownames(summary_mat))
+    clean_row_names <- gsub("_", " ", clean_row_names)
+    rownames(summary_mat) <- clean_row_names
+  }
+
+  summary_mat
+}
+
+#' Prepare a drug-by-pathway effect size heatmap matrix
+#'
+#' @description Converts a named list of pathway-level drug association results into
+#'   a matrix with drugs as rows and pathways as columns.
+#' @param pathway_results_list Named list of data frames returned by
+#'   \code{batchAnalyzePathwayAcrossFeatures()}, where each list element corresponds to one pathway.
+#' @param pathway_names Optional character vector specifying which pathways to keep and in what order.
+#' @param drug_names Optional character vector specifying which drugs to keep and in what order.
+#' @param clean_pathway_names Logical, whether to remove the \code{HALLMARK_} prefix and replace
+#'   underscores with spaces in the output column names.
+#' @param remove_prefix Regular expression removed from pathway names when
+#'   \code{clean_pathway_names = TRUE}.
+#' @return Numeric matrix with drugs in rows and pathways in columns.
+#' @export
+prepareDrugPathwayEffectSizeMatrix <- function(pathway_results_list,
+                                               pathway_names = NULL,
+                                               drug_names = NULL,
+                                               clean_pathway_names = TRUE,
+                                               remove_prefix = "^HALLMARK_") {
+  if (!is.list(pathway_results_list) || length(pathway_results_list) == 0) {
+    stop("pathway_results_list must be a non-empty named list")
+  }
+
+  if (is.null(names(pathway_results_list)) || any(names(pathway_results_list) == "")) {
+    stop("pathway_results_list must be a named list with pathway names")
+  }
+
+  if (!is.null(pathway_names)) {
+    keep_pathways <- intersect(pathway_names, names(pathway_results_list))
+    if (length(keep_pathways) == 0) {
+      stop("None of the requested pathway_names were found in pathway_results_list")
+    }
+    pathway_results_list <- pathway_results_list[keep_pathways]
+  }
+
+  valid_results <- Filter(function(x) {
+    is.data.frame(x) && all(c("name", "effect_size") %in% colnames(x)) && nrow(x) > 0
+  }, pathway_results_list)
+  if (length(valid_results) == 0) {
+    stop("No valid pathway result tables found")
+  }
+
+  all_drugs <- unique(unlist(lapply(valid_results, function(x) as.character(x$name)), use.names = FALSE))
+  if (length(all_drugs) == 0) {
+    stop("No drug names found in pathway_results_list")
+  }
+
+  if (!is.null(drug_names)) {
+    all_drugs <- intersect(drug_names, all_drugs)
+    if (length(all_drugs) == 0) {
+      stop("None of the requested drug_names were found in pathway_results_list")
+    }
+  }
+
+  effect_mat <- matrix(
+    NA_real_,
+    nrow = length(all_drugs),
+    ncol = length(valid_results),
+    dimnames = list(all_drugs, names(valid_results))
+  )
+
+  for (pathway_name in names(valid_results)) {
+    result_df <- valid_results[[pathway_name]]
+    result_df <- result_df[!duplicated(result_df$name), c("name", "effect_size"), drop = FALSE]
+    overlap_drugs <- intersect(all_drugs, as.character(result_df$name))
+    if (length(overlap_drugs) == 0) {
+      next
+    }
+    matched_idx <- match(overlap_drugs, result_df$name)
+    effect_mat[overlap_drugs, pathway_name] <- result_df$effect_size[matched_idx]
+  }
+
+  keep_rows <- rowSums(!is.na(effect_mat)) > 0
+  keep_cols <- colSums(!is.na(effect_mat)) > 0
+  effect_mat <- effect_mat[keep_rows, keep_cols, drop = FALSE]
+  if (nrow(effect_mat) == 0 || ncol(effect_mat) == 0) {
+    stop("No non-missing effect sizes retained after matrix assembly")
+  }
+
+  if (clean_pathway_names) {
+    clean_col_names <- gsub(remove_prefix, "", colnames(effect_mat))
+    clean_col_names <- gsub("_", " ", clean_col_names)
+    colnames(effect_mat) <- clean_col_names
+  }
+
+  effect_mat
+}
+
 #' Analyze GSVA score associations with drugs or omics features
 #'
 #' @description Analyzes associations between GSVA scores and drug sensitivity or omics features,

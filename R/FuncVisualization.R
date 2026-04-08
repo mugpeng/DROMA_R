@@ -103,6 +103,63 @@ plotGroupComparison <- function(no_values, yes_values,
 }
 
 
+#' ROC / AUC plot for clinical drug response (expression vs response groups)
+#'
+#' @description
+#' ggplot2 ROC curve comparable to the clinical validation panel style: diagonal
+#' reference line, smooth curve, and annotated AUC.
+#'
+#' @param no_values Non-response expression values (same order as \code{plotGroupComparison}).
+#' @param yes_values Response expression values.
+#' @param title Plot title.
+#' @param subtitle Plot subtitle.
+#' @param positive_direction One of \code{"auto"}, \code{"high"}, \code{"low"}; passed to the
+#'   internal ROC builder in the clinical module (\code{.computeClinicalResponseRoc}).
+#' @return A \code{ggplot} object, or \code{NULL} if ROC cannot be computed.
+#'         Attribute \code{roc_auc} holds the numeric AUC when the plot is non-NULL.
+#' @export
+plotClinicalDrugResponseRoc <- function(no_values,
+                                       yes_values,
+                                       title = "Clinical readout",
+                                       subtitle = "Response classification performance",
+                                       positive_direction = c("auto", "high", "low")) {
+  positive_direction <- match.arg(positive_direction)
+  prep <- .computeClinicalResponseRoc(no_values, yes_values,
+                                     positive_direction = positive_direction)
+  if (is.null(prep$df)) {
+    return(NULL)
+  }
+  auc_val <- prep$auc
+  df <- prep$df
+  # Panel D–style annotation position (lower-right of diagonal)
+  txt_x <- 0.55
+  txt_y <- 0.12
+  p <- ggplot2::ggplot(df, ggplot2::aes(.data$FPR, .data$TPR)) +
+    ggplot2::geom_abline(intercept = 0, slope = 1,
+                        color = "#B0A99F", linetype = "dashed", linewidth = 0.35) +
+    ggplot2::geom_line(color = "#4B74F2", linewidth = 1.2) +
+    ggplot2::annotate("text", x = txt_x, y = txt_y,
+                     label = sprintf("AUC = %.2f", auc_val),
+                     hjust = 0, size = 3.8) +
+    ggplot2::labs(
+      title = title,
+      subtitle = subtitle,
+      x = "False positive rate",
+      y = "True positive rate"
+    ) +
+    ggplot2::coord_equal() +
+    ggplot2::lims(x = c(0, 1), y = c(0, 1)) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(face = "bold", size = 13),
+      plot.subtitle = ggplot2::element_text(size = 10, color = "#6F685E"),
+      panel.grid.minor = ggplot2::element_blank()
+    )
+  attr(p, "roc_auc") <- auc_val
+  p
+}
+
+
 #' Plot multiple correlation plots in a grid
 #'
 #' @description Creates and combines multiple correlation plots
@@ -749,6 +806,358 @@ plotPriorityEvidenceHeatmap <- function(priority_df,
       legend.text = ggplot2::element_text(size = 10),
       panel.grid = ggplot2::element_blank()
     )
+}
+
+#' Plot a GSVA heatmap
+#'
+#' @param gsva_heatmap A numeric matrix prepared by \code{prepareGSVAHeatmapMatrix()} with
+#'   pathways in rows and datasets in columns.
+#' @param title Plot title.
+#' @param subtitle Plot subtitle.
+#' @param low_color Low-value color.
+#' @param mid_color Midpoint color.
+#' @param high_color High-value color.
+#' @param midpoint Midpoint for the diverging color scale.
+#' @param border_color Tile border color.
+#' @param cluster_rows Logical, whether to cluster pathway order.
+#' @param cluster_cols Logical, whether to cluster dataset order.
+#' @param show_x_text Logical, whether to show dataset labels.
+#' @return A ggplot2 object.
+#' @export
+plotGSVAHeatmap <- function(gsva_heatmap,
+                            title = "GSVA pathway activity",
+                            subtitle = "Representative pathway score matrix",
+                            low_color = "#6AAED6",
+                            mid_color = "#FBFAF7",
+                            high_color = "#E98484",
+                            midpoint = 0,
+                            border_color = "#F6F2EA",
+                            cluster_rows = FALSE,
+                            cluster_cols = FALSE,
+                            show_x_text = FALSE) {
+  if (!is.matrix(gsva_heatmap) || !is.numeric(gsva_heatmap)) {
+    stop("gsva_heatmap must be a numeric matrix")
+  }
+  if (is.null(rownames(gsva_heatmap)) || is.null(colnames(gsva_heatmap))) {
+    stop("gsva_heatmap must have rownames and colnames")
+  }
+
+  row_order <- rownames(gsva_heatmap)
+  col_order <- colnames(gsva_heatmap)
+  cluster_mat <- gsva_heatmap
+
+  if (anyNA(cluster_mat)) {
+    row_means <- apply(cluster_mat, 1, function(x) mean(x, na.rm = TRUE))
+    row_means[!is.finite(row_means)] <- 0
+    for (i in seq_len(nrow(cluster_mat))) {
+      na_idx <- is.na(cluster_mat[i, ])
+      if (any(na_idx)) {
+        cluster_mat[i, na_idx] <- row_means[i]
+      }
+    }
+  }
+
+  if (cluster_rows && nrow(gsva_heatmap) > 1) {
+    row_dist <- stats::dist(cluster_mat)
+    if (length(row_dist) > 0 && all(is.finite(row_dist))) {
+      row_order <- rownames(gsva_heatmap)[stats::hclust(row_dist)$order]
+    }
+  }
+
+  if (cluster_cols && ncol(gsva_heatmap) > 1) {
+    col_dist <- stats::dist(t(cluster_mat))
+    if (length(col_dist) > 0 && all(is.finite(col_dist))) {
+      col_order <- colnames(gsva_heatmap)[stats::hclust(col_dist)$order]
+    }
+  }
+
+  heatmap_df <- as.data.frame(as.table(gsva_heatmap), stringsAsFactors = FALSE)
+  colnames(heatmap_df) <- c("Pathway", "Dataset", "Score")
+  heatmap_df$Pathway <- factor(heatmap_df$Pathway, levels = rev(row_order))
+  heatmap_df$Dataset <- factor(heatmap_df$Dataset, levels = col_order)
+
+  ggplot2::ggplot(heatmap_df, ggplot2::aes(x = Dataset, y = Pathway, fill = Score)) +
+    ggplot2::geom_tile(color = border_color, linewidth = 0.45) +
+    ggplot2::scale_fill_gradient2(
+      low = low_color,
+      mid = mid_color,
+      high = high_color,
+      midpoint = midpoint,
+      na.value = "#E7E1D7",
+      name = "Score"
+    ) +
+    ggplot2::labs(
+      title = title,
+      subtitle = subtitle,
+      x = NULL,
+      y = NULL
+    ) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(
+      panel.grid = ggplot2::element_blank(),
+      axis.text.x = if (show_x_text) {
+        ggplot2::element_text(angle = 45, hjust = 1, vjust = 1, color = "#2F2A24")
+      } else {
+        ggplot2::element_blank()
+      },
+      axis.text.y = ggplot2::element_text(color = "#2F2A24"),
+      axis.ticks = ggplot2::element_blank(),
+      plot.title = ggplot2::element_text(face = "bold", size = 13, color = "#2F2A24"),
+      plot.subtitle = ggplot2::element_text(size = 10, color = "#6F685E"),
+      legend.title = ggplot2::element_text(face = "bold"),
+      legend.text = ggplot2::element_text(color = "#2F2A24")
+    )
+}
+
+#' Plot a drug-by-pathway effect size heatmap
+#'
+#' @param effect_size_matrix Numeric matrix with drugs in rows and pathways in columns.
+#' @param title Plot title.
+#' @param subtitle Plot subtitle.
+#' @param low_color Low-value color.
+#' @param mid_color Midpoint color.
+#' @param high_color High-value color.
+#' @param midpoint Midpoint for the diverging color scale.
+#' @param border_color Tile border color.
+#' @param zscore Optional z-score transform before plotting: \code{NULL} (none),
+#'   \code{"row"} (per drug), \code{"col"} (per pathway), or \code{"both"}
+#'   (row z-score then column z-score). NAs are temporarily imputed for scaling
+#'   then restored for display.
+#' @param cluster_rows Logical, whether to cluster drugs.
+#' @param cluster_cols Logical, whether to cluster pathways.
+#' @param x_label X-axis label.
+#' @param y_label Y-axis label.
+#' @return A ggplot2 object.
+#' @export
+plotDrugPathwayEffectHeatmap <- function(effect_size_matrix,
+                                         title = "Drug-pathway effect size heatmap",
+                                         subtitle = "Effect sizes from GSVA-feature association analysis",
+                                         low_color = "#6AAED6",
+                                         mid_color = "#FBFAF7",
+                                         high_color = "#E98484",
+                                         midpoint = 0,
+                                         border_color = "#F6F2EA",
+                                         zscore = NULL,
+                                         cluster_rows = FALSE,
+                                         cluster_cols = FALSE,
+                                         x_label = NULL,
+                                         y_label = NULL) {
+  if (!is.matrix(effect_size_matrix) || !is.numeric(effect_size_matrix)) {
+    stop("effect_size_matrix must be a numeric matrix")
+  }
+  if (is.null(rownames(effect_size_matrix)) || is.null(colnames(effect_size_matrix))) {
+    stop("effect_size_matrix must have rownames and colnames")
+  }
+
+  plot_mat <- effect_size_matrix
+  na_mask <- is.na(plot_mat)
+
+  if (!is.null(zscore)) {
+    zscore <- match.arg(zscore, c("row", "col", "both"))
+    if (anyNA(plot_mat)) {
+      fill_value <- mean(plot_mat, na.rm = TRUE)
+      if (!is.finite(fill_value)) {
+        fill_value <- 0
+      }
+      plot_mat[na_mask] <- fill_value
+    }
+    if (zscore %in% c("row", "both")) {
+      plot_mat <- t(scale(t(plot_mat)))
+    }
+    if (zscore %in% c("col", "both")) {
+      plot_mat <- scale(plot_mat)
+    }
+    plot_mat[is.nan(plot_mat)] <- 0
+    if (any(na_mask)) {
+      plot_mat[na_mask] <- NA
+    }
+  }
+
+  fill_label <- if (is.null(zscore)) "Effect size" else "Z-score"
+  row_order <- rownames(plot_mat)
+  col_order <- colnames(plot_mat)
+  cluster_mat <- plot_mat
+
+  if (anyNA(cluster_mat)) {
+    fill_value <- mean(cluster_mat, na.rm = TRUE)
+    if (!is.finite(fill_value)) {
+      fill_value <- 0
+    }
+    cluster_mat[is.na(cluster_mat)] <- fill_value
+  }
+
+  if (cluster_rows && nrow(cluster_mat) > 1) {
+    row_order <- rownames(cluster_mat)[stats::hclust(stats::dist(cluster_mat))$order]
+  }
+  if (cluster_cols && ncol(cluster_mat) > 1) {
+    col_order <- colnames(cluster_mat)[stats::hclust(stats::dist(t(cluster_mat)))$order]
+  }
+
+  heatmap_df <- as.data.frame(as.table(plot_mat), stringsAsFactors = FALSE)
+  colnames(heatmap_df) <- c("Drug", "Pathway", "EffectSize")
+  heatmap_df$Drug <- factor(heatmap_df$Drug, levels = rev(row_order))
+  heatmap_df$Pathway <- factor(heatmap_df$Pathway, levels = col_order)
+
+  ggplot2::ggplot(heatmap_df, ggplot2::aes(x = Pathway, y = Drug, fill = EffectSize)) +
+    ggplot2::geom_tile(color = border_color, linewidth = 0.45) +
+    ggplot2::scale_fill_gradient2(
+      low = low_color,
+      mid = mid_color,
+      high = high_color,
+      midpoint = midpoint,
+      na.value = "#E7E1D7",
+      name = fill_label
+    ) +
+    ggplot2::labs(
+      title = title,
+      subtitle = subtitle,
+      x = x_label,
+      y = y_label
+    ) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(
+      panel.grid = ggplot2::element_blank(),
+      axis.text.x = ggplot2::element_text(angle = 28, hjust = 1, vjust = 1, color = "#2F2A24"),
+      axis.text.y = ggplot2::element_text(color = "#2F2A24"),
+      axis.title = ggplot2::element_text(color = "#2F2A24"),
+      axis.ticks = ggplot2::element_blank(),
+      plot.title = ggplot2::element_text(face = "bold", size = 13, color = "#2F2A24"),
+      plot.subtitle = ggplot2::element_text(size = 10, color = "#6F685E"),
+      legend.title = ggplot2::element_text(face = "bold"),
+      legend.text = ggplot2::element_text(color = "#2F2A24")
+    )
+}
+
+.wrapCandidateSelectionLabels <- function(x, width = 18) {
+  vapply(x, function(label) {
+    paste(strwrap(as.character(label), width = width), collapse = "\n")
+  }, character(1))
+}
+
+#' Plot clinically supported candidate selection
+#'
+#' @param candidate_df Data frame with candidate-level preclinical and clinical support annotations.
+#' @param n_retained Number of retained candidates to display.
+#' @param n_filtered Number of filtered candidates to display.
+#' @param title Plot title.
+#' @param subtitle Plot subtitle.
+#' @param label_width Width used for wrapping candidate labels.
+#' @return A patchwork plot object.
+#' @export
+plotClinicallySupportedCandidateSelection <- function(candidate_df,
+                                                      n_retained = 6,
+                                                      n_filtered = 4,
+                                                      title = "Clinically supported candidate selection",
+                                                      subtitle = "Preclinical hits retained after clinical validation and concordant direction",
+                                                      label_width = 18) {
+  candidate_df <- as.data.frame(candidate_df)
+  required_cols <- c(
+    "name", "effect_size_clinical", "cell_supported", "pdopdx_supported",
+    "clinical_supported", "direction_concordant", "retained"
+  )
+  if (!all(required_cols %in% colnames(candidate_df))) {
+    stop("candidate_df must contain columns: ", paste(required_cols, collapse = ", "))
+  }
+  if (!is.numeric(n_retained) || length(n_retained) != 1 || n_retained < 0) {
+    stop("n_retained must be a single non-negative number")
+  }
+  if (!is.numeric(n_filtered) || length(n_filtered) != 1 || n_filtered < 0) {
+    stop("n_filtered must be a single non-negative number")
+  }
+
+  candidate_df$clinical_supported[is.na(candidate_df$clinical_supported)] <- FALSE
+  candidate_df$direction_concordant[is.na(candidate_df$direction_concordant)] <- FALSE
+  candidate_df$retained[is.na(candidate_df$retained)] <- FALSE
+  if (!"clinical_abs" %in% colnames(candidate_df)) {
+    candidate_df$clinical_abs <- abs(ifelse(is.na(candidate_df$effect_size_clinical), 0, candidate_df$effect_size_clinical))
+  }
+  if (!"preclinical_abs" %in% colnames(candidate_df)) {
+    if ("effect_size_preclinical" %in% colnames(candidate_df)) {
+      candidate_df$preclinical_abs <- abs(ifelse(is.na(candidate_df$effect_size_preclinical), 0, candidate_df$effect_size_preclinical))
+    } else {
+      candidate_df$preclinical_abs <- 0
+    }
+  }
+
+  retained_df <- candidate_df[candidate_df$retained, , drop = FALSE]
+  retained_df <- retained_df[order(-retained_df$clinical_abs, -retained_df$preclinical_abs), , drop = FALSE]
+  filtered_df <- candidate_df[!candidate_df$retained, , drop = FALSE]
+  filtered_df <- filtered_df[order(-filtered_df$clinical_abs, -filtered_df$preclinical_abs), , drop = FALSE]
+
+  plot_candidates <- unique(c(
+    head(retained_df$name, n_retained),
+    head(filtered_df$name, n_filtered)
+  ))
+  if (length(plot_candidates) == 0) {
+    plot_candidates <- head(candidate_df$name, min(nrow(candidate_df), n_retained + n_filtered))
+  }
+
+  plot_df <- candidate_df[candidate_df$name %in% plot_candidates, , drop = FALSE]
+  plot_df <- plot_df[order(
+    -plot_df$retained,
+    -plot_df$clinical_supported,
+    -plot_df$clinical_abs,
+    -plot_df$preclinical_abs
+  ), , drop = FALSE]
+
+  plot_df$name_wrapped <- .wrapCandidateSelectionLabels(plot_df$name, width = label_width)
+  plot_df$name_wrapped <- factor(plot_df$name_wrapped, levels = rev(plot_df$name_wrapped))
+  plot_df$retained_label <- ifelse(plot_df$retained, "Retained", "Filtered after clinical")
+
+  evidence_df <- rbind(
+    data.frame(name_wrapped = plot_df$name_wrapped, Evidence = "Cell/PDC", Status = plot_df$cell_supported),
+    data.frame(name_wrapped = plot_df$name_wrapped, Evidence = "PDO/PDX", Status = plot_df$pdopdx_supported),
+    data.frame(name_wrapped = plot_df$name_wrapped, Evidence = "Clinical", Status = plot_df$clinical_supported),
+    data.frame(name_wrapped = plot_df$name_wrapped, Evidence = "Concordant", Status = plot_df$direction_concordant)
+  )
+  evidence_df$Evidence <- factor(evidence_df$Evidence, levels = c("Cell/PDC", "PDO/PDX", "Clinical", "Concordant"))
+  evidence_df$Marker <- ifelse(evidence_df$Status, "•", "")
+
+  evidence_plot <- ggplot2::ggplot(evidence_df, ggplot2::aes(Evidence, name_wrapped, fill = Status)) +
+    ggplot2::geom_tile(color = "#F6F2EA", linewidth = 0.45) +
+    ggplot2::geom_text(ggplot2::aes(label = Marker), size = 5.4, color = "#2F2A24") +
+    ggplot2::scale_fill_manual(values = c(`TRUE` = "#F6D3CD", `FALSE` = "#F4EFE7")) +
+    ggplot2::labs(x = NULL, y = NULL) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(
+      legend.position = "none",
+      panel.grid = ggplot2::element_blank(),
+      axis.text.x = ggplot2::element_text(angle = 24, hjust = 1, vjust = 1, color = "#2F2A24"),
+      axis.text.y = ggplot2::element_text(color = "#2F2A24"),
+      plot.background = ggplot2::element_rect(fill = "transparent", color = NA)
+    )
+
+  effect_plot <- ggplot2::ggplot(plot_df, ggplot2::aes(effect_size_clinical, name_wrapped, fill = retained_label)) +
+    ggplot2::geom_vline(xintercept = 0, color = "#B0A99F", linetype = "dashed", linewidth = 0.35) +
+    ggplot2::geom_segment(
+      ggplot2::aes(x = 0, xend = effect_size_clinical, yend = name_wrapped),
+      color = "#C9C1B6", linewidth = 0.95
+    ) +
+    ggplot2::geom_point(shape = 21, size = 3.2, color = "#6F685E", stroke = 0.5) +
+    ggplot2::scale_fill_manual(values = c("Retained" = "#FB8A7A", "Filtered after clinical" = "#D9D3C8")) +
+    ggplot2::labs(
+      title = title,
+      subtitle = subtitle,
+      x = "Clinical effect size",
+      y = NULL
+    ) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(
+      panel.grid.major.y = ggplot2::element_blank(),
+      panel.grid.minor = ggplot2::element_blank(),
+      axis.text.y = ggplot2::element_blank(),
+      axis.title.y = ggplot2::element_blank(),
+      plot.title = ggplot2::element_text(face = "bold", size = 13, color = "#2F2A24"),
+      plot.subtitle = ggplot2::element_text(size = 10, color = "#6F685E"),
+      axis.text.x = ggplot2::element_text(color = "#2F2A24"),
+      axis.title.x = ggplot2::element_text(color = "#2F2A24"),
+      legend.title = ggplot2::element_blank(),
+      legend.text = ggplot2::element_text(color = "#2F2A24"),
+      legend.position = "top",
+      plot.background = ggplot2::element_rect(fill = "transparent", color = NA)
+    )
+
+  patchwork::wrap_plots(evidence_plot, effect_plot, nrow = 1, widths = c(1.1, 2.3))
 }
 
 #' Plot clinical versus preclinical evidence as a bubble chart

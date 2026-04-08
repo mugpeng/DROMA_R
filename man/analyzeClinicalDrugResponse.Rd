@@ -12,7 +12,8 @@ analyzeClinicalDrugResponse(
   connection = NULL,
   meta_enabled = TRUE,
   zscore = TRUE,
-  merged_enabled = TRUE
+  merged_enabled = TRUE,
+  roc_plot = TRUE
 )
 }
 \arguments{
@@ -31,9 +32,13 @@ analyzeClinicalDrugResponse(
 \item{zscore}{Logical, whether to apply z-score normalization to omics expression data (default: TRUE). If FALSE, merged_enabled should be set to FALSE to avoid combining non-normalized data from different patients.}
 
 \item{merged_enabled}{Logical, whether to create a merged dataset from all patients}
+
+\item{roc_plot}{Logical, whether to add an ROC / AUC plot (\code{roc_plot}) using the same
+pooled expression scale as the merged comparison when multiple cohorts exist and
+\code{merged_enabled} is TRUE; otherwise pooled per-cohort values without a second global z-score.}
 }
 \value{
-A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), meta-analysis results, and data
+A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), optional \code{roc_plot} and \code{roc_auc}, meta-analysis results, and data
 }
 \description{
 Performs analysis of clinical drug response associations with omics features using CTRDB data
@@ -51,6 +56,10 @@ result$plot
 
 # View merged dataset plot
 result$merged_plot
+
+# ROC / AUC (expression classifying responders)
+result$roc_plot
+result$roc_auc
 
 # View meta-analysis results
 result$meta

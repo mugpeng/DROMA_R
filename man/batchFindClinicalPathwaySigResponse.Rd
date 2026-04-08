@@ -44,7 +44,9 @@ names accepted by \code{calculateGSVAScores()}.}
 
 \item{zscore}{Logical, whether to z-score pathway scores within each patient.}
 
-\item{show_progress}{Logical, whether to print progress messages.}
+\item{show_progress}{Logical, whether to show progress updates (default: TRUE).
+Uses the same progress callback style as other batch functions, including
+processed count, elapsed time, and ETA.}
 
 \item{...}{Additional parameters passed to GSVA.}
 }

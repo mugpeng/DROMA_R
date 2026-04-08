@@ -1,5 +1,59 @@
 # Clinical Analysis and Prioritization Functions ----
 
+#' Compute ROC coordinates and AUC for response prediction from expression
+#'
+#' @description
+#' Builds an empirical ROC curve using expression as a continuous predictor
+#' for binary response (response vs non-response). With \code{positive_direction = "auto"},
+#' the score sign is chosen so that higher values imply response when the response
+#' group has higher median expression, and conversely.
+#'
+#' @param no_values Numeric vector, non-response group (negative class, label 0).
+#' @param yes_values Numeric vector, response group (positive class, label 1).
+#' @param positive_direction One of \code{"auto"}, \code{"high"}, \code{"low"}.
+#'   \code{"high"} means higher expression associates with response; \code{"low"} negates scores.
+#' @return List with \code{df} (\code{data.frame} with \code{FPR}, \code{TPR}) and
+#'   numeric \code{auc}, or \code{list(df = NULL, auc = NA_real_)} if insufficient data.
+#' @keywords internal
+.computeClinicalResponseRoc <- function(no_values,
+                                        yes_values,
+                                        positive_direction = c("auto", "high", "low")) {
+  positive_direction <- match.arg(positive_direction)
+  no_values <- as.numeric(no_values)
+  yes_values <- as.numeric(yes_values)
+  no_values <- no_values[!is.na(no_values)]
+  yes_values <- yes_values[!is.na(yes_values)]
+  if (length(no_values) < 1L || length(yes_values) < 1L) {
+    return(list(df = NULL, auc = NA_real_))
+  }
+  score <- c(no_values, yes_values)
+  label <- c(rep(0L, length(no_values)), rep(1L, length(yes_values)))
+  if (positive_direction == "auto") {
+    if (stats::median(yes_values) < stats::median(no_values)) {
+      score <- -score
+    }
+  } else if (positive_direction == "low") {
+    score <- -score
+  }
+  ord <- order(score, decreasing = TRUE)
+  y <- label[ord]
+  n_pos <- sum(y == 1L)
+  n_neg <- sum(y == 0L)
+  if (n_pos < 1L || n_neg < 1L) {
+    return(list(df = NULL, auc = NA_real_))
+  }
+  cum_tp <- cumsum(y == 1L)
+  cum_fp <- cumsum(y == 0L)
+  tpr <- c(0, cum_tp / n_pos)
+  fpr <- c(0, cum_fp / n_neg)
+  roc_df <- data.frame(FPR = fpr, TPR = tpr)
+  ord_f <- order(roc_df$FPR, roc_df$TPR)
+  rf <- roc_df$FPR[ord_f]
+  rt <- roc_df$TPR[ord_f]
+  auc <- sum(diff(rf) * (head(rt, -1L) + tail(rt, -1L)) / 2)
+  list(df = roc_df, auc = auc)
+}
+
 #' Analyze clinical meta-analysis across datasets
 #'
 #' @description Performs meta-analysis on clinical drug response data across multiple datasets
@@ -37,7 +91,10 @@ analyzeClinicalMeta <- function(patient_data_list) {
 #' @param meta_enabled Logical, whether to perform meta-analysis across datasets
 #' @param zscore Logical, whether to apply z-score normalization to omics expression data (default: TRUE). If FALSE, merged_enabled should be set to FALSE to avoid combining non-normalized data from different patients.
 #' @param merged_enabled Logical, whether to create a merged dataset from all patients
-#' @return A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), meta-analysis results, and data
+#' @param roc_plot Logical, whether to add an ROC / AUC plot (\code{roc_plot}) using the same
+#'   pooled expression scale as the merged comparison when multiple cohorts exist and
+#'   \code{merged_enabled} is TRUE; otherwise pooled per-cohort values without a second global z-score.
+#' @return A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), optional \code{roc_plot} and \code{roc_auc}, meta-analysis results, and data
 #' @export
 #' @examples
 #' \dontrun{
@@ -53,6 +110,10 @@ analyzeClinicalMeta <- function(patient_data_list) {
 #' # View merged dataset plot
 #' result$merged_plot
 #'
+#' # ROC / AUC (expression classifying responders)
+#' result$roc_plot
+#' result$roc_auc
+#'
 #' # View meta-analysis results
 #' result$meta
 #' }
@@ -63,7 +124,8 @@ analyzeClinicalDrugResponse <- function(select_omics,
                                       connection = NULL,
                                       meta_enabled = TRUE,
                                       zscore = TRUE,
-                                      merged_enabled = TRUE) {
+                                      merged_enabled = TRUE,
+                                      roc_plot = TRUE) {
 
   # Validate inputs
   if (missing(select_omics) || is.null(select_omics) || select_omics == "") {
@@ -308,6 +370,38 @@ analyzeClinicalDrugResponse <- function(select_omics,
       title = paste("Merged:", select_omics, "vs", select_drugs),
       y_label = if(zscore) paste0(select_omics, " Expression (z-score)") else paste(select_omics, "Expression")
     )
+  }
+
+  # ROC / AUC: same pooling / scaling as merged plot when multiple cohorts and merge enabled
+  if (isTRUE(roc_plot) && length(transformed_pairs) > 0L) {
+    if (length(transformed_pairs) == 1L) {
+      roc_no <- transformed_pairs[[1]]$no
+      roc_yes <- transformed_pairs[[1]]$yes
+    } else {
+      roc_yes <- unlist(lapply(transformed_pairs, function(x) x$yes), use.names = FALSE)
+      roc_no <- unlist(lapply(transformed_pairs, function(x) x$no), use.names = FALSE)
+      if (isTRUE(zscore) && isTRUE(merged_enabled)) {
+        all_roc <- c(roc_yes, roc_no)
+        mean_roc <- mean(all_roc, na.rm = TRUE)
+        sd_roc <- stats::sd(all_roc, na.rm = TRUE)
+        if (!is.na(sd_roc) && sd_roc > 0) {
+          roc_yes <- (roc_yes - mean_roc) / sd_roc
+          roc_no <- (roc_no - mean_roc) / sd_roc
+        }
+      }
+    }
+    roc_gg <- plotClinicalDrugResponseRoc(
+      roc_no,
+      roc_yes,
+      title = "Clinical readout",
+      subtitle = sprintf("%s vs %s — response classification", select_omics, select_drugs)
+    )
+    if (!is.null(roc_gg)) {
+      result$roc_plot <- roc_gg
+      result$roc_auc <- attr(roc_gg, "roc_auc")
+    } else {
+      result$roc_auc <- NA_real_
+    }
   }
 
   # Perform meta-analysis if enabled and we have multiple datasets

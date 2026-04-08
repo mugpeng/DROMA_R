@@ -13,6 +13,7 @@ batchAnalyzePathwaysWithFeature(
   data_type = "all",
   tumor_type = "all",
   overlap_only = FALSE,
+  cores = 1,
   zscore = TRUE,
   show_progress = TRUE
 )
@@ -36,6 +37,9 @@ If NULL, analyzes all gene sets in gsva_scores}
 
 \item{overlap_only}{For MultiDromaSet, whether to use only overlapping samples (default: FALSE)}
 
+\item{cores}{Number of CPU cores to use for parallel processing (default: 1).
+Uses future + furrr with task chunking for efficiency when cores > 1}
+
 \item{zscore}{Logical, whether to apply z-score normalization (default: TRUE)}
 
 \item{show_progress}{Logical, whether to show progress messages (default: TRUE)}
@@ -57,7 +61,8 @@ all_gene_sets <- getAvailableGeneSets()
 gsva_scores <- calculateGSVAScores(gCSI, all_gene_sets, method = "gsva")
 
 # Batch analyze associations with a drug
-results <- batchAnalyzePathwaysWithFeature(gCSI, gsva_scores, "Bortezomib", feature_type = "drug")
+results <- batchAnalyzePathwaysWithFeature(gCSI, gsva_scores, "Bortezomib",
+                                          feature_type = "drug", cores = 4)
 
 # Batch analyze associations with a gene expression
 results <- batchAnalyzePathwaysWithFeature(gCSI, gsva_scores, "TP53", feature_type = "mRNA")
