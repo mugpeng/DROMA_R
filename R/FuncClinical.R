@@ -790,41 +790,6 @@ getInVitroCandidateFeatures <- function(...,
   out[order(out$p_value, decreasing = FALSE), , drop = FALSE]
 }
 
-#' Select significant clinical candidates from a clinical meta-analysis table
-#'
-#' @description Filters batchFindClinicalSigResponse() results into a compact
-#'   candidate table suitable for downstream prioritization.
-#' @param clinical_results Output data frame from batchFindClinicalSigResponse().
-#' @param es_t Effect size threshold passed to getSignificantFeatures().
-#' @param P_t P-value or q-value threshold passed to getSignificantFeatures().
-#' @param use_p_value Whether to use p-values instead of q-values.
-#' @param n_datasets_t Optional minimum number of datasets.
-#' @return A data frame of significant clinical candidates.
-#' @export
-getClinicalCandidateFeatures <- function(clinical_results,
-                                         es_t = 0.05,
-                                         P_t = 0.1,
-                                         use_p_value = TRUE,
-                                         n_datasets_t = NULL) {
-  out <- getSignificantFeatures(
-    meta_df = clinical_results,
-    es_t = es_t,
-    P_t = P_t,
-    use_p_value = use_p_value,
-    n_datasets_t = n_datasets_t
-  )
-
-  if (nrow(out) == 0) {
-    return(out)
-  }
-
-  if (!"direction" %in% colnames(out) && "effect_size" %in% colnames(out)) {
-    out$direction <- ifelse(out$effect_size >= 0, "Up", "Down")
-  }
-
-  out
-}
-
 #' Extract pathway-level support for candidate genes
 #'
 #' @description Summarizes pathway support for candidate genes using either

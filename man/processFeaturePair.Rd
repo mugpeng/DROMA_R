@@ -18,6 +18,7 @@ processFeaturePair(
   overlap_only,
   samples_search,
   sample_intersection_cache,
+  min_intersected_cells = 3,
   preloaded_data = NULL
 )
 }
@@ -47,6 +48,8 @@ processFeaturePair(
 \item{samples_search}{Sample metadata for discrete vs discrete analysis}
 
 \item{sample_intersection_cache}{Cached sample intersections}
+
+\item{min_intersected_cells}{Minimum number of intersected cells required to keep a pair}
 
 \item{preloaded_data}{Preloaded feature2 data (NULL for on-demand loading)}
 }

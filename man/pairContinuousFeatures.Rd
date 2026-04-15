@@ -8,7 +8,8 @@ pairContinuousFeatures(
   dataset1,
   dataset2,
   merged = FALSE,
-  intersection_cache = NULL
+  intersection_cache = NULL,
+  min_intersected_cells = 3
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ pairContinuousFeatures(
 \item{merged}{Logical, if TRUE, creates an additional merged dataset combining all pairs}
 
 \item{intersection_cache}{Optional pre-computed sample intersection cache (NULL for auto-compute)}
+
+\item{min_intersected_cells}{Minimum number of intersected cells required to keep a pair (default: 3)}
 }
 \value{
 List of paired data with feature1 and feature2 values

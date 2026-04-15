@@ -9,7 +9,8 @@ pairDiscreteDiscrete(
   discrete_dataset2,
   feature1_type,
   feature2_type,
-  samples_search
+  samples_search,
+  min_intersected_cells = 3
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ pairDiscreteDiscrete(
 \item{feature2_type}{Type of second feature}
 
 \item{samples_search}{Reference data for all samples}
+
+\item{min_intersected_cells}{Minimum number of intersected cells required to keep a pair (default: 3)}
 }
 \value{
 List of paired data with contingency tables

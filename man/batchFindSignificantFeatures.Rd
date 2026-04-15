@@ -18,6 +18,7 @@ batchFindSignificantFeatures(
   progress_callback = NULL,
   test_top_n = NULL,
   preloaded = NULL,
+  min_intersected_cells = 3,
   verbose = FALSE
 )
 }
@@ -55,6 +56,8 @@ For continuous features:
 NULL (auto): Preload when feature2 count > 1000, otherwise load on-demand
 TRUE: Always preload all feature2 data (faster for large datasets, uses more memory)
 FALSE: Load feature2 data on-demand (slower but memory efficient)}
+
+\item{min_intersected_cells}{Minimum number of intersected cells required to keep a pair (default: 3)}
 
 \item{verbose}{Logical, whether to display detailed messages from internal functions (default: FALSE)}
 }

@@ -4,7 +4,12 @@
 \alias{pairDiscreteFeatures}
 \title{Pair discrete with continuous data}
 \usage{
-pairDiscreteFeatures(discrete_dataset, continuous_dataset, merged = FALSE)
+pairDiscreteFeatures(
+  discrete_dataset,
+  continuous_dataset,
+  merged = FALSE,
+  min_intersected_cells = 3
+)
 }
 \arguments{
 \item{discrete_dataset}{List with discrete feature data (samples with feature present)}
@@ -12,6 +17,8 @@ pairDiscreteFeatures(discrete_dataset, continuous_dataset, merged = FALSE)
 \item{continuous_dataset}{List with continuous feature data (numeric values)}
 
 \item{merged}{Logical, if TRUE, creates an additional merged dataset}
+
+\item{min_intersected_cells}{Minimum number of intersected cells required to keep a pair (default: 3)}
 }
 \value{
 List of paired data with yes/no groups for continuous values
