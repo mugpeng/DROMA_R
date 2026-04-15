@@ -1,7 +1,7 @@
 Package: DROMA.R
 Title: Drug Omics Association Analysis Extension for DROMA.Set
-Version: 0.5.6
-Date: 2026-04-06
+Version: 0.5.7
+Date: 2026-04-15
 Authors@R: 
     person("Peng Yu", "Zhong", email = "yc47680@um.edu.mo", role = c("aut", "cre"))
 Description: DROMA.R provides advanced analysis functions for drug-omics associations 
