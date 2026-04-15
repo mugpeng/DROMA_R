@@ -41,4 +41,3 @@ For continuous data: single feature returns list of named vectors by dataset; mu
 \description{
 Load feature data from DromaSet or MultiDromaSet
 }
-\keyword{internal}

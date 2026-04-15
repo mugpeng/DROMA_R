@@ -11,7 +11,7 @@
 #' @param return_all_samples For discrete features, whether to return all profiled samples in addition to feature-present samples (default: FALSE)
 #' @param zscore Whether to apply z-score normalization (default: TRUE)
 #' @return For continuous data: single feature returns list of named vectors by dataset; multiple features return list of matrices by dataset. For discrete data: single feature returns vector of sample IDs (or list with 'present' and 'all' if return_all_samples=TRUE); multiple features return named list of sample vectors per feature (or list with 'present' as named list and 'all' if return_all_samples=TRUE).
-#' @keywords internal
+#' @export
 loadFeatureData <- function(dromaset_object, feature_type, select_features,
                            data_type = "all", tumor_type = "all",
                            overlap_only = FALSE, is_continuous = TRUE,
