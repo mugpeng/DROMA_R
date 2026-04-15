@@ -697,9 +697,15 @@ batchFindSignificantFeatures <- function(dromaset_object,
   }
 
   # Validate cores parameter
-  max_cores <- ifelse(requireNamespace("parallel", quietly = TRUE),
-                    parallel::detectCores() - 1,
-                    1)
+  max_cores <- if (requireNamespace("parallel", quietly = TRUE)) {
+    detected_cores <- tryCatch(
+      parallel::detectCores(),
+      error = function(e) NA_integer_
+    )
+    if (is.na(detected_cores) || detected_cores < 2) 1 else detected_cores - 1
+  } else {
+    1
+  }
   if (!is.numeric(cores) || cores < 1 || cores > max_cores) {
     stop(paste0("cores must be a positive integer between 1 and ", max_cores))
   }
@@ -1026,4 +1032,3 @@ batchFindSignificantFeatures <- function(dromaset_object,
 
   return(cal_re_df)
 }
-
