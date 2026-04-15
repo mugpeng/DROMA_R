@@ -74,6 +74,7 @@ createDefaultProgressCallback <- function(show_progress = TRUE, update_interval 
 #' @param samples_search Sample metadata for discrete vs discrete analysis
 #' @param sample_intersection_cache Cached sample intersections
 #' @param preloaded_data Preloaded feature2 data (NULL for on-demand loading)
+#' @param min_intersected_cells Minimum number of intersected cells required to keep a pair
 #' @return Data frame with p_value, effect_size, n_datasets or NULL
 #' @keywords internal
 processFeaturePair <- function(feature_idx, feature2_list, dromaset_object,
@@ -82,6 +83,7 @@ processFeaturePair <- function(feature_idx, feature2_list, dromaset_object,
                                is_continuous1, is_continuous2,
                                data_type, tumor_type, overlap_only,
                                samples_search, sample_intersection_cache,
+                               min_intersected_cells = 3,
                                preloaded_data = NULL) {
   results <- tryCatch({
     # Validate input index
@@ -146,14 +148,17 @@ processFeaturePair <- function(feature_idx, feature2_list, dromaset_object,
     if (is_continuous1 && is_continuous2) {
       selected_pair <- pairContinuousFeatures(selected_feas1, selected_feas2,
                             merged = FALSE,
-                            intersection_cache = sample_intersection_cache)
+                            intersection_cache = sample_intersection_cache,
+                            min_intersected_cells = min_intersected_cells)
       cal_meta_re <- metaCalcConCon(selected_pair)
       # dis vs con ----
     } else if ((is_continuous1 && !is_continuous2) || (!is_continuous1 && is_continuous2)) {
       if (is_continuous1 && !is_continuous2){
-        selected_pair <- pairDiscreteFeatures(selected_feas2, selected_feas1)
+        selected_pair <- pairDiscreteFeatures(selected_feas2, selected_feas1,
+                                              min_intersected_cells = min_intersected_cells)
       } else {
-        selected_pair <- pairDiscreteFeatures(selected_feas1, selected_feas2)
+        selected_pair <- pairDiscreteFeatures(selected_feas1, selected_feas2,
+                                              min_intersected_cells = min_intersected_cells)
       }
       cal_meta_re <- metaCalcConDis(selected_pair)
       # dis vs dis ----
@@ -170,7 +175,8 @@ processFeaturePair <- function(feature_idx, feature2_list, dromaset_object,
 
       selected_pair <- pairDiscreteDiscrete(selected_feas1, selected_feas2,
                           feature1_type, feature2_type,
-                          samples_search)
+                          samples_search,
+                          min_intersected_cells = min_intersected_cells)
       cal_meta_re <- metaCalcDisDis(selected_pair)
     }
 
@@ -188,7 +194,8 @@ processFeaturePair <- function(feature_idx, feature2_list, dromaset_object,
     results <- data.frame(
       p_value = p_val,
       effect_size = eff_size,
-      n_datasets = n_datasets
+      n_datasets = n_datasets,
+      stringsAsFactors = FALSE
     )
   }, error = function(e) {
     # Silently continue processing on error
@@ -594,6 +601,7 @@ getIntersectSignificantFeatures <- function(..., direction_cols = NULL) {
 #'   NULL (auto): Preload when feature2 count > 1000, otherwise load on-demand
 #'   TRUE: Always preload all feature2 data (faster for large datasets, uses more memory)
 #'   FALSE: Load feature2 data on-demand (slower but memory efficient)
+#' @param min_intersected_cells Minimum number of intersected cells required to keep a pair (default: 3)
 #' @param verbose Logical, whether to display detailed messages from internal functions (default: FALSE)
 #' @return Data frame with meta-analysis results (p_value, effect_size, n_datasets, name, q_value). NA values are replaced: p_value -> 1, effect_size -> 0. q_value is calculated using Benjamini-Hochberg method
 #' @export
@@ -657,6 +665,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
                                       progress_callback = NULL,
                                       test_top_n = NULL,
                                       preloaded = NULL,
+                                      min_intersected_cells = 3,
                                       verbose = FALSE
 ) {
   # Validate input object
@@ -725,6 +734,10 @@ batchFindSignificantFeatures <- function(dromaset_object,
   # Validate preloaded parameter
   if (!is.null(preloaded) && !is.logical(preloaded)) {
     stop("preloaded must be NULL, TRUE, or FALSE")
+  }
+  if (!is.numeric(min_intersected_cells) || length(min_intersected_cells) != 1 ||
+      min_intersected_cells < 1 || min_intersected_cells != as.integer(min_intersected_cells)) {
+    stop("min_intersected_cells must be a positive integer")
   }
 
   # Validate show_progress parameter
@@ -902,6 +915,7 @@ batchFindSignificantFeatures <- function(dromaset_object,
       overlap_only = overlap_only,
       samples_search = samples_search,
       sample_intersection_cache = sample_intersection_cache,
+      min_intersected_cells = min_intersected_cells,
       preloaded_data = preloaded_feas2
     )
   }

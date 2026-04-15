@@ -7,8 +7,11 @@
 #' @param dataset2 Second dataset list with named vectors
 #' @param merged Logical, if TRUE, creates an additional merged dataset combining all pairs
 #' @param intersection_cache Optional pre-computed sample intersection cache (NULL for auto-compute)
+#' @param min_intersected_cells Minimum number of intersected cells required to keep a pair (default: 3)
 #' @return List of paired data with feature1 and feature2 values
-pairContinuousFeatures <- function(dataset1, dataset2, merged = FALSE, intersection_cache = NULL) {
+pairContinuousFeatures <- function(dataset1, dataset2, merged = FALSE,
+                                   intersection_cache = NULL,
+                                   min_intersected_cells = 3) {
   pair_list2 <- lapply(1:length(dataset1), function(x) {
     feat1_sel <- dataset1[[x]]
     pair_list <- lapply(1:length(dataset2), function(y) {
@@ -31,7 +34,7 @@ pairContinuousFeatures <- function(dataset1, dataset2, merged = FALSE, intersect
         intersected_cells <- intersect(names(feat1_sel), names(feat2_sel))
       }
       
-      if(length(intersected_cells) < 3) {
+      if(length(intersected_cells) < min_intersected_cells) {
         return(NULL)
       }
 
@@ -80,8 +83,10 @@ pairContinuousFeatures <- function(dataset1, dataset2, merged = FALSE, intersect
 #' @param discrete_dataset List with discrete feature data (samples with feature present)
 #' @param continuous_dataset List with continuous feature data (numeric values)
 #' @param merged Logical, if TRUE, creates an additional merged dataset
+#' @param min_intersected_cells Minimum number of intersected cells required to keep a pair (default: 3)
 #' @return List of paired data with yes/no groups for continuous values
-pairDiscreteFeatures <- function(discrete_dataset, continuous_dataset, merged = FALSE) {
+pairDiscreteFeatures <- function(discrete_dataset, continuous_dataset, merged = FALSE,
+                                 min_intersected_cells = 3) {
   pair_list2 <- lapply(1:length(discrete_dataset), function(x) {
     discrete_sel <- discrete_dataset[[x]]
     present_samples <- discrete_sel$present
@@ -102,7 +107,7 @@ pairDiscreteFeatures <- function(discrete_dataset, continuous_dataset, merged = 
       no_values <- continuous_sel[names(continuous_sel) %in% valid_samples & !names(continuous_sel) %in% present_samples]
       no_values <- na.omit(no_values)
 
-      if(length(yes_values) < 3 | length(no_values) < 3) {
+      if(length(valid_samples) < min_intersected_cells || length(yes_values) < 3 | length(no_values) < 3) {
         return(NULL)
       }
 
@@ -149,10 +154,12 @@ pairDiscreteFeatures <- function(discrete_dataset, continuous_dataset, merged = 
 #' @param feature1_type Type of first feature
 #' @param feature2_type Type of second feature
 #' @param samples_search Reference data for all samples
+#' @param min_intersected_cells Minimum number of intersected cells required to keep a pair (default: 3)
 #' @return List of paired data with contingency tables
 pairDiscreteDiscrete <- function(discrete_dataset1, discrete_dataset2,
                                 feature1_type, feature2_type,
-                                samples_search) {
+                                samples_search,
+                                min_intersected_cells = 3) {
   # Create pairs list across all features in dataset 1
   pair_list3 <- lapply(1:length(discrete_dataset1), function(x) {
     feat1_sel <- discrete_dataset1[[x]]
@@ -178,7 +185,7 @@ pairDiscreteDiscrete <- function(discrete_dataset1, discrete_dataset2,
       no_no <- length(all_cells) - (yes_yes + yes_no + no_yes)
 
       # Skip if any cell count is too low or negative (invalid)
-      if (any(c(yes_yes, yes_no, no_yes, no_no) < 3)) {
+      if (length(all_cells) < min_intersected_cells || any(c(yes_yes, yes_no, no_yes, no_no) < 3)) {
         return(NULL)
       }
 
