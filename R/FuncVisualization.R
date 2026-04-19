@@ -66,12 +66,14 @@ plotCorrelation <- function(x_values, y_values,
 #' @param yes_values Values for group with feature present
 #' @param group_labels Labels for the two groups
 #' @param title Plot title
+#' @param subtitle Optional subtitle (e.g. comma-separated dataset IDs for merged panels).
 #' @param y_label Label for y-axis
 #' @return A ggplot2 object with boxplot and statistical test
 plotGroupComparison <- function(no_values, yes_values,
                                 group_labels = c("Without", "With"),
                                 title = "Group Comparison",
-                                y_label = "Value") {
+                                y_label = "Value",
+                                subtitle = NULL) {
   # Combine data into dataframe
   box_df <- data.frame(
     values = c(no_values, yes_values),
@@ -89,14 +91,15 @@ plotGroupComparison <- function(no_values, yes_values,
     theme_bw() +
     theme(
       title = element_text(size = 15, face = "bold"),
+      plot.subtitle = element_text(size = 10, color = "gray35"),
       axis.text = element_text(size = 11),
       axis.title = element_text(size = 12),
       axis.text.x = element_text(angle = 15, hjust = 0.85),
       legend.position = "none"
     ) +
     coord_cartesian(ylim = c(NA, max(box_df$values) + max(box_df$values)/20)) +
-    ggtitle(title) +
-    ylab(y_label) + 
+    ggplot2::labs(title = title, subtitle = subtitle) +
+    ylab(y_label) +
     xlab("")
 
   return(p)
@@ -1047,6 +1050,7 @@ plotDrugPathwayEffectHeatmap <- function(effect_size_matrix,
 plotClinicallySupportedCandidateSelection <- function(candidate_df,
                                                       n_retained = 6,
                                                       n_filtered = 4,
+                                                      add = NULL,
                                                       title = "Clinically supported candidate selection",
                                                       subtitle = "Preclinical hits retained after clinical validation and concordant direction",
                                                       label_width = 18) {
@@ -1063,6 +1067,9 @@ plotClinicallySupportedCandidateSelection <- function(candidate_df,
   }
   if (!is.numeric(n_filtered) || length(n_filtered) != 1 || n_filtered < 0) {
     stop("n_filtered must be a single non-negative number")
+  }
+  if (!is.null(add) && !is.character(add)) {
+    stop("add must be NULL or a character vector of candidate names")
   }
 
   candidate_df$clinical_supported[is.na(candidate_df$clinical_supported)] <- FALSE
@@ -1084,9 +1091,16 @@ plotClinicallySupportedCandidateSelection <- function(candidate_df,
   filtered_df <- candidate_df[!candidate_df$retained, , drop = FALSE]
   filtered_df <- filtered_df[order(-filtered_df$clinical_abs, -filtered_df$preclinical_abs), , drop = FALSE]
 
+  add_candidates <- character()
+  if (!is.null(add)) {
+    add_candidates <- unique(add[!is.na(add) & nzchar(add)])
+    add_candidates <- add_candidates[add_candidates %in% candidate_df$name]
+  }
+
   plot_candidates <- unique(c(
     head(retained_df$name, n_retained),
-    head(filtered_df$name, n_filtered)
+    head(filtered_df$name, n_filtered),
+    add_candidates
   ))
   if (length(plot_candidates) == 0) {
     plot_candidates <- head(candidate_df$name, min(nrow(candidate_df), n_retained + n_filtered))
@@ -1102,7 +1116,7 @@ plotClinicallySupportedCandidateSelection <- function(candidate_df,
 
   plot_df$name_wrapped <- .wrapCandidateSelectionLabels(plot_df$name, width = label_width)
   plot_df$name_wrapped <- factor(plot_df$name_wrapped, levels = rev(plot_df$name_wrapped))
-  plot_df$retained_label <- ifelse(plot_df$retained, "Retained", "Filtered after clinical")
+  plot_df$retained_label <- ifelse(plot_df$retained, "clinical biomarker", "preclinical biomarker")
 
   evidence_df <- rbind(
     data.frame(name_wrapped = plot_df$name_wrapped, Evidence = "Cell/PDC", Status = plot_df$cell_supported),
@@ -1115,10 +1129,10 @@ plotClinicallySupportedCandidateSelection <- function(candidate_df,
 
   evidence_plot <- ggplot2::ggplot(evidence_df, ggplot2::aes(Evidence, name_wrapped, fill = Status)) +
     ggplot2::geom_tile(color = "#F6F2EA", linewidth = 0.45) +
-    ggplot2::geom_text(ggplot2::aes(label = Marker), size = 5.4, color = "#2F2A24") +
+    ggplot2::geom_text(ggplot2::aes(label = Marker), size = 6.2, color = "#2F2A24") +
     ggplot2::scale_fill_manual(values = c(`TRUE` = "#F6D3CD", `FALSE` = "#F4EFE7")) +
     ggplot2::labs(x = NULL, y = NULL) +
-    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme_minimal(base_size = 13) +
     ggplot2::theme(
       legend.position = "none",
       panel.grid = ggplot2::element_blank(),
@@ -1133,26 +1147,26 @@ plotClinicallySupportedCandidateSelection <- function(candidate_df,
       ggplot2::aes(x = 0, xend = effect_size_clinical, yend = name_wrapped),
       color = "#C9C1B6", linewidth = 0.95
     ) +
-    ggplot2::geom_point(shape = 21, size = 3.2, color = "#6F685E", stroke = 0.5) +
-    ggplot2::scale_fill_manual(values = c("Retained" = "#FB8A7A", "Filtered after clinical" = "#D9D3C8")) +
+    ggplot2::geom_point(shape = 21, size = 3.6, color = "#6F685E", stroke = 0.55) +
+    ggplot2::scale_fill_manual(values = c("clinical biomarker" = "#FB8A7A", "preclinical biomarker" = "#D9D3C8")) +
     ggplot2::labs(
       title = title,
       subtitle = subtitle,
-      x = "Clinical effect size",
+      x = "effect size",
       y = NULL
     ) +
-    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme_minimal(base_size = 13) +
     ggplot2::theme(
       panel.grid.major.y = ggplot2::element_blank(),
       panel.grid.minor = ggplot2::element_blank(),
       axis.text.y = ggplot2::element_blank(),
       axis.title.y = ggplot2::element_blank(),
-      plot.title = ggplot2::element_text(face = "bold", size = 13, color = "#2F2A24"),
-      plot.subtitle = ggplot2::element_text(size = 10, color = "#6F685E"),
+      plot.title = ggplot2::element_text(face = "bold", size = 15, color = "#2F2A24"),
+      plot.subtitle = ggplot2::element_text(size = 12, color = "#6F685E"),
       axis.text.x = ggplot2::element_text(color = "#2F2A24"),
       axis.title.x = ggplot2::element_text(color = "#2F2A24"),
       legend.title = ggplot2::element_blank(),
-      legend.text = ggplot2::element_text(color = "#2F2A24"),
+      legend.text = ggplot2::element_text(color = "#2F2A24", size = 12.5),
       legend.position = "top",
       plot.background = ggplot2::element_rect(fill = "transparent", color = NA)
     )

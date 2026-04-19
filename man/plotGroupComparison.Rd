@@ -9,7 +9,8 @@ plotGroupComparison(
   yes_values,
   group_labels = c("Without", "With"),
   title = "Group Comparison",
-  y_label = "Value"
+  y_label = "Value",
+  subtitle = NULL
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ plotGroupComparison(
 \item{title}{Plot title}
 
 \item{y_label}{Label for y-axis}
+
+\item{subtitle}{Optional subtitle (e.g. comma-separated dataset IDs for merged panels).}
 }
 \value{
 A ggplot2 object with boxplot and statistical test

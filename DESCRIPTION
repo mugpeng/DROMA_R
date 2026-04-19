@@ -36,6 +36,7 @@ Imports:
     grid,
     RSQLite,
     DBI,
+    sva,
     methods
 RoxygenNote: 7.3.3
 Suggests: 

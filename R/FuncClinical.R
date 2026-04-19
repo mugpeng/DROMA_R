@@ -54,6 +54,79 @@
   list(df = roc_df, auc = auc)
 }
 
+.prepareClinicalMergedValues <- function(patient_data_list,
+                                         normalization = c("none", "zscore", "combat"),
+                                         combat_fun = NULL) {
+  normalization <- match.arg(normalization)
+  merged_df <- do.call(rbind, lapply(names(patient_data_list), function(dataset_id) {
+    patient_data <- patient_data_list[[dataset_id]]
+    data.frame(
+      dataset = dataset_id,
+      sample_id = c(names(patient_data$response), names(patient_data$non_response)),
+      response = c(rep("Response", length(patient_data$response)),
+                   rep("Non_response", length(patient_data$non_response))),
+      value = c(as.numeric(patient_data$response), as.numeric(patient_data$non_response)),
+      stringsAsFactors = FALSE
+    )
+  }))
+
+  values <- merged_df$value
+  normalization_used <- normalization
+
+  if (normalization == "zscore") {
+    mean_all <- mean(values, na.rm = TRUE)
+    sd_all <- stats::sd(values, na.rm = TRUE)
+    if (!is.na(sd_all) && sd_all > 0) {
+      values <- (values - mean_all) / sd_all
+    }
+  } else if (normalization == "combat") {
+    combat_result <- tryCatch({
+      if (is.null(combat_fun)) {
+        if (!requireNamespace("sva", quietly = TRUE)) {
+          stop("package 'sva' is required for ComBat normalization")
+        }
+        combat_fun <- sva::ComBat
+      }
+      mod <- stats::model.matrix(~ response, data = merged_df)
+      combat_dat <- rbind(
+        feature = values,
+        feature_copy = values + sqrt(.Machine$double.eps)
+      )
+      colnames(combat_dat) <- merged_df$sample_id
+      suppressMessages(
+        utils::capture.output(
+          corrected <- combat_fun(
+            dat = combat_dat,
+            batch = merged_df$dataset,
+            mod = mod,
+            mean.only = TRUE,
+            par.prior = TRUE,
+            prior.plots = FALSE
+          )
+        )
+      )
+      as.numeric(corrected[1, ])
+    }, error = function(e) {
+      warning("ComBat normalization failed; using raw merged values instead: ", e$message)
+      NULL
+    })
+    if (is.null(combat_result)) {
+      normalization_used <- "none"
+    } else {
+      values <- combat_result
+    }
+  }
+
+  list(
+    response = stats::setNames(values[merged_df$response == "Response"],
+                               merged_df$sample_id[merged_df$response == "Response"]),
+    non_response = stats::setNames(values[merged_df$response == "Non_response"],
+                                   merged_df$sample_id[merged_df$response == "Non_response"]),
+    metadata = merged_df,
+    normalization_used = normalization_used
+  )
+}
+
 #' Analyze clinical meta-analysis across datasets
 #'
 #' @description Performs meta-analysis on clinical drug response data across multiple datasets
@@ -89,12 +162,21 @@ analyzeClinicalMeta <- function(patient_data_list) {
 #' @param tumor_type Filter by tumor type ("all" or specific tumor types)
 #' @param connection Optional database connection object. If NULL, uses global connection
 #' @param meta_enabled Logical, whether to perform meta-analysis across datasets
-#' @param zscore Logical, whether to apply z-score normalization to omics expression data (default: TRUE). If FALSE, merged_enabled should be set to FALSE to avoid combining non-normalized data from different patients.
+#' @param normalization One of \code{"none"}, \code{"zscore"}, or \code{"combat"}.
+#'   \code{"combat"} is used only for merged analysis with multiple datasets and
+#'   preserves the Response phenotype while correcting dataset batch effects.
+#'   Because this function analyzes one feature at a time, ComBat uses its
+#'   mean-only adjustment.
 #' @param merged_enabled Logical, whether to create a merged dataset from all patients
-#' @param roc_plot Logical, whether to add an ROC / AUC plot (\code{roc_plot}) using the same
-#'   pooled expression scale as the merged comparison when multiple cohorts exist and
+#' @param roc_plot Logical, whether to compute ROC / AUC and store them in \code{result$roc}.
+#'   Pooled scaling matches the merged comparison when multiple cohorts exist and
 #'   \code{merged_enabled} is TRUE; otherwise pooled per-cohort values without a second global z-score.
-#' @return A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), optional \code{roc_plot} and \code{roc_auc}, meta-analysis results, and data
+#' @param zscore Deprecated logical compatibility option. If provided, maps to
+#'   \code{normalization = "zscore"} when TRUE and \code{"none"} when FALSE.
+#' @return A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), optional \code{roc} (see below), meta-analysis results, and data.
+#'   \code{roc} is a named list: each cohort (PatientID) maps to \code{list(roc_plot, roc_auc)}.
+#'   With multiple cohorts, \code{roc$merged} holds the pooled ROC (same structure).
+#'   With a single cohort, only that cohort entry is present (no \code{merged}).
 #' @export
 #' @examples
 #' \dontrun{
@@ -111,8 +193,9 @@ analyzeClinicalMeta <- function(patient_data_list) {
 #' result$merged_plot
 #'
 #' # ROC / AUC (expression classifying responders)
-#' result$roc_plot
-#' result$roc_auc
+#' result$roc[["GSE123"]]$roc_plot
+#' result$roc[["GSE123"]]$roc_auc
+#' # result$roc$merged$roc_plot  # pooled, when multiple cohorts
 #'
 #' # View meta-analysis results
 #' result$meta
@@ -123,9 +206,15 @@ analyzeClinicalDrugResponse <- function(select_omics,
                                       tumor_type = "all",
                                       connection = NULL,
                                       meta_enabled = TRUE,
-                                      zscore = TRUE,
+                                      normalization = c("none", "zscore", "combat"),
                                       merged_enabled = TRUE,
-                                      roc_plot = TRUE) {
+                                      roc_plot = TRUE,
+                                      zscore = NULL) {
+  normalization <- match.arg(normalization)
+  if (!is.null(zscore)) {
+    warning("zscore is deprecated; use normalization = 'zscore' or normalization = 'none' instead.")
+    normalization <- if (isTRUE(zscore)) "zscore" else "none"
+  }
 
   # Validate inputs
   if (missing(select_omics) || is.null(select_omics) || select_omics == "") {
@@ -136,9 +225,12 @@ analyzeClinicalDrugResponse <- function(select_omics,
     stop("select_drugs must be specified")
   }
 
-  # Warning if zscore is FALSE but merged_enabled is TRUE
-  if (!zscore && merged_enabled) {
-    warning("Without z-score normalization (zscore=FALSE), merging data from different patients may not be appropriate. Consider setting merged_enabled=FALSE.")
+  # Warning if raw values are merged without normalization
+  if (normalization == "none" && merged_enabled) {
+    warning("Without normalization, merging data from different patients may not be appropriate. Consider normalization = 'zscore' or 'combat'.")
+  }
+  if (normalization == "combat" && !merged_enabled) {
+    warning("normalization = 'combat' is only used when merged_enabled = TRUE; individual dataset analyses will use raw values.")
   }
 
   # Get CTRDB connection from global environment if not provided
@@ -262,8 +354,8 @@ analyzeClinicalDrugResponse <- function(select_omics,
       expr_values <- as.numeric(expr_data[select_omics, common_samples])
       names(expr_values) <- common_samples
 
-      # Apply z-score normalization if enabled
-      if (zscore) {
+      # Apply per-dataset z-score normalization if enabled
+      if (normalization == "zscore") {
         mean_expr <- mean(expr_values, na.rm = TRUE)
         sd_expr <- sd(expr_values, na.rm = TRUE)
         if (sd_expr > 0) {
@@ -330,7 +422,7 @@ analyzeClinicalDrugResponse <- function(select_omics,
         transformed_pairs[[1]]$yes,
         group_labels = c("Non response", "Response"),
         title = names(transformed_pairs)[1],
-        y_label = if(zscore) paste0(select_omics, " Expression (z-score)") else paste(select_omics, "Expression")
+        y_label = if(normalization == "zscore") paste0(select_omics, " Expression (z-score)") else paste(select_omics, "Expression")
       )
     } else if (length(transformed_pairs) > 1) {
       # Multiple plots case
@@ -338,69 +430,84 @@ analyzeClinicalDrugResponse <- function(select_omics,
         transformed_pairs,
         group_labels = c("Non response", "Response"),
         x_label = select_omics,
-        y_label = if(zscore) "Expression (z-score)" else "Expression"
+        y_label = if(normalization == "zscore") "Expression (z-score)" else "Expression"
       )
       # Add common axis label
       result$plot <- createPlotWithCommonAxes(multi_plot,
-                                              y_title = if(zscore) paste0(select_omics, " Expression (z-score)") else paste(select_omics, "Expression"))
+                                              y_title = if(normalization == "zscore") paste0(select_omics, " Expression (z-score)") else paste(select_omics, "Expression"))
     }
   }
 
   # Create merged plot if we have multiple datasets and merged_enabled is TRUE
+  merged_values <- NULL
   if (length(transformed_pairs) > 1 && merged_enabled) {
-    # Combine all data for merged analysis
-    all_response <- unlist(lapply(transformed_pairs, function(x) x$yes))
-    all_non_response <- unlist(lapply(transformed_pairs, function(x) x$no))
+    merged_values <- .prepareClinicalMergedValues(patient_data_list, normalization = normalization)
+    all_response <- merged_values$response
+    all_non_response <- merged_values$non_response
 
-    # Apply overall z-score to merged data if zscore is enabled
-    if (zscore) {
-      all_values <- c(all_response, all_non_response)
-      mean_all <- mean(all_values, na.rm = TRUE)
-      sd_all <- sd(all_values, na.rm = TRUE)
-      if (sd_all > 0) {
-        all_response <- (all_response - mean_all) / sd_all
-        all_non_response <- (all_non_response - mean_all) / sd_all
-      }
-    }
-
+    merged_subtitle <- paste(names(transformed_pairs), collapse = ",")
     result$merged_plot <- plotGroupComparison(
       all_non_response,
       all_response,
       group_labels = c("Non response", "Response"),
       title = paste("Merged:", select_omics, "vs", select_drugs),
-      y_label = if(zscore) paste0(select_omics, " Expression (z-score)") else paste(select_omics, "Expression")
+      subtitle = merged_subtitle,
+      y_label = if(merged_values$normalization_used == "zscore") paste0(select_omics, " Expression (z-score)") else paste(select_omics, "Expression")
     )
   }
 
-  # ROC / AUC: same pooling / scaling as merged plot when multiple cohorts and merge enabled
+  # ROC / AUC: only result$roc — per cohort list(roc_plot, roc_auc); merged when multiple cohorts
   if (isTRUE(roc_plot) && length(transformed_pairs) > 0L) {
+    result$roc <- list()
+    if (length(transformed_pairs) > 1L) {
+      for (nm in names(transformed_pairs)) {
+        roc_no_i <- transformed_pairs[[nm]]$no
+        roc_yes_i <- transformed_pairs[[nm]]$yes
+        roc_gg_i <- plotClinicalDrugResponseRoc(
+          roc_no_i,
+          roc_yes_i,
+          title = "Clinical readout",
+          subtitle = sprintf("%s — %s vs %s", nm, select_omics, select_drugs)
+        )
+        result$roc[[nm]] <- list(
+          roc_plot = roc_gg_i,
+          roc_auc = if (!is.null(roc_gg_i)) attr(roc_gg_i, "roc_auc") else NA_real_
+        )
+      }
+    }
+
     if (length(transformed_pairs) == 1L) {
       roc_no <- transformed_pairs[[1]]$no
       roc_yes <- transformed_pairs[[1]]$yes
     } else {
-      roc_yes <- unlist(lapply(transformed_pairs, function(x) x$yes), use.names = FALSE)
-      roc_no <- unlist(lapply(transformed_pairs, function(x) x$no), use.names = FALSE)
-      if (isTRUE(zscore) && isTRUE(merged_enabled)) {
-        all_roc <- c(roc_yes, roc_no)
-        mean_roc <- mean(all_roc, na.rm = TRUE)
-        sd_roc <- stats::sd(all_roc, na.rm = TRUE)
-        if (!is.na(sd_roc) && sd_roc > 0) {
-          roc_yes <- (roc_yes - mean_roc) / sd_roc
-          roc_no <- (roc_no - mean_roc) / sd_roc
+      if (isTRUE(merged_enabled)) {
+        if (is.null(merged_values)) {
+          merged_values <- .prepareClinicalMergedValues(patient_data_list, normalization = normalization)
         }
+        roc_yes <- merged_values$response
+        roc_no <- merged_values$non_response
+      } else {
+        roc_yes <- unlist(lapply(transformed_pairs, function(x) x$yes), use.names = FALSE)
+        roc_no <- unlist(lapply(transformed_pairs, function(x) x$no), use.names = FALSE)
       }
+    }
+    pooled_subtitle <- if (length(transformed_pairs) > 1L) {
+      sprintf("%s vs %s — pooled response classification", select_omics, select_drugs)
+    } else {
+      sprintf("%s vs %s — response classification", select_omics, select_drugs)
     }
     roc_gg <- plotClinicalDrugResponseRoc(
       roc_no,
       roc_yes,
       title = "Clinical readout",
-      subtitle = sprintf("%s vs %s — response classification", select_omics, select_drugs)
+      subtitle = pooled_subtitle
     )
-    if (!is.null(roc_gg)) {
-      result$roc_plot <- roc_gg
-      result$roc_auc <- attr(roc_gg, "roc_auc")
+    auc_val <- if (!is.null(roc_gg)) attr(roc_gg, "roc_auc") else NA_real_
+    if (length(transformed_pairs) > 1L) {
+      result$roc$merged <- list(roc_plot = roc_gg, roc_auc = auc_val)
     } else {
-      result$roc_auc <- NA_real_
+      nm0 <- names(transformed_pairs)[1]
+      result$roc[[nm0]] <- list(roc_plot = roc_gg, roc_auc = auc_val)
     }
   }
 

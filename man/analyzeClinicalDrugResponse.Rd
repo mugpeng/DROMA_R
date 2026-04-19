@@ -11,9 +11,10 @@ analyzeClinicalDrugResponse(
   tumor_type = "all",
   connection = NULL,
   meta_enabled = TRUE,
-  zscore = TRUE,
+  normalization = c("none", "zscore", "combat"),
   merged_enabled = TRUE,
-  roc_plot = TRUE
+  roc_plot = TRUE,
+  zscore = NULL
 )
 }
 \arguments{
@@ -29,16 +30,26 @@ analyzeClinicalDrugResponse(
 
 \item{meta_enabled}{Logical, whether to perform meta-analysis across datasets}
 
-\item{zscore}{Logical, whether to apply z-score normalization to omics expression data (default: TRUE). If FALSE, merged_enabled should be set to FALSE to avoid combining non-normalized data from different patients.}
+\item{normalization}{One of \code{"none"}, \code{"zscore"}, or \code{"combat"}.
+\code{"combat"} is used only for merged analysis with multiple datasets and
+preserves the Response phenotype while correcting dataset batch effects.
+Because this function analyzes one feature at a time, ComBat uses its
+mean-only adjustment.}
 
 \item{merged_enabled}{Logical, whether to create a merged dataset from all patients}
 
-\item{roc_plot}{Logical, whether to add an ROC / AUC plot (\code{roc_plot}) using the same
-pooled expression scale as the merged comparison when multiple cohorts exist and
+\item{roc_plot}{Logical, whether to compute ROC / AUC and store them in \code{result$roc}.
+Pooled scaling matches the merged comparison when multiple cohorts exist and
 \code{merged_enabled} is TRUE; otherwise pooled per-cohort values without a second global z-score.}
+
+\item{zscore}{Deprecated logical compatibility option. If provided, maps to
+\code{normalization = "zscore"} when TRUE and \code{"none"} when FALSE.}
 }
 \value{
-A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), optional \code{roc_plot} and \code{roc_auc}, meta-analysis results, and data
+A list containing plot (individual study plots), merged_plot (merged dataset plot if merged_enabled=TRUE), optional \code{roc} (see below), meta-analysis results, and data.
+  \code{roc} is a named list: each cohort (PatientID) maps to \code{list(roc_plot, roc_auc)}.
+  With multiple cohorts, \code{roc$merged} holds the pooled ROC (same structure).
+  With a single cohort, only that cohort entry is present (no \code{merged}).
 }
 \description{
 Performs analysis of clinical drug response associations with omics features using CTRDB data
@@ -58,8 +69,9 @@ result$plot
 result$merged_plot
 
 # ROC / AUC (expression classifying responders)
-result$roc_plot
-result$roc_auc
+result$roc[["GSE123"]]$roc_plot
+result$roc[["GSE123"]]$roc_auc
+# result$roc$merged$roc_plot  # pooled, when multiple cohorts
 
 # View meta-analysis results
 result$meta

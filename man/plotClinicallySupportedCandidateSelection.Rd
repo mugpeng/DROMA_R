@@ -8,6 +8,7 @@ plotClinicallySupportedCandidateSelection(
   candidate_df,
   n_retained = 6,
   n_filtered = 4,
+  add = NULL,
   title = "Clinically supported candidate selection",
   subtitle =
     "Preclinical hits retained after clinical validation and concordant direction",
@@ -20,6 +21,8 @@ plotClinicallySupportedCandidateSelection(
 \item{n_retained}{Number of retained candidates to display.}
 
 \item{n_filtered}{Number of filtered candidates to display.}
+
+\item{add}{Optional character vector of candidate names to force-include in the plot.}
 
 \item{title}{Plot title.}
 
