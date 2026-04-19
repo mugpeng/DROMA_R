@@ -84,8 +84,8 @@ multi_set <- createMultiDromaSetFromDatabase(
 # Single project analysis
 result <- analyzeDrugOmicPair(
   gCSI,
-  select_omics_type = "mRNA",
-  select_omics = "ABCB1",
+  feature_type = "mRNA",
+  select_features = "ABCB1",
   select_drugs = "Paclitaxel",
   data_type = "all",
   tumor_type = "all"
@@ -94,8 +94,8 @@ result <- analyzeDrugOmicPair(
 # Multi-project meta-analysis
 multi_result <- analyzeDrugOmicPair(
   multi_set,
-  select_omics_type = "mRNA",
-  select_omics = "ABCB1",
+  feature_type = "mRNA",
+  select_features = "ABCB1",
   select_drugs = "Paclitaxel",
   overlap_only = FALSE
 )
@@ -124,62 +124,60 @@ print(volcano_plot)
 
 ## Core Functions by Module
 
-### 🔧 Data Loading Module (Z-score Normalized by Default)
-- **`loadMolecularProfiles()`**: Load molecular profiles with automatic z-score normalization
-- **`loadTreatmentResponse()`**: Load drug response data with automatic z-score normalization
-- **`loadMultiProjectMolecularProfiles()`**: Load multi-project molecular profiles
-- **`loadMultiProjectTreatmentResponse()`**: Load multi-project drug response data
-- **`applyZscoreNormalization()`**: Apply z-score normalization to existing data
-- **`isZscoreNormalized()`**: Check if data has been z-score normalized
+### 🔧 Data Loading and Processing
+- **`loadFeatureData()`**: Unified feature loader used by the analysis workflows
+- **`processDrugData()`**: Process one drug across a `DromaSet` or `MultiDromaSet`
+- **`getDrugSensitivityData()`**: Process and optionally annotate one drug
+- **`getAllDrugSensitivityData()`**: Collect all drugs with optional summarization
+- **`annotateDrugData()`**: Attach sample annotations to processed drug data
+- **`formatDrugTable()`**: Present processed drug data with raw and z-score values
 
-### 🔗 Data Pairing Module
-- **`pairDrugOmic()`**: Pair continuous drug and omics data
-- **`pairDiscreteDrugOmic()`**: Pair discrete omics with drug data
-- **`pairContinuousFeatures()`**: General function for pairing continuous features
-- **`pairDiscreteFeatures()`**: General function for pairing discrete and continuous features
-
-### 📊 Meta-Analysis Module
-- **`metaCalcConCon()`**: Meta-analysis for continuous vs continuous data (Spearman correlation)
-- **`metaCalcConDis()`**: Meta-analysis for continuous vs discrete data (Wilcoxon + Cliff's Delta)
-- **`analyzeContinuousDrugOmic()`**: Wrapper for continuous drug-omics analysis
-- **`analyzeDiscreteDrugOmic()`**: Wrapper for discrete drug-omics analysis
-
-### 🎨 Visualization Module
-- **`createForestPlot()`**: Forest plots for meta-analysis results
-- **`plotMetaVolcano()`**: Volcano plots for batch analysis results
-- **`plotContinuousDrugOmic()`**: Scatter plots with correlation statistics
-- **`plotDiscreteDrugOmic()`**: Box plots for group comparisons
-
-### 🚀 High-Level Analysis Functions
-- **`analyzeDrugOmicPair()`**: Complete workflow for single drug-omics pair analysis
-- **`batchFindSignificantFeatures()`**: Batch screening of multiple features
-- **`processDrugData()`**: Process drug sensitivity data with normalization
-- **`getDrugSensitivityData()`**: Combined processing and annotation
-- **`analyzeStratifiedDrugOmic()`**: Stratified analysis by another drug's response
-- **`createStatisticalDashboard()`**: Interactive dashboard for statistical results
-- **`generateStatisticalPlots()`**: Generate comprehensive statistical overview plots
+### 📊 Pairwise and Batch Analysis
+- **`analyzeDrugOmicPair()`**: Single feature vs single drug analysis for `DromaSet` or `MultiDromaSet`
+- **`batchFindSignificantFeatures()`**: Batch screen many features against one feature/drug
+- **`getSignificantFeatures()`**: Filter batch results by p-value, q-value, effect size, and dataset count
+- **`getIntersectSignificantFeatures()`**: Intersect significant feature sets across analyses
 
 ### 🏥 Clinical Trial Database (CTRDB) Module
-- **`analyzeClinicalDrugResponse()`**: Analyze clinical drug response with omics data
-- **`analyzeStratifiedCTRDB()`**: Stratified analysis across different drugs
-- **`analyzeClinicalMeta()`**: Meta-analysis across clinical datasets
-- **`getClinicalSummary()`**: Summary statistics for clinical analysis
-- **`getStratifiedCTRDBSummary()`**: Summary for stratified CTRDB analysis
+- **`analyzeClinicalDrugResponse()`**: Clinical response vs omics analysis across CTRDB cohorts
+- **`batchFindClinicalSigResponse()`**: Batch screen many omics features against one clinical drug
+- **`getInVitroCandidateFeatures()`**: Candidate discovery pipeline combining in vitro evidence
+- **`extractPathwayGeneSupport()`**: Summarize pathway support for candidate genes
+- **`prioritizeIntegratedCandidates()`**: Combine in vitro, PDO/PDX, and clinical evidence
+
+### 🧬 GSVA and Pathway Analysis
+- **`loadGeneSetsFromGMT()`**, **`getAvailableGeneSets()`**, **`getGeneSetByName()`**
+- **`calculateGSVAScores()`**: Compute GSVA/ssGSEA/zscore/plage pathway scores
+- **`analyzeGSVAAssociation()`**: Pathway vs drug/feature association analysis
+- **`batchAnalyzePathwaysWithFeature()`**: Screen pathways against one drug or feature
+- **`batchFindClinicalPathwaySigResponse()`**: Clinical response screening at pathway level
+- **`batchAnalyzePathwayAcrossFeatures()`**: Pathway-by-feature batch analysis
+
+### 🎨 Visualization and Prioritization
+- **`createForestPlot()`**, **`plotMetaVolcano()`**, **`createPlotWithCommonAxes()`**
+- **`plotClinicalDrugResponseRoc()`**: ROC/AUC plots for CTRDB response classification
+- **`plotDrugSensitivityRank()`**: Ranked drug sensitivity view with raw or z-score values
+- **`plotGSVAHeatmap()`**, **`prepareGSVAHeatmapMatrix()`**
+- **`plotDrugPathwayEffectHeatmap()`**, **`prepareDrugPathwayEffectSizeMatrix()`**
+- **`buildPriorityTable()`**, **`preparePriorityVisualizationData()`**
+- **`plotPriorityTopBar()`**, **`plotPriorityEvidenceStacked()`**, **`plotPriorityEvidenceHeatmap()`**
+- **`plotClinicallySupportedCandidateSelection()`**, **`plotPriorityClinicalPreclinicalBubble()`**
+- **`plotContinuousComparison()`**, **`plotContinuousGroups()`**, **`plotCategoryComparison()`**
+
+### 🛠 Enrichment Utilities
+- **`runGO()`**: GO enrichment analysis with optional plotting
+- **`runKEGG()`**: KEGG enrichment analysis with optional plotting
 
 > **Note**: `getPatientExpressionData()` has been moved to `DROMA.Set` package (CTRDB_SQLManager.R) for better separation of database operations and analysis functions.
 
 ### 🛠 Utility Functions
-- **`bright_palette_26`**: Pre-defined color palette for visualizations
 - **`formatTime()`**: Format processing time outputs
 - **`estimateTimeRemaining()`**: Estimate batch processing time
-- **`formatDrugTable()`**: Format drug sensitivity data for display
-- **`annotateDrugData()`**: Add clinical annotations to drug data
 - **`loadFeatureData()`**: Load feature data for batch analysis
-- **`filterFeatureData()`**: Filter features by minimum sample size
 
 ## Examples
 
-### Example 1: Loading Data with Z-score Normalization
+### Example 1: Loading Feature Data for Analysis
 
 ```r
 # Load required packages
@@ -189,57 +187,51 @@ library(DROMA.R)
 # Create DromaSet
 gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
 
-# Load mRNA data with z-score normalization (default)
-mrna_normalized <- loadMolecularProfiles(
+# Load one continuous feature (z-score by default)
+mrna_feature <- loadFeatureData(
   gCSI,
-  molecular_type = "mRNA",
-  features = "ABCB1"
+  feature_type = "mRNA",
+  select_features = "ABCB1",
+  is_continuous = TRUE
 )
 
-# Load without normalization
-mrna_raw <- loadMolecularProfiles(
+# Load the same feature without z-score normalization
+mrna_raw <- loadFeatureData(
   gCSI,
-  molecular_type = "mRNA",
-  features = "ABCB1",
+  feature_type = "mRNA",
+  select_features = "ABCB1",
+  is_continuous = TRUE,
   zscore = FALSE
 )
 
-# Check if data is normalized
-cat("Normalized:", isZscoreNormalized(mrna_normalized))
-cat("Raw:", isZscoreNormalized(mrna_raw))
-
-# Load drug data with normalization
-drug_normalized <- loadTreatmentResponse(
+# Load one drug profile
+drug_feature <- loadFeatureData(
   gCSI,
-  drugs = "Paclitaxel"
+  feature_type = "drug",
+  select_features = "Paclitaxel",
+  is_continuous = TRUE
 )
 ```
 
-### Example 2: Multi-Project Normalized Loading
+### Example 2: Multi-Project Drug Processing
 
 ```r
 # Create MultiDromaSet
 multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"))
 
-# Load normalized data across projects
-multi_mrna <- loadMultiProjectMolecularProfiles(
+# Collect one drug across projects with annotations
+multi_drug_data <- getDrugSensitivityData(
   multi_set,
-  molecular_type = "mRNA",
-  features = "ABCB1",
+  select_drugs = "Paclitaxel",
   overlap_only = FALSE
 )
 
-# Load normalized drug data across projects
-multi_drugs <- loadMultiProjectTreatmentResponse(
+# Summarize all drugs across projects
+all_drugs <- getAllDrugSensitivityData(
   multi_set,
-  drugs = "Paclitaxel",
-  overlap_only = FALSE
+  summarize = "median",
+  summarize_by = "drug"
 )
-
-# Check normalization status for each project
-for (project in names(multi_mrna)) {
-  cat(project, "normalized:", isZscoreNormalized(multi_mrna[[project]]), "\n")
-}
 ```
 
 ### Example 3: Single Project Analysis
@@ -255,8 +247,8 @@ gCSI <- createDromaSetFromDatabase("gCSI", "path/to/droma.sqlite")
 # Analyze Paclitaxel vs ABCB1 expression
 result <- analyzeDrugOmicPair(
   gCSI,
-  select_omics_type = "mRNA",
-  select_omics = "ABCB1",
+  feature_type = "mRNA",
+  select_features = "ABCB1",
   select_drugs = "Paclitaxel"
 )
 
@@ -274,8 +266,8 @@ multi_set <- createMultiDromaSetFromDatabase(c("gCSI", "CCLE"))
 # Analyze across projects with overlapping samples
 result <- analyzeDrugOmicPair(
   multi_set,
-  select_omics_type = "mutation_gene",
-  select_omics = "TP53",
+  feature_type = "mutation_gene",
+  select_features = "TP53",
   select_drugs = "Cisplatin",
   overlap_only = FALSE
 )
@@ -305,25 +297,12 @@ volcano_plot <- plotMetaVolcano(batch_results)
 print(volcano_plot)
 ```
 
-### Example 6: Stratified Analysis
+### Example 6: Candidate Prioritization and Visualization
 
 ```r
-# Analyze drug response stratified by another drug's sensitivity
-# This helps identify context-dependent biomarkers
-
-stratified_result <- analyzeStratifiedDrugOmic(
-  dromaset_object = multi_set,
-  stratification_drug = "Cisplatin",     # Drug for stratification
-  select_omics_type = "mRNA",            # Omics data type
-  select_omics = "ERCC1",                # Target gene
-  select_drugs = "Bortezomib",           # Drug to analyze
-  stratify_by = "response_median",       # Stratification method
-  tumor_type = "all"
-)
-
-# View stratified results
-print(stratified_result$statistics)
-print(stratified_result$comparison)
+# Visualize an already prepared priority table
+top_bar_plot <- plotPriorityTopBar(priority_df)
+print(top_bar_plot)
 ```
 
 ### Example 7: Drug Sensitivity Data Processing
@@ -332,7 +311,7 @@ print(stratified_result$comparison)
 # Process drug data with annotations
 drug_data <- getDrugSensitivityData(
   dromaset_object = gCSI,
-  drug_name = "Paclitaxel",
+  select_drugs = "Paclitaxel",
   data_type = "all",
   tumor_type = "all",
   db_path = "path/to/droma.sqlite"  # For loading annotations
@@ -341,8 +320,8 @@ drug_data <- getDrugSensitivityData(
 # View processed data
 head(drug_data)
 
-# Create sensitivity rank plot
-formatDrugTable(drug_data, drug_name = "Paclitaxel")
+# Create a formatted data table
+formatDrugTable(drug_data)
 ```
 
 ### Example 8: Clinical Trial Database (CTRDB) Analysis
@@ -351,53 +330,42 @@ formatDrugTable(drug_data, drug_name = "Paclitaxel")
 # Connect to CTRDB database
 con <- connectCTRDatabase("path/to/ctrdb.sqlite")
 
-# Analyze clinical drug response
+# Analyze clinical drug response across CTRDB cohorts
 result <- analyzeClinicalDrugResponse(
   select_omics = "EGFR",
   select_drugs = "Erlotinib",
   data_type = "all",
   tumor_type = "all",
   connection = con,
-  meta_enabled = TRUE
+  meta_enabled = TRUE,
+  merged_enabled = TRUE,
+  normalization = "combat",  # choose from "none", "zscore", "combat"
+  roc_plot = TRUE
 )
 
 # View individual patient plots
 print(result$plot)
 
-# View meta-analysis forest plot
-print(result$forest_plot)
+# View merged comparison and pooled ROC
+print(result$merged_plot)
+print(result$roc$merged$roc_plot)
 
-# Get summary statistics
-summary <- getClinicalSummary(result)
-print(summary)
+# View meta-analysis object when multiple cohorts are available
+print(result$meta)
 ```
 
-### Example 9: Stratified CTRDB Analysis
+### Example 9: Clinically Supported Candidate Selection Plot
 
 ```r
-# Stratified analysis: Drug B signature applied to Drug A
-result <- analyzeStratifiedCTRDB(
-  drug_b_name = "Cisplatin",      # Signature generation
-  drug_a_name = "Paclitaxel",     # Signature application
-  select_omics = "EGFR",          # Feature to analyze
-  connection = con,
-  top_n_genes = 100,
-  data_type = "all",
-  tumor_type = "all"
+# Build priority summary tables first, then visualize retained vs filtered candidates
+candidate_selection_plot <- plotClinicallySupportedCandidateSelection(
+  candidate_selection_df,
+  n_retained = 10,
+  n_filtered = 4,
+  add = c("TP53", "EGFR"),
+  subtitle = NULL
 )
-
-# View signature genes
-print(result$signature_genes)
-
-# View forest plot with meta-analyzed correlations
-print(result$correlation_results$forest_plot)
-
-# View combined scatter plots
-print(result$correlation_results$combined_scatter_plot)
-
-# Get comprehensive summary
-summary <- getStratifiedCTRDBSummary(result)
-print(summary)
+print(candidate_selection_plot)
 ```
 
 ## Data Types Supported
